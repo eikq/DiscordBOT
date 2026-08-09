@@ -1,0 +1,82 @@
+[
+  {
+    "conversationId": "c1",
+    "context": [
+      { "speaker": "Anu", "text": "มึงเล่น valo ปะ" }
+    ],
+    "ownerAction": "ANSWER",
+    "ownerResponse": "ไม่อะ",
+    "responseDelayMs": 840,
+    "relationship": "close_friend",
+    "directlyAddressed": true,
+    "topic": "gaming",
+    "notes": []
+  },
+  {
+    "conversationId": "c2",
+    "context": [
+      { "speaker": "Anu", "text": "เข้า valo" }
+    ],
+    "ownerAction": "ANSWER",
+    "ownerResponse": "ขก.",
+    "responseDelayMs": 1200,
+    "relationship": "close_friend",
+    "directlyAddressed": false,
+    "topic": "gaming",
+    "notes": []
+  },
+  {
+    "conversationId": "c3",
+    "context": [
+      { "speaker": "Anu", "text": "เล่น valo กัน" }
+    ],
+    "ownerAction": "IGNORE",
+    "ownerResponse": null,
+    "responseDelayMs": 0,
+    "relationship": "close_friend",
+    "directlyAddressed": false,
+    "topic": "gaming",
+    "notes": []
+  },
+  {
+    "conversationId": "c4",
+    "context": [
+      { "speaker": "Anu", "text": "เกมนี้แม่งกาก" },
+      { "speaker": "Bank", "text": "มึงก็กาก" }
+    ],
+    "ownerAction": "IGNORE",
+    "ownerResponse": null,
+    "responseDelayMs": 0,
+    "relationship": "close_friend",
+    "directlyAddressed": false,
+    "topic": "gaming",
+    "notes": []
+  },
+  {
+    "conversationId": "c5",
+    "context": [
+      { "speaker": "Bank", "text": "Spin มึงเลือกดิ" }
+    ],
+    "ownerAction": "ANSWER",
+    "ownerResponse": "อะไรก็ได้",
+    "responseDelayMs": 1500,
+    "relationship": "close_friend",
+    "directlyAddressed": true,
+    "topic": "general",
+    "notes": []
+  },
+  {
+    "conversationId": "c6",
+    "context": [
+      { "speaker": "Spin", "text": "กูว่าเกมนี้มัน—" },
+      { "speaker": "Anu", "text": "เดี๋ยวๆๆๆ มีคนมา" }
+    ],
+    "ownerAction": "IGNORE",
+    "ownerResponse": null,
+    "responseDelayMs": 0,
+    "relationship": "close_friend",
+    "directlyAddressed": false,
+    "topic": "general",
+    "notes": ["Interrupted, owner chooses not to continue"]
+  }
+]

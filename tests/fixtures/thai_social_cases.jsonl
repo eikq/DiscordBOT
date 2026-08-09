@@ -1,0 +1,4 @@
+{"id": "case1", "description": "Direct question to Spin", "context": [{"speaker": "Anu", "text": "Spin มึงจะเล่นปะ", "timestamp": 1000}], "expectedAction": "ANSWER"}
+{"id": "case2", "description": "Friends arguing, ignoring Spin", "context": [{"speaker": "Anu", "text": "เกมนี้แม่งกาก", "timestamp": 1000}, {"speaker": "Bank", "text": "มึงก็กากเหมือนกัน", "timestamp": 2000}, {"speaker": "Anu", "text": "ควย", "timestamp": 3000}], "expectedAction": "IGNORE"}
+{"id": "case3", "description": "Greeting directly addressed", "context": [{"speaker": "Bank", "text": "โย่ว Spin", "timestamp": 1000}], "expectedAction": "SHORT_REACTION"}
+{"id": "case4", "description": "Indirect question, previous target was Spin", "context": [{"speaker": "Anu", "text": "Spin เล่นไร", "timestamp": 1000}, {"speaker": "Bank", "text": "เดี๋ยวกูมา", "timestamp": 2000}, {"speaker": "Anu", "text": "ละมึงอะ", "timestamp": 3000}], "expectedAction": "ANSWER"}
