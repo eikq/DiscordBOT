@@ -2,24 +2,21 @@ import { SocialBrain } from '../src/bot/brain/SocialBrain';
 import { GroupConversationState } from '../src/bot/brain/GroupConversationState';
 import { ConversationTimeline } from '../src/bot/timeline/ConversationTimeline';
 import { ResponseGenerator } from '../src/bot/personality/ResponseGenerator';
-import { FriendMemoryManager } from '../src/bot/memory/FriendMemoryManager';
+import assert from 'node:assert/strict';
 
 export async function runStressSimulation() {
   console.log('=== DIGITAL ME PHASE 6 STRESS & BARGE-IN SIMULATION ===\n');
 
   const brain = new SocialBrain('Spin');
   const generator = new ResponseGenerator();
-  const memoryManager = new FriendMemoryManager();
-
-  const speakers = ['Anu', 'Bank', 'Tan', 'Spin'];
   const turns = [
-    { speaker: 'Anu', text: 'มึงจะเล่น valo ปะ' },
-    { speaker: 'Bank', text: 'อย่าเลยแม่งกาก' },
-    { speaker: 'Tan', text: '555' },
-    { speaker: 'Anu', text: 'Spin ว่าไง' },
-    { speaker: 'Bank', text: 'เดี๋ยวๆๆๆ มีคนมา' }, // Interruption
-    { speaker: 'Bank', text: 'งั้นเล่น minecraft' },
-    { speaker: 'Anu', text: 'เอาปะ Spin' }
+    { speaker: 'Anu', text: 'มึงจะเล่น valo ปะ', expectedAction: 'IGNORE' },
+    { speaker: 'Bank', text: 'อย่าเลยแม่งกาก', expectedAction: 'IGNORE' },
+    { speaker: 'Tan', text: '555', expectedAction: 'IGNORE' },
+    { speaker: 'Anu', text: 'Spin ว่าไง', expectedAction: 'ANSWER' },
+    { speaker: 'Bank', text: 'เดี๋ยวๆๆๆ มีคนมา', expectedAction: 'IGNORE' },
+    { speaker: 'Bank', text: 'งั้นเล่น minecraft', expectedAction: 'IGNORE' },
+    { speaker: 'Anu', text: 'เอาปะ Spin', expectedAction: 'ANSWER' }
   ];
 
   const timeline = new ConversationTimeline();
@@ -54,6 +51,7 @@ export async function runStressSimulation() {
 
     const state = new GroupConversationState(timeline);
     const decision = await brain.evaluate(state);
+    assert.equal(decision.action, turn.expectedAction, `Unexpected action for turn: ${turn.text}`);
 
     if (decision.action !== 'IGNORE') {
       const response = await generator.generate(decision, state);
@@ -64,7 +62,7 @@ export async function runStressSimulation() {
 
     if (turn.text.includes('เดี๋ยวๆๆๆ')) {
       interruptionsTriggered++;
-      console.log(`   ⚡ [BARGE-IN DETECTED] Interruption event triggered successfully! Playback cancelled.`);
+      console.log(`   ⚡ Simulated interruption marker reached (live playback cancellation is covered by npm test).`);
     }
 
     totalTurnsProcessed++;
@@ -72,10 +70,13 @@ export async function runStressSimulation() {
 
   console.log(`\n=== STRESS SIMULATION SUMMARY ===`);
   console.log(`Processed Turns: ${totalTurnsProcessed}`);
-  console.log(`Barge-in Triggers:${interruptionsTriggered}`);
-  console.log(`System Stability: 100% OK ($0 Recurring Cost)\n`);
+  console.log(`Simulated Interruption Markers: ${interruptionsTriggered}`);
+  console.log(`Decision Loop: VERIFIED\n`);
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('stress')) {
-  runStressSimulation().catch(console.error);
+  runStressSimulation().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

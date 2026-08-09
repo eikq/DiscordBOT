@@ -5,7 +5,7 @@ import { GroupConversationState } from './brain/GroupConversationState';
 import { ConversationTimeline } from './timeline/ConversationTimeline';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 async function runSimulation() {
   console.log("=== PHASE 2: SOCIAL BRAIN SIMULATOR (ZERO-COST LOCAL) ===\n");
@@ -28,10 +28,12 @@ async function runSimulation() {
       timestamp: Date.now()
     });
 
-    for (const ctxLine of testCase.context) {
-      const parts = ctxLine.split(': ');
-      const speaker = parts[0] || 'Unknown';
-      const text = parts.slice(1).join(': ') || ctxLine;
+    for (const [index, ctxLine] of testCase.context.entries()) {
+      const isLegacyString = typeof ctxLine === 'string';
+      const parts = isLegacyString ? ctxLine.split(': ') : [];
+      const speaker = isLegacyString ? (parts[0] || 'Unknown') : (ctxLine.speaker || 'Unknown');
+      const text = isLegacyString ? (parts.slice(1).join(': ') || ctxLine) : ctxLine.text;
+      const timestamp = isLegacyString ? Date.now() + index : (ctxLine.timestamp ?? Date.now() + index);
 
       timeline.addEvent({
         type: 'TRANSCRIPT_FINAL',
@@ -42,9 +44,9 @@ async function runSimulation() {
         displayName: speaker,
         rawText: text,
         confidence: 0.99,
-        timestamp: Date.now(),
-        speechStartedAt: Date.now() - 500,
-        speechEndedAt: Date.now(),
+        timestamp,
+        speechStartedAt: timestamp - 500,
+        speechEndedAt: timestamp,
         sttLatencyMs: 100
       });
     }
@@ -58,10 +60,18 @@ async function runSimulation() {
 
     if (isPass) passed++;
     
-    console.log(`[Case #${testCase.id}] Input: "${testCase.context[testCase.context.length - 1]}" -> Expected: ${testCase.expectedAction} | Got: ${decision.action} (${isPass ? '✅ PASS' : '❌ FAIL'})`);
+    const lastInput = testCase.context[testCase.context.length - 1];
+    const lastInputText = typeof lastInput === 'string' ? lastInput : `${lastInput.speaker}: ${lastInput.text}`;
+    console.log(`[Case #${testCase.id}] Input: "${lastInputText}" -> Expected: ${testCase.expectedAction} | Got: ${decision.action} (${isPass ? '✅ PASS' : '❌ FAIL'})`);
   }
 
   console.log(`\n=== ACCURACY SCORE: ${passed} / ${total} (${Math.round((passed / total) * 100)}%) ===\n`);
+  if (passed !== total) {
+    throw new Error(`Phase 2 simulation failed: ${total - passed} case(s) did not match expectations.`);
+  }
 }
 
-runSimulation().catch(console.error);
+runSimulation().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

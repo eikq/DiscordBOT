@@ -28,7 +28,7 @@ export class MockSpeechStream extends SpeechStream {
         }
     }
 
-    public endStream() {
+    public async endStream(): Promise<void> {
         this.isEnded = true;
         if (this.timer) clearTimeout(this.timer);
         

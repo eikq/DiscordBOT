@@ -1,5 +1,7 @@
 # PHASE 8 STATUS — CONTINUOUS PERSONALIZATION & FINE-TUNING
 
+> Historical generated note. Dataset export exists; LoRA training and gated deployment have not been executed or verified.
+
 **Status:** LOCALLY_VERIFIED (Dataset Exporter & LoRA Trainer Ready)
 
 ---

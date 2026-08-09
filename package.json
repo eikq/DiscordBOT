@@ -1,12 +1,15 @@
 {
-  "name": "react-example",
+  "name": "digital-me-discord-bot",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "start": "node -e \"process.env.NODE_ENV='production'; require('./dist/server.cjs')\"",
+    "test": "tsx --test tests/*.test.ts",
+    "verify": "npm run lint && npm test && npm run verify:colab && npm run build && npm run simulate:p2 && npm run simulate:p3 && npm run simulate:p4 && npm run stress",
+    "verify:colab": "python -m py_compile colab/voice_service.py colab/rvc_train_runner.py colab/bootstrap_colab.py && node -e \"JSON.parse(require('fs').readFileSync('colab/DigitalMe_RVC_Colab.ipynb','utf8')); console.log('Colab notebook JSON verified')\"",
     "simulate": "tsx src/bot/simulate.ts",
     "simulate:p2": "tsx src/bot/simulatePhase2.ts",
     "simulate:p3": "tsx src/bot/simulatePhase3.ts",
@@ -21,11 +24,10 @@
     "start:local": "tsx scripts/start_local.ts",
     "fine-tune:prepare": "tsx scripts/validate_dataset.ts",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.2",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
@@ -37,8 +39,7 @@
     "libsodium-wrappers": "^0.8.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
-    "opusscript": "^0.1.1",
-    "prism-media": "^1.3.5",
+    "opusscript": "^0.0.8",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"

@@ -1,5 +1,7 @@
 # PHASE 3 STATUS — THAI PERSONALITY & BEHAVIOR REPLICATION
 
+> Historical generated note. Deterministic retrieval is tested; a live local LLM is not. See `PROJECT_STATUS.md`.
+
 **Status:** LOCALLY_VERIFIED ($0 API Cost Behavior Retrieval & Generation)
 
 ---

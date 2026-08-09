@@ -1,118 +1,59 @@
-# Google Colab Voice Cloning Guide (Thai & Multilingual)
+# Google Colab RVC Voice Service
 
-To get 100% natural Thai voice cloning for your friend's voice in your Discord bot, **RVC v2 (Retrieval-based Voice Conversion)** combined with **Edge-TTS** or **XTTS v2** in Google Colab is the industry standard solution.
+The supported setup is [colab/DigitalMe_RVC_Colab.ipynb](colab/DigitalMe_RVC_Colab.ipynb). Old generated Edge-TTS snippets were removed because they stored files but never trained or ran a voice-clone model.
 
----
+## What is real-time
 
-## Why XTTS v2 standard Zero-Shot sounds unnatural for Thai
-1. **Language Phonemes:** XTTS v2 is trained primarily on English, European, and East Asian languages. Translating Thai script to Romanized text (`gam ja pai nai`) results in a heavy Western accent or mispronunciation.
-2. **Missing Reference Audio:** Without uploading `friend_sample.wav` to Colab, the server fell back to a default beep reference tone.
+- Discord captures each opted-in user's completed utterances while VC is active.
+- The bot immediately saves a WAV locally and uploads it to the authenticated Colab service.
+- Colab persists the sample under `MyDrive/DigitalMeVoice/speakers/<discord-user-id>/samples`.
+- Uploading continues while a queued RVC job is waiting or training.
 
----
+RVC training itself is a batch GPU job, not an incremental update on each audio frame. The service debounces jobs so a new multi-minute training process is not launched for every sentence.
 
-## 🚀 Recommended Solution: Train an RVC Voice Weight in Google Colab (5-10 Mins)
+## Setup
 
-**Retrieval-based Voice Conversion (RVC v2)** trains a lightweight `.pth` model weight on your friend's voice in ~5-10 minutes. 
+1. Open the notebook in Google Colab.
+2. Choose a T4 GPU runtime.
+3. Run every cell and authorize Google Drive.
+4. Enter a strong shared API token or let the notebook create one.
+5. Copy the printed values into the bot's `.env`:
 
-### How RVC + Edge-TTS Works:
-1. **Edge-TTS** (Microsoft Neural Voice) generates natural, fluent Thai text-to-speech (`th-TH-NiwatNeural` or `th-TH-PremwadeeNeural`).
-2. **RVC v2** instantly converts that audio into your friend's exact voice pitch, tone, and vocal characteristics.
-3. **Result:** 100% fluent, native Thai speech spoken in your friend's exact voice!
-
----
-
-## Option 1: Quick Edge-TTS + RVC Inference Server in Colab (No Training Needed First)
-
-If you already have or want to quickly test Edge-TTS + RVC or train a model in Colab:
-
-### Step 1: Create a Google Colab Notebook with GPU
-1. Open [Google Colab](https://colab.research.google.com/).
-2. Set Runtime: **Runtime > Change runtime type > T4 GPU**.
-
-### Step 2: Install dependencies (Edge-TTS + RVC + FastAPI)
-Paste and run this in Cell 1:
-
-```python
-# 1. Install Edge-TTS, RVC dependencies, and FastAPI
-!pip install edge-tts fastapi uvicorn pyngrok soundfile torch torchaudio pythainlp
-!git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI.git /content/RVC
+```dotenv
+COLAB_VOICE_URL="https://example.trycloudflare.com"
+COLAB_API_TOKEN="the-same-long-random-secret"
+OWNER_DISCORD_USER_ID="your-numeric-discord-user-id"
+RECORD_RAW_AUDIO=true
 ```
 
-### Step 3: Run the Edge-TTS + RVC / XTTS Server
-Paste and run this in Cell 2 (Replace `"YOUR_NGROK_TOKEN"` with your token from [ngrok.com](https://ngrok.com/)):
+6. Restart the bot, join VC with `/join`, and have each willing participant run `/voice-consent grant` themselves.
 
-```python
-%%writefile server.py
-import os
-import asyncio
-import torch
-import soundfile as sf
-import edge_tts
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-import uvicorn
-from pyngrok import ngrok
+## Training thresholds
 
-app = FastAPI()
+- `/voice-train start`: at least `MIN_TRAIN_SECONDS` (default 120 seconds).
+- First automatic job: `AUTO_TRAIN_MIN_SECONDS` (default 600 seconds).
+- Automatic retrain: at least `RETRAIN_NEW_SECONDS` (default 180 new seconds after the published model).
 
-class TTSRequest(BaseModel):
-    text: str
-    voice: str = "th-TH-NiwatNeural" # Native Thai Male voice (use "th-TH-PremwadeeNeural" for Female)
+Override these as Colab environment variables before starting `voice_service.py`. Lower thresholds are useful for plumbing tests but usually reduce voice quality.
 
-@app.post("/generate")
-async def generate_audio(req: TTSRequest):
-    output_raw = "edge_temp.mp3"
-    output_wav = "output.wav"
-    
-    # 1. Generate natural Thai speech via Edge-TTS
-    communicate = edge_tts.Communicate(req.text, req.voice)
-    await communicate.save(output_raw)
-    
-    # Convert MP3 to WAV
-    data, sr = sf.read(output_raw)
-    sf.write(output_wav, data, sr)
-    
-    return FileResponse(output_wav, media_type="audio/wav")
+## Storage and interruption behavior
 
-if __name__ == "__main__":
-    ngrok.set_auth_token("YOUR_NGROK_TOKEN")
-    public_url = ngrok.connect(8000).public_url
-    print(f"\n---> YOUR COLAB TTS URL IS: {public_url} <---")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-```
+Samples, published `.pth` weights, `.index` files, and training logs live in Google Drive. Temporary preprocessing files live on the Colab VM. If Colab disconnects during training, the job is marked failed on the next start and the user runs `/voice-train start` again; existing Drive samples remain.
 
-Run in Cell 3:
-```python
-!python3 server.py
-```
+The Cloudflare quick-tunnel URL is temporary. Paste the new URL into the dashboard or `.env` after every Colab restart. Never expose `COLAB_API_TOKEN` in Discord or commit it to Git.
 
----
+## Data control
 
-## 🎯 Option 2: Train a Custom RVC Voice Model Weight (.pth) in Colab
+- `grant`: allows future raw sample capture in that server.
+- `revoke`: stops future capture; existing data remains.
+- `delete`: revokes, deletes local samples, and deletes the user's Drive speaker directory through the authenticated service.
 
-To train an actual voice model weight of your friend in Colab:
+The bot rejects selecting a Discord user's voice unless that user still has active consent.
 
-1. **Prepare Audio Dataset:** Collect 1 to 3 minutes of clear audio of your friend talking without background music. Save as `voice_dataset.wav`.
-2. **Open RVC Colab WebUI:** Use the open-source [Applio / Mangio-RVC Colab](https://colab.research.google.com/github/IAHISPANO/Applio/blob/main/Applio.ipynb).
-3. **Upload Dataset & Train:**
-   - Upload `voice_dataset.wav`.
-   - Set Model Name (e.g. `FriendVoice`).
-   - Click **Process Data**, **Extract Pitch**, and **Train Model** (Set epochs to 100-200, takes ~5-8 mins on T4 GPU).
-4. **Download Trained Weight:** RVC will output `FriendVoice.pth` and `FriendVoice.index`.
-5. **Load into Colab Server:** Load `FriendVoice.pth` in your Colab inference script to convert any generated Edge-TTS audio into your friend's voice!
+## Troubleshooting
 
----
-
-## Summary of Options
-| Solution | Thai Pronunciation | Voice Matching | Setup Time |
-|---|---|---|---|
-| **Edge-TTS (Default)** | ⭐️⭐️⭐️⭐️⭐️ 100% Native | Neutral Thai Voice | 1 Min |
-| **Edge-TTS + RVC Trained Weight** | ⭐️⭐️⭐️⭐️⭐️ 100% Native | ⭐️⭐️⭐️⭐️⭐️ 100% Friend's Voice | 10 Mins (Train RVC .pth) |
-| **XTTS v2 Zero-Shot** | ⭐️⭐️ Western Accent | ⭐️⭐️⭐️ Requires clear WAV upload | 2 Mins |
-
-* You only need to run the Colab notebook **once per day/session** (free Colab GPU sessions stay active for up to 12 hours). When you first launch Colab, the installation takes ~1-2 minutes, and after that it runs continuously.
-
-**Can the bot just collect their voice live from Discord and clone it?**
-Technically yes, but it is very difficult. You would need to build a system that detects when your friend is speaking (Voice Activity Detection), isolates their voice from game sounds, saves it as a clear `.wav`, and updates the Colab model. 
-**The easiest and best way** is to just secretly record a clean 10-second clip of them talking, upload it to Colab as `friend_sample.wav`, and use that as the permanent reference!
+- `401 invalid bearer token`: the bot and notebook tokens differ.
+- `409 Need ... clean audio`: collect more consented speech before manual training.
+- `503 GPU is currently training`: recording/upload still works; cloned inference resumes after training.
+- `model is not trained yet`: check `/voice-train status` and wait for `model ready: yes`.
+- Colab bootstrap error: confirm the runtime uses Python 3.12 and an NVIDIA GPU, then rerun the install cell.

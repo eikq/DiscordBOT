@@ -1,7 +1,7 @@
 import { runHardwareDoctor } from './doctor';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 export interface BenchmarkResult {
   sttLatencyMs: number;
@@ -12,6 +12,11 @@ export interface BenchmarkResult {
   ttsLatencyMs: number;
   embeddingLatencyMs: number;
   status: 'SUCCESS' | 'PARTIAL' | 'OFFLINE';
+  services: {
+    llm: boolean;
+    stt: boolean;
+    tts: boolean;
+  };
 }
 
 export async function runLocalBenchmark(): Promise<BenchmarkResult> {
@@ -21,13 +26,14 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
 
   const result: BenchmarkResult = {
     sttLatencyMs: 0,
-    sttAccuracy: 'High (Thai-English Code-Switching Supported)',
-    llmFirstTokenMs: 0,
-    llmTotalMs: 0,
-    llmTokensPerSec: 0,
-    ttsLatencyMs: 0,
+    sttAccuracy: 'Unavailable (service offline)',
+    llmFirstTokenMs: -1,
+    llmTotalMs: -1,
+    llmTokensPerSec: -1,
+    ttsLatencyMs: -1,
     embeddingLatencyMs: 0,
-    status: 'SUCCESS'
+    status: 'OFFLINE',
+    services: { llm: false, stt: false, tts: false }
   };
 
   // 1. Benchmark Local Embeddings (Cosine Similarity on Local Vectors)
@@ -64,15 +70,13 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
       result.llmTotalMs = Date.now() - llmStart;
       result.llmFirstTokenMs = Math.round(result.llmTotalMs * 0.3);
       result.llmTokensPerSec = 28.5;
+      result.services.llm = true;
       console.log(`     -> Local LLM Server Connected! Total Latency: ${result.llmTotalMs}ms (~28.5 tok/s)`);
     } else {
       throw new Error(`Local LLM server returned status ${res.status}`);
     }
   } catch (e: any) {
-    result.llmTotalMs = 120; // Offline fallback baseline engine latency
-    result.llmFirstTokenMs = 45;
-    result.llmTokensPerSec = 35;
-    console.log(`     -> Local LLM Server Offline (${llmUrl}). Using Zero-Cost Deterministic Local Fallback Engine (${result.llmTotalMs}ms).`);
+    console.log(`     -> Local LLM Server Offline (${llmUrl}). Deterministic social rules remain available; model generation is unavailable.`);
   }
 
   // 3. Benchmark Local STT Endpoint
@@ -83,13 +87,15 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
     const res = await fetch(`${sttUrl}/health`, { signal: AbortSignal.timeout(2000) });
     if (res.ok) {
       result.sttLatencyMs = Date.now() - sttStart;
+      result.sttAccuracy = 'Not measured (health check only)';
+      result.services.stt = true;
       console.log(`     -> Local STT Server Connected! Latency: ${result.sttLatencyMs}ms`);
     } else {
       throw new Error('STT offline');
     }
   } catch (e) {
-    result.sttLatencyMs = 85;
-    console.log(`     -> Local STT Endpoint Offline (${sttUrl}). Fallback Stream Decoder Ready (${result.sttLatencyMs}ms).`);
+    result.sttLatencyMs = -1;
+    console.log(`     -> Local STT Endpoint Offline (${sttUrl}). Voice cannot be transcribed until this service is running.`);
   }
 
   // 4. Benchmark Local TTS Endpoint
@@ -100,21 +106,25 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
     const res = await fetch(`${ttsUrl}/health`, { signal: AbortSignal.timeout(2000) });
     if (res.ok) {
       result.ttsLatencyMs = Date.now() - ttsStart;
+      result.services.tts = true;
       console.log(`     -> Local TTS Server Connected! First Chunk Latency: ${result.ttsLatencyMs}ms`);
     } else {
       throw new Error('TTS offline');
     }
   } catch (e) {
-    result.ttsLatencyMs = 150;
-    console.log(`     -> Local TTS Endpoint Offline (${ttsUrl}). Edge-TTS / Colab Engine Ready (${result.ttsLatencyMs}ms).`);
+    result.ttsLatencyMs = -1;
+    console.log(`     -> Local TTS Endpoint Offline (${ttsUrl}). Spoken bot replies are unavailable until TTS is running.`);
   }
+
+  const connectedServices = Object.values(result.services).filter(Boolean).length;
+  result.status = connectedServices === 3 ? 'SUCCESS' : connectedServices > 0 ? 'PARTIAL' : 'OFFLINE';
 
   console.log('\n=== BENCHMARK SUMMARY ===');
   console.log(`Embedding Batch:  ${result.embeddingLatencyMs}ms`);
-  console.log(`Local LLM TTFT:   ${result.llmFirstTokenMs}ms (${result.llmTokensPerSec} tok/s)`);
-  console.log(`Local STT Latency:${result.sttLatencyMs}ms`);
-  console.log(`Local TTS TTFA:   ${result.ttsLatencyMs}ms`);
-  console.log('Status:           LOCAL_READY ($0 API Cost)\n');
+  console.log(`Local LLM TTFT:   ${result.services.llm ? `${result.llmFirstTokenMs}ms (${result.llmTokensPerSec} tok/s)` : 'UNAVAILABLE'}`);
+  console.log(`Local STT Latency:${result.services.stt ? `${result.sttLatencyMs}ms` : 'UNAVAILABLE'}`);
+  console.log(`Local TTS TTFA:   ${result.services.tts ? `${result.ttsLatencyMs}ms` : 'UNAVAILABLE'}`);
+  console.log(`Status:           ${result.status}\n`);
 
   return result;
 }

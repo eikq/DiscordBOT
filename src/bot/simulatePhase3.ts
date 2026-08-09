@@ -3,14 +3,14 @@ import { GroupConversationState } from './brain/GroupConversationState';
 import { ConversationTimeline } from './timeline/ConversationTimeline';
 import { ResponseGenerator } from './personality/ResponseGenerator';
 import dotenv from 'dotenv';
+import assert from 'node:assert/strict';
 
-dotenv.config();
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+dotenv.config({ quiet: true });
 
 async function runSimulation() {
     console.log("=== PHASE 3: PERSONALITY & BEHAVIOR SIMULATOR ===\n");
 
+    process.env.LLM_ENABLED = 'false';
     const brain = new SocialBrain("Spin");
     const generator = new ResponseGenerator();
 
@@ -19,27 +19,29 @@ async function runSimulation() {
             name: "Direct question about gaming",
             context: [
                 { speaker: "Anu", text: "Spin มึงจะเล่น valo ปะ", timestamp: 1000 }
-            ]
+            ],
+            expectedAction: 'ANSWER'
         },
         {
             name: "Asking for opinion",
             context: [
                 { speaker: "Anu", text: "เกมนี้มันแปลกๆว่ะ", timestamp: 1000 },
                 { speaker: "Bank", text: "Spin มึงว่าไง", timestamp: 2000 }
-            ]
+            ],
+            expectedAction: 'ANSWER'
         },
         {
             name: "Banter (should ignore)",
             context: [
                 { speaker: "Anu", text: "ไอ้ Bank แม่งกาก", timestamp: 1000 },
                 { speaker: "Bank", text: "มึงก็กาก", timestamp: 2000 }
-            ]
+            ],
+            expectedAction: 'IGNORE'
         }
     ];
 
     for (const scenario of scenarios) {
         console.log(`\n▶ Scenario: ${scenario.name}`);
-        await delay(30000); // 30s delay to avoid free-tier rate limits
         
         const timeline = new ConversationTimeline();
         timeline.addEvent({
@@ -72,6 +74,7 @@ async function runSimulation() {
         
         console.log("  -- Evaluating Social Brain --");
         const decision = await brain.evaluate(state);
+        assert.equal(decision.action, scenario.expectedAction, `${scenario.name}: unexpected social action`);
         
         if (decision.action !== 'IGNORE') {
             console.log("  -- Generating Response --");
@@ -83,4 +86,7 @@ async function runSimulation() {
     }
 }
 
-runSimulation().catch(console.error);
+runSimulation().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

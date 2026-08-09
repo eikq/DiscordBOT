@@ -35,7 +35,7 @@ export class SafeOpusDecoder extends Transform {
   }
 
   private decodeChunk(chunk: Buffer): Buffer | null {
-    if (!chunk || chunk.length < 3) return null;
+    if (!chunk || chunk.length === 0) return null;
 
     if (!this.decoder) {
       this.initDecoder();
@@ -45,13 +45,11 @@ export class SafeOpusDecoder extends Transform {
 
     // Clean RTP Extension Header if present at start (0xBEDE or 0x1000..0x100F)
     let payload = chunk;
-    if ((chunk[0] === 0xbe && chunk[1] === 0xde) || (chunk[0] === 0x10 && (chunk[1] & 0xf0) === 0x00)) {
+    if (chunk.length >= 4 && ((chunk[0] === 0xbe && chunk[1] === 0xde) || (chunk[0] === 0x10 && (chunk[1] & 0xf0) === 0x00))) {
       const extLen = chunk.readUInt16BE(2);
       const fullHeaderSize = 4 + 4 * extLen;
       if (chunk.length > fullHeaderSize) {
         payload = chunk.subarray(fullHeaderSize);
-      } else if (chunk.length > 4) {
-        payload = chunk.subarray(4);
       }
     }
 
@@ -78,7 +76,7 @@ export class SafeOpusDecoder extends Transform {
   }
 
   _transform(chunk: Buffer, encoding: string, callback: TransformCallback) {
-    if (!chunk || chunk.length < 3) {
+    if (!chunk || chunk.length === 0) {
       callback();
       return;
     }

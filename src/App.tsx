@@ -8,6 +8,8 @@ import { useEffect, useState } from 'react';
 export default function App() {
   const [status, setStatus] = useState<string>('Loading...');
   const [colabUrl, setColabUrl] = useState<string | null>(null);
+  const [recordRawAudio, setRecordRawAudio] = useState<boolean>(false);
+  const [colabAuthenticated, setColabAuthenticated] = useState<boolean>(false);
   
   // TTS Test state
   const [testText, setTestText] = useState<string>('สวัสดีครับเพื่อน มึงจะเล่นเกมปะเนี่ย');
@@ -27,7 +29,6 @@ export default function App() {
   const [isSavingBehavior, setIsSavingBehavior] = useState<boolean>(false);
   const [discordTokenInput, setDiscordTokenInput] = useState<string>('');
   const [isConnectingBot, setIsConnectingBot] = useState<boolean>(false);
-  const [showColabScript, setShowColabScript] = useState<boolean>(false);
   const [colabInput, setColabInput] = useState<string>('');
   const [isSyncingDrive, setIsSyncingDrive] = useState<boolean>(false);
   const [hasSyncedDrive, setHasSyncedDrive] = useState<boolean>(() => {
@@ -88,6 +89,8 @@ export default function App() {
       .then(data => {
         setStatus(data.status);
         if (data.colabUrl) setColabUrl(data.colabUrl);
+        setColabAuthenticated(data.colabAuthenticated === true);
+        setRecordRawAudio(data.privacy?.recordRawAudio === true);
       })
       .catch(() => setStatus('Error fetching status'));
 
@@ -209,7 +212,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0a0a] to-[#121212] text-gray-200 font-sans">
       <header className="h-20 border-b border-white/5 flex items-center justify-between px-10">
-        <h2 className="text-xl font-medium text-white tracking-tight">Digital Me <span className="text-gray-600 font-light mx-2">/</span> <span className="text-[#5865F2] font-semibold">Voice Cloning Dashboard</span></h2>
+        <h2 className="text-xl font-medium text-white tracking-tight">Digital Me <span className="text-gray-600 font-light mx-2">/</span> <span className="text-[#5865F2] font-semibold">Discord Voice Dashboard</span></h2>
       </header>
 
       <div className="p-10 space-y-8 flex-1 overflow-auto">
@@ -245,20 +248,21 @@ export default function App() {
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <span className="text-4xl">⚡</span>
             </div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Google Colab Voice Engine</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Google Colab RVC Training + Inference</p>
             <div className="text-lg font-bold text-white mb-2 font-mono truncate">
               {colabUrl ? colabUrl : 'Not Connected'}
             </div>
             <div className="flex items-center justify-between mb-4">
               <div className={`flex items-center gap-1.5 text-xs font-mono ${colabUrl ? 'text-green-400' : 'text-red-400'}`}>
-                <span>{colabUrl ? '● Active Cloudflare Tunnel' : '○ Paste your Colab trycloudflare URL below'}</span>
+                <span>{colabUrl ? `● URL set / auth ${colabAuthenticated ? 'configured' : 'missing'}` : '○ Paste your Colab trycloudflare URL below'}</span>
               </div>
-              <button
-                onClick={() => setShowColabScript(!showColabScript)}
+              <a
+                href="/api/colab/notebook"
+                download="DigitalMe_RVC_Colab.ipynb"
                 className="text-xs text-[#5865F2] hover:underline font-mono cursor-pointer"
               >
-                {showColabScript ? 'Hide Colab Fix Script' : '🛠️ Copy Fixed Colab Python Code'}
-              </button>
+                Download maintained Colab notebook
+              </a>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
@@ -294,153 +298,6 @@ export default function App() {
               )}
             </div>
 
-            {showColabScript && (
-              <div className="mt-4 p-4 bg-[#0d0d0d] rounded-xl border border-white/10 text-xs font-mono text-gray-300 space-y-2">
-                <p className="text-yellow-400 font-bold">🚀 Complete Google Colab Code (Fixed Asyncio Error + Per-Person Drive Voice Cloning):</p>
-                <p className="text-gray-400">Copy & Paste this entire code block into your Google Colab notebook cell and run it:</p>
-                <pre className="p-3 bg-[#111111] rounded-lg overflow-x-auto text-[11px] text-green-300 border border-white/5 select-all leading-relaxed">
-{`# ============================================================
-# 1. MOUNT GOOGLE DRIVE (Saves recorded voices permanently per person)
-# ============================================================
-from google.colab import drive
-import os, base64, glob, time, threading, subprocess, re
-drive.mount('/content/drive')
-
-DRIVE_DIR = "/content/drive/MyDrive/DiscordBotVoice"
-SAMPLES_DIR = os.path.join(DRIVE_DIR, "voice_samples")
-os.makedirs(SAMPLES_DIR, exist_ok=True)
-print(f"📁 Google Drive Storage Ready at: {SAMPLES_DIR}")
-
-# ============================================================
-# 2. INSTALL REQUIRED PACKAGES & FIX ASYNCIO IN COLAB
-# ============================================================
-!pip install -q fastapi uvicorn edge-tts pyngrok pydantic nest_asyncio
-!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-!dpkg -i cloudflared-linux-amd64.deb
-
-import nest_asyncio
-nest_asyncio.apply()
-
-# ============================================================
-# 3. FASTAPI VOICE SERVER (Live Upload + Live Train + Fixed TTS)
-# ============================================================
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
-import edge_tts, asyncio
-
-app = FastAPI()
-
-# 🎙️ RECEIVE & STORE LIVE FRIEND VOICE FROM DISCORD VC TO GOOGLE DRIVE
-@app.post("/upload-sample")
-async def upload_sample(request: Request):
-    data = await request.json()
-    speaker = data.get("speaker", "unknown")
-    filename = data.get("filename", "sample.wav")
-    audio_b64 = data.get("audio_base64", "")
-    
-    # Store inside individual speaker folder in Google Drive!
-    speaker_dir = os.path.join(SAMPLES_DIR, speaker)
-    os.makedirs(speaker_dir, exist_ok=True)
-    file_path = os.path.join(speaker_dir, filename)
-    
-    audio_bytes = base64.b64decode(audio_b64)
-    with open(file_path, "wb") as f:
-        f.write(audio_bytes)
-        
-    print(f"[Drive Backup] 🎧 Received live VC voice sample from '{speaker}' -> Saved in Drive: {file_path}")
-    
-    # ⚡ TRIGGER LIVE AUTO-TRAIN / INDEXING FOR THIS INDIVIDUAL
-    asyncio.create_task(auto_train_voice_model(speaker))
-    return {"status": "success", "saved_path": file_path, "speaker": speaker}
-
-# 🤖 LIVE VOICE MODEL TRAINING TRIGGER PER PERSON
-async def auto_train_voice_model(speaker: str):
-    speaker_dir = os.path.join(SAMPLES_DIR, speaker)
-    samples = glob.glob(f"{speaker_dir}/*.wav")
-    print(f"[AutoTrain] 🏋️ Auto-training voice model for friend '{speaker}' ({len(samples)} samples in Drive)...")
-    # Custom model fine-tuning / embedding updates happen here automatically in Google Drive!
-
-# 🔊 GENERATE VOICE FOR SPECIFIC CLONED FRIEND OR TTS
-@app.post("/generate")
-async def generate_voice(request: Request):
-    data = await request.json()
-    text = data.get("text", "สวัสดีครับ")
-    speaker = data.get("speaker", "default")
-    
-    # If speaker has cloned voice samples in Drive, Colab synthesizes using that speaker's trained voice model
-    speaker_dir = os.path.join(SAMPLES_DIR, speaker)
-    has_cloned_voice = os.path.exists(speaker_dir) and len(glob.glob(f"{speaker_dir}/*.wav")) > 0
-    
-    if has_cloned_voice:
-        print(f"[ColabTTS] 🎙️ Generating voice using trained voice clone for friend '{speaker}'...")
-    else:
-        print(f"[ColabTTS] 🔊 Speaker '{speaker}' has no voice samples yet, using fallback Thai Neural Voice...")
-        
-    communicate = edge_tts.Communicate(text, "th-TH-NiwatNeural")
-    audio_data = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_data += chunk["data"]
-            
-    # CRITICAL FIX: Return Response object for raw binary audio (prevents UnicodeDecodeError)
-    return Response(content=audio_data, media_type="audio/wav")
-
-# ============================================================
-# 4. LAUNCH SERVER & GET CLOUDFLARE PUBLIC URL
-# ============================================================
-import uvicorn
-
-# Kill any existing server on port 8766 if re-running cell
-os.system("fuser -k -9 8766/tcp 2>/dev/null || true")
-os.system("pkill -9 -f uvicorn 2>/dev/null || true")
-time.sleep(1.5)
-
-def run_fastapi():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=8766, log_level="error")
-    server = uvicorn.Server(config)
-    loop.run_until_complete(server.serve())
-
-server_thread = threading.Thread(target=run_fastapi, daemon=True)
-server_thread.start()
-
-time.sleep(2)
-
-print("\\n=================================================")
-print("🚀 STARTING CLOUDFLARE TUNNEL...")
-print("=================================================")
-
-# Launch cloudflared with unbuffered pipe output
-tunnel = subprocess.Popen(
-    ["cloudflared", "tunnel", "--url", "http://127.0.0.1:8766"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT,
-    text=True,
-    bufsize=1
-)
-
-public_url = None
-for _ in range(40):
-    line = tunnel.stdout.readline()
-    if not line:
-        time.sleep(0.2)
-        continue
-    match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-    if match:
-        public_url = match.group(0)
-        break
-
-if public_url:
-    print(f"\\n=================================================")
-    print(f"🎉 YOUR LIVE COLAB VOICE SERVER URL IS:\\n\\n   {public_url}\\n")
-    print(f"Copy this URL and paste it into COLAB_TTS_URL in your .env or App Dashboard!")
-    print("=================================================\\n")
-else:
-    print("\\n⚠️ Cloudflare tunnel starting... If URL doesn't show, re-run cell or check stdout above.")`}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
 
@@ -545,7 +402,7 @@ else:
                               🤖
                             </div>
                             <span className="text-sm font-bold text-white">Digital Me AI</span>
-                            <span className="text-[10px] bg-[#5865F2]/20 text-[#5865F2] border border-[#5865F2]/40 px-2 py-0.5 rounded-full font-mono">Cloned Voice Reply</span>
+                            <span className="text-[10px] bg-[#5865F2]/20 text-[#5865F2] border border-[#5865F2]/40 px-2 py-0.5 rounded-full font-mono">Bot Voice Reply</span>
                           </div>
                           <span className="text-[11px] font-mono text-gray-500">{timeStr}</span>
                         </div>
@@ -574,10 +431,10 @@ else:
         <div className="bg-[#161616] p-8 rounded-2xl border border-white/5 space-y-6">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>🔊</span> Test Google Colab Voice Cloning
+              <span>🔊</span> Test Configured TTS Bridge
             </h3>
             <p className="text-xs text-gray-400 mt-1">
-              Type any sentence below to test synthesizing voice live through your Colab XTTS model!
+              Type any sentence below to test the configured Colab or local TTS endpoint.
             </p>
           </div>
 
@@ -722,12 +579,16 @@ else:
           {/* Live Recorded Voice Samples Catalog */}
           <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">🎙️ Auto-Captured Friend Voice Samples ({voiceSamples.length}):</p>
-              <span className="text-[10px] text-green-400 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-ping"></span> Live Capturing from Discord VC</span>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">🎙️ Consented Voice Samples ({voiceSamples.length}):</p>
+              <span className={`text-[10px] font-mono ${recordRawAudio ? 'text-yellow-400' : 'text-gray-500'}`}>
+                {recordRawAudio ? '● Global capture enabled; per-user grant required' : '○ Recording disabled by default'}
+              </span>
             </div>
             {voiceSamples.length === 0 ? (
               <p className="text-xs text-gray-500 italic bg-[#111111] p-3 rounded-xl border border-white/5">
-                No voice samples captured yet. Connect bot to Discord Voice Channel and let friends speak — voice audio will be recorded and cloned automatically!
+                {recordRawAudio
+                  ? 'No voice samples captured yet. Each participant must run /voice-consent grant themselves.'
+                  : 'Raw capture is disabled. Consent records alone do not enable recording.'}
               </p>
             ) : (
               <div className="max-h-40 overflow-y-auto space-y-2 pr-2">
@@ -749,47 +610,47 @@ else:
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
             <div className="space-y-4">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] px-1">Active Modules Status</h3>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] px-1">Runtime Capabilities</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between p-4 bg-[#111111] border border-white/5 rounded-xl">
                   <div className="flex items-center gap-4">
                     <div>🎙️</div>
                     <div>
                       <p className="text-sm font-bold text-white">Opus Audio Receiver</p>
-                      <p className="text-[10px] text-gray-500 uppercase">Phase 1</p>
+                      <p className="text-[10px] text-gray-500 uppercase">{status === 'Connected' ? 'Discord connected' : 'Standby'}</p>
                     </div>
                   </div>
-                  <div className="w-10 h-5 bg-green-500/20 rounded-full border border-green-500/30 flex items-center justify-end px-1"><div className="w-3 h-3 bg-green-400 rounded-full"></div></div>
+                  <span className={`text-[10px] font-mono ${status === 'Connected' ? 'text-green-400' : 'text-gray-500'}`}>{status === 'Connected' ? 'LISTENING READY' : 'NOT CONNECTED'}</span>
                 </div>
                 <div className="flex items-center justify-between p-4 bg-[#111111] border border-white/5 rounded-xl">
                   <div className="flex items-center gap-4">
                     <div>🧠</div>
                     <div>
                       <p className="text-sm font-bold text-white">Social Brain</p>
-                      <p className="text-[10px] text-gray-500 uppercase">Phase 2</p>
+                      <p className="text-[10px] text-gray-500 uppercase">Deterministic Thai rules</p>
                     </div>
                   </div>
-                  <div className="w-10 h-5 bg-green-500/20 rounded-full border border-green-500/30 flex items-center justify-end px-1"><div className="w-3 h-3 bg-green-400 rounded-full"></div></div>
+                  <span className="text-[10px] font-mono text-green-400">VERIFIED</span>
                 </div>
                 <div className="flex items-center justify-between p-4 bg-[#111111] border border-white/5 rounded-xl">
                   <div className="flex items-center gap-4">
                     <div>🎭</div>
                     <div>
                       <p className="text-sm font-bold text-white">Response Generator (Personality)</p>
-                      <p className="text-[10px] text-gray-500 uppercase">Phase 3</p>
+                      <p className="text-[10px] text-gray-500 uppercase">Fallback rules + optional local LLM</p>
                     </div>
                   </div>
-                  <div className="w-10 h-5 bg-green-500/20 rounded-full border border-green-500/30 flex items-center justify-end px-1"><div className="w-3 h-3 bg-green-400 rounded-full"></div></div>
+                  <span className="text-[10px] font-mono text-green-400">FALLBACK READY</span>
                 </div>
                 <div className="flex items-center justify-between p-4 bg-[#111111] border border-white/5 rounded-xl">
                   <div className="flex items-center gap-4">
                     <div>🗣️</div>
                     <div>
-                      <p className="text-sm font-bold text-white">Google Colab Voice Cloning (XTTS)</p>
-                      <p className="text-[10px] text-gray-500 uppercase">Phase 4</p>
+                      <p className="text-sm font-bold text-white">RVC Voice Service</p>
+                      <p className="text-[10px] text-gray-500 uppercase">Drive samples + queued training + cloned inference</p>
                     </div>
                   </div>
-                  <div className="w-10 h-5 bg-green-500/20 rounded-full border border-green-500/30 flex items-center justify-end px-1"><div className="w-3 h-3 bg-green-400 rounded-full"></div></div>
+                  <span className={`text-[10px] font-mono ${colabUrl && colabAuthenticated ? 'text-green-400' : 'text-yellow-400'}`}>{colabUrl && colabAuthenticated ? 'CONFIGURED' : 'SETUP NEEDED'}</span>
                 </div>
               </div>
             </div>
@@ -801,8 +662,8 @@ else:
                   <div className="flex gap-3"><span className="text-gray-600">[00:00:01]</span> <span className="text-blue-400">INFO</span> <span>System initialized.</span></div>
                   <div className="flex gap-3"><span className="text-gray-600">[00:00:02]</span> <span className="text-purple-400">BRAIN</span> <span>SocialBrain module loaded.</span></div>
                   <div className="flex gap-3"><span className="text-gray-600">[00:00:03]</span> <span className="text-purple-400">PERSN</span> <span>Loaded 6 behavior examples.</span></div>
-                  <div className="flex gap-3"><span className="text-gray-600">[00:00:04]</span> <span className="text-green-400">TTS</span> <span>Colab Voice Cloning active ({colabUrl}).</span></div>
-                  <div className="flex gap-3 animate-pulse mt-4"><span className="text-gray-600">[{new Date().toLocaleTimeString('en-US', { hour12: false })}]</span> <span className="text-blue-400">INFO</span> <span className="text-white">Waiting for gateway events...</span><span className="inline-block w-1.5 h-3 bg-white ml-1"></span></div>
+                  <div className="flex gap-3"><span className="text-gray-600">[00:00:04]</span> <span className={colabUrl ? 'text-green-400' : 'text-yellow-400'}>TTS</span> <span>{colabUrl ? `TTS bridge configured (${colabUrl}).` : 'No TTS bridge configured.'}</span></div>
+                  <div className="flex gap-3 animate-pulse mt-4"><span className="text-gray-600">[{new Date().toLocaleTimeString('en-US', { hour12: false })}]</span> <span className="text-blue-400">INFO</span> <span className="text-white">{status === 'Connected' ? 'Waiting for Discord gateway events...' : 'Dashboard ready; Discord is disconnected.'}</span><span className="inline-block w-1.5 h-3 bg-white ml-1"></span></div>
                 </div>
               </div>
             </div>

@@ -1,18 +1,19 @@
 import { VoiceConnectionManager } from '../VoiceConnectionManager';
 import { LocalTTSProvider } from './LocalTTSProvider';
+import { TTSProvider } from './TTSProvider';
 
 export class VoiceOutputManager {
   private voiceManager: VoiceConnectionManager;
-  private ttsProvider: LocalTTSProvider;
+  private ttsProvider: TTSProvider;
   private currentTurnId: string | null = null;
   private activeCancellationTokens: Map<string, boolean> = new Map();
 
-  constructor(voiceManager: VoiceConnectionManager, ttsProvider?: LocalTTSProvider) {
+  constructor(voiceManager: VoiceConnectionManager, ttsProvider?: TTSProvider) {
     this.voiceManager = voiceManager;
     this.ttsProvider = ttsProvider || new LocalTTSProvider();
   }
 
-  public async speakTurn(guildId: string, text: string, speakerName?: string): Promise<string> {
+  public async speakTurn(guildId: string, text: string, speakerName?: string): Promise<boolean> {
     const turnId = `turn_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     this.currentTurnId = turnId;
     this.activeCancellationTokens.set(turnId, false);
@@ -22,15 +23,23 @@ export class VoiceOutputManager {
 
     if (this.isCancelled(turnId)) {
       console.log(`[VoiceOutputManager] Turn [${turnId}] was cancelled before playback.`);
-      return turnId;
+      this.activeCancellationTokens.delete(turnId);
+      if (this.currentTurnId === turnId) this.currentTurnId = null;
+      return false;
     }
 
-    if (audioBuffer) {
-      this.voiceManager.playAudio(guildId, audioBuffer);
-      console.log(`[VoiceOutputManager] Playing audio for turn [${turnId}]`);
+    if (!audioBuffer) {
+      this.activeCancellationTokens.delete(turnId);
+      if (this.currentTurnId === turnId) this.currentTurnId = null;
+      return false;
     }
 
-    return turnId;
+    console.log(`[VoiceOutputManager] Playing audio for turn [${turnId}]`);
+    const played = await this.voiceManager.playAudio(guildId, audioBuffer);
+    const cancelled = this.isCancelled(turnId);
+    this.activeCancellationTokens.delete(turnId);
+    if (this.currentTurnId === turnId) this.currentTurnId = null;
+    return played && !cancelled;
   }
 
   public cancelCurrentTurn(guildId: string): void {

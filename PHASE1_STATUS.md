@@ -1,5 +1,7 @@
 # PHASE 1 STATUS
 
+> Historical generated note. Live Discord audio remains unverified. See `PROJECT_STATUS.md` for the current boundary.
+
 **Status:** Completed Scaffolding for Phase 1.
 
 ## What Works

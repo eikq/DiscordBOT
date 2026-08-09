@@ -1,5 +1,7 @@
 # PHASE 2 STATUS — GROUP CONVERSATION & SOCIAL BRAIN
 
+> Historical generated note. The active fixture contains 4 cases, not the 40+ claimed below. See `PROJECT_STATUS.md`.
+
 **Status:** LOCALLY_VERIFIED ($0 API Cost Hybrid Decision Engine)
 
 ---

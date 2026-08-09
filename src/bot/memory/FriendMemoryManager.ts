@@ -18,14 +18,15 @@ export interface FriendMemory {
   createdAt: number;
   supersededBy?: string;
   expiresAt?: number;
+  topics?: string[];
 }
 
 export class FriendMemoryManager {
   private dbPath: string;
   private profiles: Map<string, FriendProfile> = new Map();
 
-  constructor() {
-    this.dbPath = path.join(process.cwd(), 'data', 'memory', 'friends_db.json');
+  constructor(dbPath?: string) {
+    this.dbPath = dbPath || path.join(process.cwd(), 'data', 'memory', 'friends_db.json');
     this.ensureStorageDirectory();
     this.loadProfiles();
   }
@@ -86,6 +87,7 @@ export class FriendMemoryManager {
     let memoryText: string | null = null;
     let category: FriendMemory['category'] = 'SEMANTIC';
     let expiresAt: number | undefined;
+    const topics = this.extractTopics(lower);
 
     // Detect temporal facts (วันนี้, พรุ่งนี้)
     if (lower.includes('พรุ่งนี้')) {
@@ -95,7 +97,7 @@ export class FriendMemoryManager {
     } else if (lower.includes('เลิกเล่น') || lower.includes('ไม่เล่นแล้ว')) {
       // Memory supersession handling (e.g. "กูเลิกเล่น valo ละ")
       memoryText = `${speakerName} เลิกเล่นเกม ${text}`;
-      this.supersedePreviousMemories(userId, 'เล่นเกม');
+      this.supersedePreviousMemories(userId, topics.length > 0 ? topics : ['เกม']);
     } else if (lower.includes('ชอบ') || lower.includes('ซื้อ')) {
       memoryText = `${speakerName}: ${text}`;
       category = 'SEMANTIC';
@@ -109,7 +111,8 @@ export class FriendMemoryManager {
       fact: memoryText,
       confidence: 0.9,
       createdAt: Date.now(),
-      expiresAt
+      expiresAt,
+      topics
     };
 
     profile.memories.push(memory);
@@ -118,12 +121,19 @@ export class FriendMemoryManager {
     return memory;
   }
 
-  private supersedePreviousMemories(userId: string, topicKeyword: string) {
+  private extractTopics(text: string): string[] {
+    const knownTopics = ['valorant', 'valo', 'minecraft', 'มายคราฟ', 'เกม'];
+    return knownTopics.filter(topic => text.includes(topic));
+  }
+
+  private supersedePreviousMemories(userId: string, topicKeywords: string[]) {
     const profile = this.profiles.get(userId);
     if (!profile) return;
 
     profile.memories.forEach(mem => {
-      if (mem.fact.includes(topicKeyword) && !mem.supersededBy) {
+      const memoryTopics = mem.topics || this.extractTopics(mem.fact.toLowerCase());
+      const sameTopic = topicKeywords.some(topic => memoryTopics.includes(topic) || mem.fact.toLowerCase().includes(topic));
+      if (sameTopic && !mem.supersededBy) {
         mem.supersededBy = 'superseded_by_newer_fact';
       }
     });

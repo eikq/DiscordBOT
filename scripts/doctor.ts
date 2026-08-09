@@ -29,7 +29,11 @@ export function runHardwareDoctor(): HardwareReport {
   let cudaVersion: string | null = null;
 
   try {
-    const smiOutput = execSync('nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader', { encoding: 'utf-8', timeout: 3000 });
+    const smiOutput = execSync('nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader', {
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore']
+    });
     if (smiOutput && smiOutput.trim()) {
       gpuInfo = smiOutput.trim();
       hasCuda = true;
@@ -39,11 +43,21 @@ export function runHardwareDoctor(): HardwareReport {
   }
 
   let pythonVersion: string | null = null;
-  try {
-    const pyOut = execSync('python3 --version || python --version', { encoding: 'utf-8', timeout: 3000 });
-    pythonVersion = pyOut.trim();
-  } catch (e) {
-    // Python not installed
+  const pythonCommands = process.platform === 'win32'
+    ? ['py -3 --version', 'python --version']
+    : ['python3 --version', 'python --version'];
+  for (const command of pythonCommands) {
+    try {
+      const pyOut = execSync(command, {
+        encoding: 'utf-8',
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+      pythonVersion = pyOut.trim();
+      break;
+    } catch (e) {
+      // Try the next common Python launcher.
+    }
   }
 
   // Calculate recommended profile based on RAM/GPU

@@ -1,5 +1,7 @@
 # PHASE 4 STATUS — FRIEND MEMORY & RELATIONSHIP MODEL
 
+> Historical generated note. The current store is JSON, not SQLite. See `PROJECT_STATUS.md` for verified behavior.
+
 **Status:** LOCALLY_VERIFIED ($0 API Cost Local Persistent Memory)
 
 ---

@@ -1,5 +1,7 @@
 # PHASE 6 STATUS — FULL REAL-TIME HUMAN-LIKE VOICE CONVERSATION
 
+> Historical generated note. Cancellation is covered locally, but a complete live Discord voice loop is not yet verified. See `PROJECT_STATUS.md`.
+
 **Status:** LOCALLY_VERIFIED ($0 API Cost Pipeline & Interruption Logic)
 
 ---
