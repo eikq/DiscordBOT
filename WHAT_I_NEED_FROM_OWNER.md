@@ -1,35 +1,41 @@
-# WHAT I NEED FROM THE OWNER (SPIN)
+# Inputs Needed for Live Discord Verification
 
-Your Digital Me AI Twin system is **100% built, tested, and fully functional** at **$0 recurring cost**.
+The offline codebase is stabilized, but a live voice session cannot be verified without owner-controlled credentials and services.
 
-To connect your AI Twin to your live Discord voice channel and activate your exact voice clone, perform these **2 simple steps**:
+## 1. Discord bot configuration
 
----
+Create a local `.env` from `.env.example` and set:
 
-## 1. Provide Your Discord Bot Token (`.env`)
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications) and create a Bot Application.
-2. Under **Bot**, enable **Message Content Intent** and **Server Members Intent**.
-3. Copy your Bot Token and paste it into `.env`:
-   ```env
-   DISCORD_TOKEN="your_discord_bot_token_here"
-   ```
+```env
+DISCORD_TOKEN="your token"
+OWNER_DISCORD_USER_ID="your Discord user ID"
+OWNER_ALIASES="Spin,สปิน"
+```
 
----
+Enable the bot's Message Content intent and invite it with permission to view/connect/speak in the test voice channel. Keep the token in `.env`; do not paste it into source control or chat.
 
-## 2. Record Your Voice Sample (1 to 3 Minutes WAV)
-To clone your voice with 100% natural Thai tone for $0 in Google Colab (RVC v2):
-1. Record 1 to 3 minutes of clean audio of your voice (WAV format, 16kHz or 44.1kHz).
-2. Speak naturally using your regular Discord slang and particles (e.g. *"เออ กูเข้าเกมละ"*, *"ไม่อะ ขก."*, *"wait กูเปิด discord ก่อน"*).
-3. Save the file at:
-   ```
-   data/voice/owner_reference.wav
-   ```
+## 2. Speech and model services
 
----
+For the real voice loop, start compatible services for:
 
-## How to Launch
-Run the zero-cost launcher at any time:
+- STT at `STT_BASE_URL` (default `http://127.0.0.1:8765`)
+- LLM at `LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`)
+- either local TTS at `TTS_BASE_URL`, or the RVC Colab service configured with `COLAB_VOICE_URL` and `COLAB_API_TOKEN`
+
+Run `npm run benchmark` and confirm that the services you need are no longer reported as unavailable.
+
+## 3. Recording consent
+
+`RECORD_RAW_AUDIO=false` is the safe default. Set it to `true` only for a consented test. Every recorded participant must also run `/voice-consent grant` themselves; the global switch alone cannot authorize capture. They can later use `revoke` or `delete`.
+
+## 4. Colab RVC service
+
+Run `colab/DigitalMe_RVC_Colab.ipynb` in a Python 3.12 NVIDIA GPU runtime, authorize Drive, and copy the printed URL/token into `.env`. A first experimental model needs at least 120 seconds of clean consented speech. The official RVC project recommends substantially more clean audio for quality.
+
+## 5. Live smoke test
+
 ```bash
 npm run start:local
 ```
-Then use `/join` in your Discord server voice channel!
+
+Then grant consent, use `/join`, collect enough clean speech, run `/voice-train start`, wait for `/voice-train status` to report a ready model, select it with `/voice`, test `/speak`, interrupt playback, and finish with `/leave`.

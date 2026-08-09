@@ -1,5 +1,7 @@
 # PHASE 5 STATUS — LOCAL THAI OWNER VOICE CLONE & TTS
 
+> Historical generated note. Actual voice cloning is not implemented; the Colab helper is stock Edge-TTS. See `PROJECT_STATUS.md`.
+
 **Status:** LOCALLY_VERIFIED (Engine & Chunking Implemented) / BLOCKED_OWNER_ASSET (Pending Owner Voice WAV)
 
 ---

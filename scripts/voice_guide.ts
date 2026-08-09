@@ -3,7 +3,7 @@ import path from 'path';
 
 export function runVoiceRecordingGuide() {
   console.log('=== DIGITAL ME OWNER VOICE DATASET GUIDE ===\n');
-  console.log('To clone your voice with 100% natural Thai tone for $0 in Google Colab (RVC v2):');
+  console.log('Prepare a clean, consented owner reference recording for a future voice-cloning backend:');
   console.log('\n1. RECORD YOUR VOICE SAMPLE:');
   console.log('   - Record 1 to 3 minutes of clean audio of your voice (16kHz or 44.1kHz WAV).');
   console.log('   - No background music, game noise, or friend voices in the clip.');
@@ -19,7 +19,8 @@ export function runVoiceRecordingGuide() {
 
   console.log('\n3. SAVE YOUR REFERENCE WAV:');
   console.log('   - Place the file at: data/voice/owner_reference.wav');
-  console.log('   - Set COLAB_TTS_URL in .env if using Google Colab RVC server.');
+  console.log('   - The current Colab helper is stock Thai Edge-TTS and does not train a voice clone.');
+  console.log('   - Connect a compatible, separately validated cloning backend before using this reference.');
 
   const targetDir = path.join(process.cwd(), 'data', 'voice');
   if (!fs.existsSync(targetDir)) {

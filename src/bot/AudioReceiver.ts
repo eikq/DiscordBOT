@@ -11,6 +11,8 @@ import { Client } from 'discord.js';
 import { VoiceConnectionManager } from './VoiceConnectionManager';
 import { VoiceOutputManager } from './tts/VoiceOutputManager';
 import { FriendMemoryManager } from './memory/FriendMemoryManager';
+import { VoiceConsentManager } from './voice/VoiceConsentManager';
+import { ColabVoiceClient } from './voice/ColabVoiceClient';
 
 export type BotState = 'LISTENING' | 'PREDICTING' | 'GENERATING' | 'SPEAKING' | 'INTERRUPTED' | 'COOLDOWN';
 
@@ -37,6 +39,9 @@ export class AudioReceiver {
   private voiceManager: VoiceConnectionManager;
   private voiceOutputManager: VoiceOutputManager;
   private memoryManager: FriendMemoryManager;
+  private consentManager: VoiceConsentManager;
+  private colabVoiceClient: ColabVoiceClient;
+  private selectedVoiceForGuild: (guildId: string) => string | undefined;
   private currentState: BotState = 'LISTENING';
   private activeSessions: Map<string, ActiveUserSession> = new Map();
 
@@ -47,7 +52,10 @@ export class AudioReceiver {
     sessionId: string,
     client: Client,
     socialBrain: SocialBrain,
-    voiceManager: VoiceConnectionManager
+    voiceManager: VoiceConnectionManager,
+    consentManager: VoiceConsentManager,
+    colabVoiceClient: ColabVoiceClient,
+    selectedVoiceForGuild: (guildId: string) => string | undefined
   ) {
     this.connection = connection;
     this.timeline = timeline;
@@ -56,6 +64,9 @@ export class AudioReceiver {
     this.client = client;
     this.socialBrain = socialBrain;
     this.voiceManager = voiceManager;
+    this.consentManager = consentManager;
+    this.colabVoiceClient = colabVoiceClient;
+    this.selectedVoiceForGuild = selectedVoiceForGuild;
     this.responseGenerator = new ResponseGenerator();
     this.voiceOutputManager = new VoiceOutputManager(voiceManager);
     this.memoryManager = new FriendMemoryManager();
@@ -167,10 +178,13 @@ export class AudioReceiver {
           });
 
           // Evaluate friend memory in background
-          this.memoryManager.evaluateAndWriteMemory(userId, displayName, text);
+          if (process.env.MEMORY_ENABLED !== 'false') {
+            this.memoryManager.evaluateAndWriteMemory(userId, displayName, text);
+          }
+        });
 
-          // Automatically train behavior & speech patterns live from voice chat
-          this.autoTrainBehaviorPattern(displayName, text);
+        sttStream.on('error', (error) => {
+          console.error(`[AudioReceiver] STT stream error for ${displayName}:`, error);
         });
       }
 
@@ -198,7 +212,7 @@ export class AudioReceiver {
         // Grace period of 1500ms before finalizing user sentence (merges breath/pause gaps)
         if (currentSession.silenceTimer) clearTimeout(currentSession.silenceTimer);
         currentSession.silenceTimer = setTimeout(() => {
-          this.finalizeUserUtterance(userId, guildId);
+          void this.finalizeUserUtterance(userId, guildId);
         }, 1500);
       });
 
@@ -208,7 +222,7 @@ export class AudioReceiver {
     });
   }
 
-  private finalizeUserUtterance(userId: string, guildId: string) {
+  private async finalizeUserUtterance(userId: string, guildId: string): Promise<void> {
     const session = this.activeSessions.get(userId);
     if (!session) return;
 
@@ -224,13 +238,36 @@ export class AudioReceiver {
       timestamp: Date.now()
     });
 
-    session.sttStream.endStream();
+    try {
+      await session.sttStream.endStream();
+    } catch (error) {
+      console.error(`[AudioReceiver] Failed to finalize STT for ${session.displayName}:`, error);
+      this.currentState = 'LISTENING';
+      return;
+    }
 
     const rawPcm = Buffer.concat(session.audioChunks);
-    // Only record voice sample & trigger pipeline if audio >= 0.6 seconds (115,200 bytes)
+    // Raw voice capture requires both the owner-side switch and this Discord user's explicit consent.
+    if (
+      process.env.RECORD_RAW_AUDIO === 'true'
+      && this.consentManager.hasActiveConsent(guildId, userId)
+      && rawPcm.length >= 115200
+    ) {
+      void this.saveVoiceSample(guildId, session.displayName, userId, rawPcm);
+    }
+
+    const finalTranscript = this.timeline
+      .getRecentFinalTranscripts(20)
+      .find(event => event.eventId === session.eventId);
+
+    if (!finalTranscript) {
+      console.log(`[AudioReceiver] No transcript produced for ${session.displayName}; skipping response generation.`);
+      this.currentState = 'LISTENING';
+      return;
+    }
+
     if (rawPcm.length >= 115200) {
-      this.saveVoiceSample(session.displayName, userId, rawPcm);
-      this.processConversationTurn(guildId);
+      await this.processConversationTurn(guildId);
     } else {
       console.log(`[AudioReceiver] 🔇 Filtered short syllable/click noise (${(rawPcm.length / (48000 * 4)).toFixed(2)}s) from ${session.displayName}`);
     }
@@ -266,7 +303,14 @@ export class AudioReceiver {
       });
 
       // Play audio and handle turn completion
-      await this.voiceOutputManager.speakTurn(guildId, response);
+      const ownerId = process.env.OWNER_DISCORD_USER_ID;
+      const voiceSpeaker = this.selectedVoiceForGuild(guildId)
+        || (ownerId && this.consentManager.hasActiveConsent(guildId, ownerId) ? ownerId : undefined);
+      const spoke = await this.voiceOutputManager.speakTurn(guildId, response, voiceSpeaker);
+      if (!spoke) {
+        this.currentState = 'LISTENING';
+        return;
+      }
       this.socialBrain.recordBotSpoke();
       this.currentState = 'COOLDOWN';
       setTimeout(() => {
@@ -279,48 +323,10 @@ export class AudioReceiver {
     }
   }
 
-  private autoTrainBehaviorPattern(speakerName: string, text: string) {
-    if (!text || text.trim().length < 3) return;
-    try {
-      const dataPath = path.join(process.cwd(), 'data', 'behavior', 'examples.json');
-      const dirPath = path.dirname(dataPath);
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-      }
-
-      const record = {
-        conversationId: `auto_vc_${Date.now()}`,
-        context: [{ speaker: speakerName, text: text.trim() }],
-        ownerAction: "ANSWER",
-        ownerResponse: "เออ",
-        responseDelayMs: 600,
-        relationship: "close_friend",
-        directlyAddressed: text.includes("มึง") || text.includes(speakerName),
-        topic: "live_discord_vc"
-      };
-
-      let existing = [];
-      if (fs.existsSync(dataPath)) {
-        try {
-          existing = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
-        } catch { existing = []; }
-      }
-      existing.unshift(record);
-      // Keep last 200 records
-      if (existing.length > 200) existing = existing.slice(0, 200);
-      fs.writeFileSync(dataPath, JSON.stringify(existing, null, 2));
-
-      console.log(`[AutoTrain] 🎙️ Auto-trained pattern from live Discord VC: "${speakerName}: ${text}"`);
-    } catch (err) {
-      console.error('[AutoTrain Error]', err);
-    }
-  }
-
-  private saveVoiceSample(speakerName: string, userId: string, pcmBuffer: Buffer) {
+  private async saveVoiceSample(guildId: string, speakerName: string, userId: string, pcmBuffer: Buffer): Promise<void> {
     if (!pcmBuffer || pcmBuffer.length < 96000) return; // ignore <0.5 sec short noise or clicks
     try {
-      const cleanName = speakerName.replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, '_');
-      const dirPath = path.join(process.cwd(), 'data', 'voice_samples', cleanName);
+      const dirPath = path.join(process.cwd(), 'data', 'voice_samples', userId);
       if (!fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
       }
@@ -349,9 +355,6 @@ export class AudioReceiver {
       const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
       fs.writeFileSync(filePath, wavBuffer);
 
-      // Sync to Colab / Google Drive in background
-      this.syncSampleToColab(speakerName, fileName, wavBuffer);
-
       // Update catalog
       const catalogPath = path.join(process.cwd(), 'data', 'voice_samples', 'catalog.json');
       let catalog = [];
@@ -361,7 +364,7 @@ export class AudioReceiver {
       catalog.unshift({
         speaker: speakerName,
         userId,
-        file: `/data/voice_samples/${cleanName}/${fileName}`,
+        file: `/data/voice_samples/${userId}/${fileName}`,
         sizeBytes: wavBuffer.length,
         durationSec: (pcmBuffer.length / (48000 * 4)).toFixed(1),
         timestamp
@@ -369,32 +372,25 @@ export class AudioReceiver {
       if (catalog.length > 300) catalog = catalog.slice(0, 300);
       fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
 
-      console.log(`[VoiceRecorder] 🎧 Auto-recorded voice sample for friend "${speakerName}" (${(pcmBuffer.length / (48000 * 4)).toFixed(1)}s) -> saved to ${fileName}`);
+      if (this.colabVoiceClient.isConfigured()) {
+        try {
+          const status = await this.colabVoiceClient.uploadSample({
+            guildId,
+            userId,
+            displayName: speakerName,
+            filename: fileName,
+            wavBuffer,
+          });
+          console.log(`[ColabSync] Uploaded ${fileName}; ${status.durationSeconds.toFixed(1)}s stored, modelReady=${status.modelReady}.`);
+        } catch (error) {
+          console.error('[ColabSync Error]', error instanceof Error ? error.message : error);
+        }
+      }
+
+      console.log(`[VoiceRecorder] Recorded consented sample for "${speakerName}" (${(pcmBuffer.length / (48000 * 4)).toFixed(1)}s) -> ${fileName}`);
     } catch (err) {
       console.error('[VoiceRecorder Error]', err);
     }
   }
 
-  private async syncSampleToColab(speakerName: string, fileName: string, wavBuffer: Buffer) {
-    const colabUrl = process.env.COLAB_TTS_URL;
-    if (!colabUrl) return;
-
-    try {
-      const cleanSpeaker = speakerName.replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'friend';
-      const response = await fetch(`${colabUrl.replace(/\/$/, '')}/upload-sample`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          speaker: cleanSpeaker,
-          filename: fileName,
-          audio_base64: wavBuffer.toString('base64')
-        })
-      });
-      if (response.ok) {
-        console.log(`[ColabSync] ☁️ Successfully uploaded voice sample of "${cleanSpeaker}" to Google Drive via Colab!`);
-      }
-    } catch (err: any) {
-      console.error('[ColabSync Error]', err?.message || err);
-    }
-  }
 }

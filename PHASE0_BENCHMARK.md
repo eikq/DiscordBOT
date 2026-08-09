@@ -1,5 +1,7 @@
 # PHASE 0 BENCHMARK — LOCAL ENVIRONMENT & FREE MODEL SELECTION
 
+> Historical generated note. Metrics and completion claims below are not current evidence. See `PROJECT_STATUS.md` and rerun `npm run benchmark`.
+
 **Status:** LOCALLY_VERIFIED ($0 API Cost Baseline Established)
 
 ---

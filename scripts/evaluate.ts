@@ -70,15 +70,19 @@ export async function runOfflineEvaluator() {
 
     if (aiResponse && ex.ownerResponse && (aiResponse.includes(ex.ownerResponse) || ex.ownerResponse.includes(aiResponse))) {
       matches++;
-      console.log(`  -> Score: 🎯 PERFECT MATCH\n`);
+      console.log(`  -> Score: MATCH\n`);
     } else {
-      console.log(`  -> Score: ⚡ HIGH SIMILARITY\n`);
+      console.log(`  -> Score: MISMATCH\n`);
     }
   }
 
-  console.log(`=== EVALUATION RESULTS: ${evaluated} Test Cases Evaluated (100% Zero Cost) ===\n`);
+  const matchRate = evaluated > 0 ? Math.round((matches / evaluated) * 100) : 0;
+  console.log(`=== EVALUATION RESULTS: ${matches}/${evaluated} matched (${matchRate}%) ===\n`);
 }
 
 if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('evaluate')) {
-  runOfflineEvaluator().catch(console.error);
+  runOfflineEvaluator().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

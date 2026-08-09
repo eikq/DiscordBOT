@@ -5,6 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 
 export class LocalSpeechStream extends SpeechStream {
   private static geminiCooldownUntil = 0;
+  private static offlineWarningShown = false;
   private options: STTStreamOptions;
   private pcmChunks: Buffer[] = [];
   private totalBytes = 0;
@@ -117,8 +118,8 @@ Return ONLY the exact transcribed words spoken in Thai and/or English. If it is 
 
     // 2. FALLBACK TO LOCAL STT / COLAB TRANSCRIPTION ENDPOINT
     try {
-      const colabUrl = process.env.COLAB_TTS_URL || this.baseUrl;
-      const response = await fetch(`${colabUrl.replace(/\/$/, '')}/transcribe`, {
+      const sttUrl = process.env.COLAB_STT_URL || this.baseUrl;
+      const response = await fetch(`${sttUrl.replace(/\/$/, '')}/transcribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: fullBuffer,
@@ -135,14 +136,15 @@ Return ONLY the exact transcribed words spoken in Thai and/or English. If it is 
         throw new Error(`Local STT status ${response.status}`);
       }
     } catch (err: any) {
-      // Offline fallback: calculate audio duration if audio >= 1.0 sec (192,000 bytes)
-      if (this.totalBytes >= 192000) {
-        const durationSec = (this.totalBytes / (48000 * 4)).toFixed(1);
-        const fallbackText = `พูดประมาณ ${durationSec} วินาที`;
-        const latencyMs = Date.now() - startTime;
-        this.emit('final', fallbackText, 0.85, latencyMs);
+      // A duration estimate is not a transcript. Stay silent until a real STT
+      // provider is available so the bot never reacts to fabricated words.
+      if (!LocalSpeechStream.offlineWarningShown) {
+        console.warn(`[LocalSTT] No transcription service available at ${this.baseUrl}.`);
+        LocalSpeechStream.offlineWarningShown = true;
       }
     } finally {
+      this.pcmChunks = [];
+      this.totalBytes = 0;
       this.emit('end');
     }
   }

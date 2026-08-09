@@ -1,5 +1,7 @@
 # PHASE 7 STATUS — EVALUATION, PRIVACY & ONE-COMMAND DEPLOYMENT
 
+> Historical generated note. The launcher and privacy defaults are tested; model services and live Discord remain pending.
+
 **Status:** LOCALLY_VERIFIED ($0 API Cost Observability & Privacy Controls)
 
 ---

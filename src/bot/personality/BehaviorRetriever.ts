@@ -40,6 +40,23 @@ export class BehaviorRetriever {
     return relevant.slice(0, limit);
   }
 
+  public retrieveBestTextMatch(query: string, action: string, minimumScore: number = 0.5): BehaviorExample | null {
+    const queryTokens = this.tokenize(query);
+    if (queryTokens.size === 0) return null;
+
+    let best: { example: BehaviorExample; score: number } | null = null;
+    for (const example of this.examples.filter(item => item.ownerAction === action)) {
+      const exampleText = example.context.map(item => item.text).join(' ');
+      const exampleTokens = this.tokenize(exampleText);
+      const intersection = [...queryTokens].filter(token => exampleTokens.has(token)).length;
+      const union = new Set([...queryTokens, ...exampleTokens]).size;
+      const score = union > 0 ? intersection / union : 0;
+      if (!best || score > best.score) best = { example, score };
+    }
+
+    return best && best.score >= minimumScore ? best.example : null;
+  }
+
   public async retrieveSemantic(query: string, limit: number = 3): Promise<BehaviorExample[]> {
     const queryEmbeddings = await this.embeddingProvider.embed([query]);
     const qVec = queryEmbeddings[0] || [];
@@ -55,5 +72,15 @@ export class BehaviorRetriever {
 
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, limit).map(s => s.ex);
+  }
+
+  private tokenize(text: string): Set<string> {
+    const normalized = text
+      .toLowerCase()
+      .replace(/["'.,!?？:;()[\]{}]/g, ' ')
+      .replace(/\b(?:spin|digital me)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return new Set(normalized.split(' ').filter(Boolean));
   }
 }

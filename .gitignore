@@ -4,5 +4,15 @@ dist/
 coverage/
 .DS_Store
 *.log
+__pycache__/
+*.py[cod]
 .env*
 !.env.example
+data/colab_url.txt
+data/fine_tuning/
+data/memory/
+data/sessions/
+data/voice/
+data/voice_samples/
+data/voice_consents.json
+project-recovered.tar.gz

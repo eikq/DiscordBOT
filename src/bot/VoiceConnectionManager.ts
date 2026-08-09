@@ -1,4 +1,4 @@
-import { joinVoiceChannel, VoiceConnection, VoiceConnectionStatus, getVoiceConnection, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, AudioPlayer } from '@discordjs/voice';
+import { joinVoiceChannel, VoiceConnection, VoiceConnectionStatus, getVoiceConnection, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, AudioPlayer, StreamType, entersState } from '@discordjs/voice';
 import { VoiceChannel, Client, Guild } from 'discord.js';
 import { Readable } from 'stream';
 
@@ -21,22 +21,30 @@ export class VoiceConnectionManager {
     connection.on(VoiceConnectionStatus.Disconnected, async () => {
       try {
         await Promise.race([
-          new Promise((resolve) => connection.once(VoiceConnectionStatus.Signalling, resolve)),
-          new Promise((resolve) => connection.once(VoiceConnectionStatus.Connecting, resolve)),
+          entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+          entersState(connection, VoiceConnectionStatus.Connecting, 5000),
         ]);
       } catch (error) {
         connection.destroy();
       }
     });
 
+    connection.on('error', error => {
+      console.error(`[Voice] Connection error in guild ${channel.guild.id}:`, error.message);
+    });
+
     return connection;
   }
 
-  public playAudio(guildId: string, audioBuffer: Buffer) {
+  public async playAudio(guildId: string, audioBuffer: Buffer): Promise<boolean> {
+    if (!audioBuffer || audioBuffer.length === 0) {
+      console.error('[Voice] Cannot play an empty audio buffer.');
+      return false;
+    }
     const connection = this.getConnection(guildId);
     if (!connection) {
       console.error(`[Voice] Cannot play audio, no connection found for guild ${guildId}`);
-      return;
+      return false;
     }
 
     // Stop existing player if playing
@@ -48,20 +56,48 @@ export class VoiceConnectionManager {
       },
     });
 
-    const stream = Readable.from(audioBuffer);
-    const resource = createAudioResource(stream);
+    let resource;
+    try {
+      const stream = Readable.from(audioBuffer);
+      resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+    } catch (error) {
+      console.error('[Voice] Failed to create audio resource:', error);
+      return false;
+    }
 
-    player.play(resource);
-    connection.subscribe(player);
     this.players.set(guildId, player);
 
-    player.on(AudioPlayerStatus.Playing, () => {
-      console.log(`[Voice] Now playing audio in guild ${guildId}`);
+    const completion = new Promise<boolean>(resolve => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(result);
+      };
+      const timeout = setTimeout(() => {
+        console.error(`[Voice] Audio playback timed out in guild ${guildId}.`);
+        finish(false);
+        player.stop(true);
+      }, 120000);
+      player.once(AudioPlayerStatus.Playing, () => {
+        console.log(`[Voice] Now playing audio in guild ${guildId}`);
+      });
+      player.once(AudioPlayerStatus.Idle, () => finish(true));
+      player.once('error', error => {
+        console.error(`[Voice] Error playing audio:`, error.message);
+        finish(false);
+      });
     });
 
-    player.on('error', error => {
-      console.error(`[Voice] Error playing audio:`, error.message);
-    });
+    connection.subscribe(player);
+    player.play(resource);
+
+    const played = await completion;
+    if (this.players.get(guildId) === player) {
+      this.players.delete(guildId);
+    }
+    return played;
   }
 
   public stopAudio(guildId: string) {

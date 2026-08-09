@@ -25,7 +25,7 @@ export class SpeechStream extends EventEmitter {
     public write(pcmBuffer: Buffer) {
         // Implement in subclass
     }
-    public endStream() {
+    public async endStream(): Promise<void> {
         // Implement in subclass
         this.emit('end');
     }

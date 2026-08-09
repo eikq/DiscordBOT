@@ -21,11 +21,15 @@ export class ResponseGenerator {
     }
 
     const context = state.getContext(10);
-    const examples = this.retriever.retrieveRelevant(decision.action);
-    
-    // Fast deterministic matching based on examples
-    const lastLine = context.recentTranscripts[context.recentTranscripts.length - 1] || "";
-    const lower = lastLine.toLowerCase();
+    const transcriptEvents = state.getRecentTranscriptEvents(10);
+    const lastText = transcriptEvents[transcriptEvents.length - 1]?.rawText || '';
+    const learnedMatch = this.retriever.retrieveBestTextMatch(lastText, decision.action);
+    if (learnedMatch?.ownerResponse) {
+      return learnedMatch.ownerResponse;
+    }
+
+    // Fast deterministic matching when no learned owner example is close enough.
+    const lower = lastText.toLowerCase();
 
     if (lower.includes("valo")) {
       return "ไม่อะ ขก.";

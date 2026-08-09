@@ -12,7 +12,10 @@ export class SocialBrain {
   constructor(botName: string = "Digital Me") {
     this.botName = botName;
     const aliasesFromEnv = process.env.OWNER_ALIASES || "Spin,สปิน";
-    this.ownerAliases = aliasesFromEnv.split(",").map(a => a.trim().toLowerCase());
+    this.ownerAliases = Array.from(new Set([
+      ...aliasesFromEnv.split(","),
+      botName,
+    ].map(alias => alias.trim().toLowerCase()).filter(Boolean)));
     this.localLlm = new LocalLlmProvider();
   }
 
@@ -23,31 +26,34 @@ export class SocialBrain {
       return this.getDefaultDecision();
     }
 
-    const lastTranscript = context.recentTranscripts[context.recentTranscripts.length - 1] || "";
-    const lowerLast = lastTranscript.toLowerCase();
+    const transcriptEvents = state.getRecentTranscriptEvents(10);
+    const lastEvent = transcriptEvents[transcriptEvents.length - 1];
+    const lowerLast = lastEvent.rawText.trim().toLowerCase();
 
     // 1. FAST DETERMINISTIC HYBRID RULES (High Confidence / Zero Cost)
     // Rule A: Was the owner directly addressed by alias?
-    const directlyAddressed = this.ownerAliases.some(alias => lowerLast.includes(alias));
+    const directlyAddressed = this.containsOwnerAlias(lowerLast);
     
     // Rule B: Is it a direct question targeting the owner?
-    const isDirectQuestion = directlyAddressed && (
-      lowerLast.includes("ปะ") || lowerLast.includes("ป่ะ") || 
-      lowerLast.includes("ไหม") || lowerLast.includes("ไม") || 
-      lowerLast.includes("?" ) || lowerLast.includes("ว่าไง")
-    );
+    const isDirectQuestion = directlyAddressed && this.looksLikeQuestion(lowerLast);
+    const isFollowUpQuestion = !directlyAddressed &&
+      this.looksLikeFollowUpQuestion(lowerLast) &&
+      transcriptEvents.slice(0, -1).slice(-4).some(event =>
+        event.discordUserId === lastEvent.discordUserId &&
+        this.containsOwnerAlias(event.rawText.toLowerCase())
+      );
 
-    if (isDirectQuestion) {
+    if (isDirectQuestion || isFollowUpQuestion) {
       const decision: SocialDecision = {
         action: 'ANSWER',
-        targetUserIds: context.participants,
-        confidence: 0.95,
-        directlyAddressed: true,
-        responseExpected: 0.95,
+        targetUserIds: [lastEvent.discordUserId],
+        confidence: isDirectQuestion ? 0.95 : 0.85,
+        directlyAddressed: isDirectQuestion,
+        responseExpected: isDirectQuestion ? 0.95 : 0.8,
         interruptAppropriate: false,
         desiredLength: 'very_short',
         tone: 'casual',
-        reasonCode: 'DIRECT_QUESTION_TARGETED'
+        reasonCode: isDirectQuestion ? 'DIRECT_QUESTION_TARGETED' : 'FOLLOW_UP_TO_OWNER'
       };
       this.logDecision(decision);
       return decision;
@@ -57,7 +63,7 @@ export class SocialBrain {
     if (directlyAddressed) {
       const decision: SocialDecision = {
         action: 'SHORT_REACTION',
-        targetUserIds: context.participants,
+        targetUserIds: [lastEvent.discordUserId],
         confidence: 0.85,
         directlyAddressed: true,
         responseExpected: 0.7,
@@ -75,6 +81,12 @@ export class SocialBrain {
       return this.getDefaultDecision('SOCIAL_COOLDOWN');
     }
 
+    // Silence is the safe default. Opt in before allowing an LLM to make the
+    // bot join conversations where the owner was not addressed.
+    if (process.env.ALLOW_UNPROMPTED_RESPONSES !== 'true') {
+      return this.getDefaultDecision('BANTER_IGNORE');
+    }
+
     // 2. LOCAL LLM STRUCTURED CLASSIFICATION
     const systemPrompt = `You are the social brain for a Discord voice bot named "${this.botName}" (behaving like owner "Spin").
 Decide if the bot should speak.
@@ -88,9 +100,10 @@ Return JSON with keys: action ("IGNORE"|"LISTEN"|"SHORT_REACTION"|"ANSWER"|"JOKE
       temperature: 0.1
     });
 
-    if (llmDecision) {
-      this.logDecision(llmDecision);
-      return llmDecision;
+    const validatedDecision = this.validateDecision(llmDecision, lastEvent.discordUserId);
+    if (validatedDecision) {
+      this.logDecision(validatedDecision);
+      return validatedDecision;
     }
 
     // Default Silence Bias
@@ -99,6 +112,48 @@ Return JSON with keys: action ("IGNORE"|"LISTEN"|"SHORT_REACTION"|"ANSWER"|"JOKE
 
   public recordBotSpoke() {
     this.lastSpeakTime = Date.now();
+  }
+
+  private containsOwnerAlias(text: string): boolean {
+    return this.ownerAliases.some(alias => text.includes(alias));
+  }
+
+  private looksLikeQuestion(text: string): boolean {
+    return /[?？]|(?:ปะ|ป่ะ|ไหม|มั้ย|ไม|ว่าไง|เล่นไร|ทำไร|เอาไง)(?:\s|$)/i.test(text);
+  }
+
+  private looksLikeFollowUpQuestion(text: string): boolean {
+    return this.looksLikeQuestion(text) || /(?:แล้ว|ละ|ล่ะ).*มึง|มึง.*(?:อะ|ล่ะ|ละ)$/.test(text);
+  }
+
+  private validateDecision(value: SocialDecision | null, fallbackTarget: string): SocialDecision | null {
+    if (!value || !['IGNORE', 'LISTEN', 'SHORT_REACTION', 'ANSWER', 'JOKE'].includes(value.action)) {
+      return null;
+    }
+
+    const desiredLength = ['very_short', 'short', 'medium'].includes(value.desiredLength)
+      ? value.desiredLength
+      : 'very_short';
+
+    return {
+      action: value.action,
+      targetUserIds: Array.isArray(value.targetUserIds)
+        ? value.targetUserIds.filter(id => typeof id === 'string').slice(0, 10)
+        : [fallbackTarget],
+      confidence: this.clampNumber(value.confidence, 0, 1, 0.5),
+      directlyAddressed: value.directlyAddressed === true,
+      responseExpected: this.clampNumber(value.responseExpected, 0, 1, 0),
+      interruptAppropriate: value.interruptAppropriate === true,
+      desiredLength,
+      tone: typeof value.tone === 'string' ? value.tone.slice(0, 40) : 'neutral',
+      reasonCode: typeof value.reasonCode === 'string' ? value.reasonCode.slice(0, 80) : 'LLM_CLASSIFICATION',
+    };
+  }
+
+  private clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value)
+      ? Math.min(max, Math.max(min, value))
+      : fallback;
   }
 
   private getDefaultDecision(reason: string = 'DEFAULT_IGNORE'): SocialDecision {

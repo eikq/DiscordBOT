@@ -1,9 +1,8 @@
 import { runHardwareDoctor } from './doctor';
 import { runLocalBenchmark } from './benchmark';
-import { BotService } from '../src/bot/BotService';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 async function startLocalZeroCostSystem() {
   console.log('====================================================');
@@ -18,19 +17,20 @@ async function startLocalZeroCostSystem() {
   // 2. Run Local Service Benchmark
   await runLocalBenchmark();
 
-  // 3. Boot Discord Bot
+  // 3. Start the dashboard. server.ts also connects the bot when a token exists.
   const token = process.env.DISCORD_TOKEN;
   if (!token) {
     console.log('\n[Launcher] ⚡ DISCORD_TOKEN is missing in .env.');
-    console.log('[Launcher] System initialized in Standalone Local Simulation & Web Control Mode.');
-    console.log('[Launcher] To connect to live Discord, add DISCORD_TOKEN to your .env file.\n');
-    return;
+    console.log('[Launcher] Dashboard will start without a Discord connection.');
+    console.log('[Launcher] Add DISCORD_TOKEN to .env or paste it into the local dashboard.\n');
+  } else {
+    console.log('[Launcher] Discord token found; the dashboard will connect the bot.');
   }
 
-  console.log('[Launcher] Connecting Digital Me to Discord...');
-  const botService = new BotService();
-  await botService.start(token);
-  console.log('✅ Digital Me Bot is ONLINE and running at $0 recurring cost!\n');
+  await import('../server');
 }
 
-startLocalZeroCostSystem().catch(console.error);
+startLocalZeroCostSystem().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

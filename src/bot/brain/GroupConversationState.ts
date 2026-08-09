@@ -13,8 +13,12 @@ export class GroupConversationState {
         this.timeline = timeline;
     }
 
+    public getRecentTranscriptEvents(limit: number = 20): TranscriptFinalEvent[] {
+        return this.timeline.getRecentFinalTranscripts(limit);
+    }
+
     public getContext(limit: number = 20): FormattedContext {
-        const transcripts = this.timeline.getRecentFinalTranscripts(limit);
+        const transcripts = this.getRecentTranscriptEvents(limit);
         
         const participantsSet = new Set<string>();
         const recentTranscripts: string[] = [];

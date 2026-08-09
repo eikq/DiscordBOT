@@ -7,6 +7,8 @@ import { SocialBrain } from './brain/SocialBrain';
 import { AudioReceiver } from './AudioReceiver';
 import fs from 'fs';
 import path from 'path';
+import { VoiceConsentManager } from './voice/VoiceConsentManager';
+import { ColabVoiceClient } from './voice/ColabVoiceClient';
 
 export class BotService {
   private client: Client;
@@ -14,9 +16,12 @@ export class BotService {
   private timeline: ConversationTimeline;
   private sttProvider: SpeechToTextProvider;
   private socialBrain: SocialBrain;
+  private voiceConsentManager: VoiceConsentManager;
+  private colabVoiceClient: ColabVoiceClient;
   private activeReceivers: Map<string, AudioReceiver> = new Map();
-  private activeVoiceSpeaker: string = "default";
+  private activeVoiceSpeakers: Map<string, string> = new Map();
   private sessionIdCounter = 1;
+  private startPromise: Promise<void> | null = null;
 
   constructor() {
     this.client = new Client({
@@ -32,6 +37,8 @@ export class BotService {
     this.timeline = new ConversationTimeline();
     this.sttProvider = new LocalSTTProvider();
     this.socialBrain = new SocialBrain("Digital Me");
+    this.voiceConsentManager = new VoiceConsentManager();
+    this.colabVoiceClient = new ColabVoiceClient();
 
     this.registerEvents();
   }
@@ -52,19 +59,19 @@ export class BotService {
           { name: 'transcript', description: 'Shows recent Thai transcriptions' },
           {
             name: 'voice',
-            description: 'Select which person/cloned voice the bot should use',
+            description: 'Select a consented Discord user voice for this server',
             options: [
               {
-                name: 'speaker',
-                description: 'Name/Discord tag of the person whose voice clone to use (e.g. piriyapong or default)',
-                type: 3, // STRING
+                name: 'user',
+                description: 'Consented user whose trained voice should be used',
+                type: 6, // USER
                 required: true
               }
             ]
           },
           {
             name: 'speak',
-            description: 'Make the bot speak text using a specific cloned voice in VC',
+            description: 'Make the bot speak text using the configured TTS provider',
             options: [
               {
                 name: 'text',
@@ -73,16 +80,50 @@ export class BotService {
                 required: true
               },
               {
-                name: 'speaker',
-                description: 'Optional speaker voice clone to use',
-                type: 3, // STRING
+                name: 'user',
+                description: 'Optional consented user voice to use',
+                type: 6, // USER
                 required: false
               }
             ]
           },
           {
+            name: 'voice-consent',
+            description: 'Control recording and voice-model consent for your own voice',
+            options: [
+              {
+                name: 'action',
+                description: 'Grant, revoke, inspect, or delete your voice data',
+                type: 3,
+                required: true,
+                choices: [
+                  { name: 'grant', value: 'grant' },
+                  { name: 'status', value: 'status' },
+                  { name: 'revoke', value: 'revoke' },
+                  { name: 'delete', value: 'delete' }
+                ]
+              }
+            ]
+          },
+          {
+            name: 'voice-train',
+            description: 'Start or inspect your asynchronous Colab RVC training job',
+            options: [
+              {
+                name: 'action',
+                description: 'Start training or inspect current state',
+                type: 3,
+                required: true,
+                choices: [
+                  { name: 'status', value: 'status' },
+                  { name: 'start', value: 'start' }
+                ]
+              }
+            ]
+          },
+          {
             name: 'voices',
-            description: 'Lists all available recorded & cloned voice models'
+            description: 'Lists locally recorded, consented voice samples'
           }
         ];
         await this.client.application?.commands.set(commands);
@@ -101,6 +142,11 @@ export class BotService {
         const voiceChannel = member?.voice?.channel;
         if (!voiceChannel || !(voiceChannel instanceof VoiceChannel)) {
           await interaction.reply({ content: "You need to be in a voice channel to use this command.", ephemeral: true });
+          return;
+        }
+
+        if (this.activeReceivers.has(voiceChannel.guild.id)) {
+          await interaction.reply({ content: "I'm already listening in this server. Use `/leave` before joining again.", ephemeral: true });
           return;
         }
 
@@ -123,12 +169,15 @@ export class BotService {
           sessionId, 
           this.client, 
           this.socialBrain,
-          this.voiceManager
+          this.voiceManager,
+          this.voiceConsentManager,
+          this.colabVoiceClient,
+          guildId => this.activeVoiceSpeakers.get(guildId)
         );
         receiver.startListening();
         this.activeReceivers.set(voiceChannel.guild.id, receiver);
 
-        await interaction.reply(`Joined ${voiceChannel.name} and started listening! ($0 API Cost)`);
+        await interaction.reply(`Joined ${voiceChannel.name} and started listening. Raw voice training samples are captured only for users who run \`/voice-consent grant\`.`);
       }
       else if (commandName === 'leave') {
         const guildId = interaction.guildId;
@@ -146,14 +195,17 @@ export class BotService {
             timestamp: Date.now()
           });
           
-          // Save session timeline
-          const sessionData = this.timeline.getRecentEvents(1000);
-          const dir = path.join(process.cwd(), 'data', 'sessions');
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          const file = path.join(dir, `session_${Date.now()}.json`);
-          fs.writeFileSync(file, JSON.stringify(sessionData, null, 2));
-          
-          await interaction.reply("Left the voice channel and saved session data.");
+          if (process.env.TRANSCRIPT_RETENTION !== 'false') {
+            const sessionData = this.timeline.getRecentEvents(1000);
+            const dir = path.join(process.cwd(), 'data', 'sessions');
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const file = path.join(dir, `session_${Date.now()}.json`);
+            fs.writeFileSync(file, JSON.stringify(sessionData, null, 2));
+            await interaction.reply("Left the voice channel and saved session data.");
+          } else {
+            this.timeline.clear();
+            await interaction.reply("Left the voice channel. Transcript retention is disabled, so session data was not saved.");
+          }
         } else {
           await interaction.reply({ content: "I'm not in a voice channel here.", ephemeral: true });
         }
@@ -190,18 +242,121 @@ export class BotService {
         }
         await interaction.reply(replyText);
       }
+      else if (commandName === 'voice-consent') {
+        const guildId = interaction.guildId;
+        if (!guildId) {
+          await interaction.reply({ content: 'This command must be used in a server.', ephemeral: true });
+          return;
+        }
+        const action = interaction.options.getString('action', true);
+        const userId = interaction.user.id;
+        const displayName = interaction.user.displayName || interaction.user.username;
+
+        if (action === 'grant') {
+          this.voiceConsentManager.grant(guildId, userId, displayName);
+          const captureState = process.env.RECORD_RAW_AUDIO === 'true'
+            ? 'Recording is enabled; your future VC utterances can now become training samples.'
+            : 'Your consent is saved, but the bot owner must also set RECORD_RAW_AUDIO=true before samples are captured.';
+          await interaction.reply({
+            content: `Consent granted for your own voice. ${captureState} Use \`/voice-consent revoke\` to stop future capture or \`/voice-consent delete\` to erase stored samples and models.`,
+            ephemeral: true,
+          });
+        } else if (action === 'status') {
+          const record = this.voiceConsentManager.get(guildId, userId);
+          await interaction.reply({
+            content: record?.active
+              ? `Your voice consent is active in this server (granted ${new Date(record.consentedAt).toISOString()}).`
+              : 'Your voice consent is not active in this server.',
+            ephemeral: true,
+          });
+        } else if (action === 'revoke') {
+          this.voiceConsentManager.revoke(guildId, userId);
+          if (this.activeVoiceSpeakers.get(guildId) === userId) this.activeVoiceSpeakers.delete(guildId);
+          await interaction.reply({
+            content: 'Consent revoked. Future raw voice capture stops in this server. Existing data remains until you run `/voice-consent delete`.',
+            ephemeral: true,
+          });
+        } else if (action === 'delete') {
+          await interaction.deferReply({ ephemeral: true });
+          this.voiceConsentManager.revokeAll(userId);
+          for (const [selectedGuildId, selectedUserId] of this.activeVoiceSpeakers) {
+            if (selectedUserId === userId) this.activeVoiceSpeakers.delete(selectedGuildId);
+          }
+          const localCount = this.voiceConsentManager.deleteLocalSpeakerData(userId);
+          let remoteResult = 'Colab is not configured, so only local files were removed.';
+          if (this.colabVoiceClient.isConfigured()) {
+            try {
+              await this.colabVoiceClient.deleteSpeaker(userId);
+              remoteResult = 'Google Drive samples, training jobs, and models were deleted through Colab.';
+            } catch (error) {
+              remoteResult = `Remote deletion failed: ${error instanceof Error ? error.message : String(error)}`;
+            }
+          }
+          await interaction.editReply(`Consent revoked and ${localCount} local WAV file(s) deleted. ${remoteResult}`);
+        }
+      }
+      else if (commandName === 'voice-train') {
+        const guildId = interaction.guildId;
+        if (!guildId) {
+          await interaction.reply({ content: 'This command must be used in a server.', ephemeral: true });
+          return;
+        }
+        if (!this.voiceConsentManager.hasActiveConsent(guildId, interaction.user.id)) {
+          await interaction.reply({ content: 'Run `/voice-consent grant` first.', ephemeral: true });
+          return;
+        }
+        if (!this.colabVoiceClient.isConfigured()) {
+          await interaction.reply({ content: 'The Colab URL and COLAB_API_TOKEN are not configured.', ephemeral: true });
+          return;
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const action = interaction.options.getString('action', true);
+          const status = action === 'start'
+            ? await this.colabVoiceClient.startTraining(interaction.user.id, interaction.user.displayName || interaction.user.username)
+            : await this.colabVoiceClient.getStatus(interaction.user.id);
+          const job = status.job ? `${status.job.status} (${status.job.id})` : 'none';
+          await interaction.editReply(
+            `Samples: ${status.sampleCount}, audio: ${status.durationSeconds.toFixed(1)}s, model ready: ${status.modelReady ? 'yes' : 'no'}, job: ${job}.`
+          );
+        } catch (error) {
+          await interaction.editReply(error instanceof Error ? error.message : String(error));
+        }
+      }
       else if (commandName === 'voice') {
-        const selectedSpeaker = interaction.options.getString('speaker', true);
-        this.activeVoiceSpeaker = selectedSpeaker;
-        await interaction.reply(`🎙️ **Active Voice Model set to:** \`${selectedSpeaker}\`!\nWhen the bot speaks in voice chat, it will attempt to use this person's cloned voice model from Google Drive.`);
+        const guildId = interaction.guildId;
+        const selectedUser = interaction.options.getUser('user', true);
+        if (!guildId) {
+          await interaction.reply({ content: 'This command must be used in a server.', ephemeral: true });
+          return;
+        }
+        if (!this.voiceConsentManager.hasActiveConsent(guildId, selectedUser.id)) {
+          await interaction.reply({ content: `${selectedUser.displayName} has not granted active voice-model consent.`, ephemeral: true });
+          return;
+        }
+        this.activeVoiceSpeakers.set(guildId, selectedUser.id);
+        await interaction.reply(`TTS voice set to the trained model for **${selectedUser.displayName}** (${selectedUser.id}).`);
       }
       else if (commandName === 'speak') {
         const textToSpeak = interaction.options.getString('text', true);
-        const speakerOpt = interaction.options.getString('speaker') || this.activeVoiceSpeaker;
+        const requestedUser = interaction.options.getUser('user');
         
         const guild = interaction.guild;
         if (!guild) {
           await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+          return;
+        }
+        const selectedSpeakerId = requestedUser?.id
+          || this.activeVoiceSpeakers.get(guild.id)
+          || process.env.OWNER_DISCORD_USER_ID;
+        if (!selectedSpeakerId && this.colabVoiceClient.isConfigured()) {
+          await interaction.reply({ content: 'Select a consented voice with `/voice` or the `user` option first.', ephemeral: true });
+          return;
+        }
+        const speakerId = selectedSpeakerId || 'default';
+        if (speakerId !== 'default' && !this.voiceConsentManager.hasActiveConsent(guild.id, speakerId)) {
+          await interaction.reply({ content: 'That user does not currently have active voice-model consent.', ephemeral: true });
           return;
         }
 
@@ -221,31 +376,30 @@ export class BotService {
         // Import LocalTTSProvider dynamically or initialize
         const { LocalTTSProvider } = await import('./tts/LocalTTSProvider');
         const tts = new LocalTTSProvider();
-        const audioBuffer = await tts.synthesize(textToSpeak, speakerOpt);
+        const audioBuffer = await tts.synthesize(textToSpeak, speakerId);
 
         if (audioBuffer) {
-          this.voiceManager.playAudio(guild.id, audioBuffer);
-          await interaction.editReply(`🗣️ **Speaking in VC** using \`${speakerOpt}\`'s cloned voice:\n> "${textToSpeak}"`);
+          const played = await this.voiceManager.playAudio(guild.id, audioBuffer);
+          if (played) {
+            await interaction.editReply(`Speaking in VC using consented voice model \`${speakerId}\`:\n> "${textToSpeak}"`);
+          } else {
+            await interaction.editReply(`❌ Audio was generated but Discord playback failed.`);
+          }
         } else {
-          await interaction.editReply(`❌ Failed to synthesize audio using speaker \`${speakerOpt}\`. Make sure your Google Colab voice server URL is connected!`);
+          await interaction.editReply(`Failed to synthesize cloned speech for \`${speakerId}\`. Check the Colab service and training status.`);
         }
       }
       else if (commandName === 'voices') {
-        const samplesDir = path.join(process.cwd(), 'data', 'voice_samples');
-        let speakers: string[] = [];
-        if (fs.existsSync(samplesDir)) {
-          speakers = fs.readdirSync(samplesDir).filter(f => {
-            const full = path.join(samplesDir, f);
-            return fs.statSync(full).isDirectory();
-          });
-        }
-
-        let msg = `🗣️ **Recorded Friend Voice Models (${speakers.length}):**\n`;
-        if (speakers.length > 0) {
-          msg += speakers.map(s => `- \`${s}\` (Stored & synced to Google Drive)`).join('\n');
-          msg += `\n\nUse \`/voice <speaker>\` to select a voice or \`/speak <text> <speaker>\` to speak!`;
+        const consented = this.voiceConsentManager.listActive().filter(record => record.guildId === interaction.guildId);
+        const unique = [...new Map(consented.map(record => [record.userId, record])).values()];
+        let msg = `**Actively consented voices (${unique.length}):**\n`;
+        if (unique.length > 0) {
+          msg += unique.map(record => `- **${record.displayName}** (\`${record.userId}\`)`).join('\n');
+          msg += '\n\nUse `/voice user:@name`; each user can inspect training with `/voice-train status`.';
         } else {
-          msg += `*No individual voice samples recorded yet.* Join a voice channel with \`/join\` and speak to automatically record and sync individual voice samples to Google Drive!`;
+          msg += process.env.RECORD_RAW_AUDIO === 'true'
+            ? '*No one has granted voice-model consent yet.*'
+            : '*Raw voice recording is disabled and no one has granted voice-model consent.*';
         }
 
         await interaction.reply(msg);
@@ -255,10 +409,26 @@ export class BotService {
 
   public async start(token: string) {
     if (!token) throw new Error("Discord token is required.");
-    await this.client.login(token);
+    if (this.client.isReady()) return;
+    if (!this.startPromise) {
+      this.startPromise = this.client.login(token)
+        .then(() => undefined)
+        .finally(() => {
+          this.startPromise = null;
+        });
+    }
+    await this.startPromise;
   }
 
   public getTimeline(): ConversationTimeline {
     return this.timeline;
+  }
+
+  public getVoiceConsentManager(): VoiceConsentManager {
+    return this.voiceConsentManager;
+  }
+
+  public getColabVoiceClient(): ColabVoiceClient {
+    return this.colabVoiceClient;
   }
 }

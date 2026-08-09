@@ -34,18 +34,29 @@ export class LocalTTSProvider implements TTSProvider {
   public async synthesize(text: string, speakerName?: string): Promise<Buffer | null> {
     const cleanText = this.preprocessText(text);
 
-    // 1. Try Local TTS Server / Colab RVC endpoint
+    // Try the authenticated Colab RVC service first, otherwise the configured local TTS server.
     try {
-      const colabUrl = process.env.COLAB_TTS_URL || this.baseUrl;
-      const res = await fetch(`${colabUrl.replace(/\/$/, '')}/generate`, {
+      const colabUrl = process.env.COLAB_VOICE_URL || process.env.COLAB_TTS_URL;
+      if (colabUrl && !speakerName) {
+        console.warn('[LocalTTS] Refusing to select an arbitrary cloned voice without a consented Discord user ID.');
+        return null;
+      }
+      const serviceUrl = colabUrl || this.baseUrl;
+      const route = colabUrl ? '/v1/generate' : '/generate';
+      const apiToken = process.env.COLAB_API_TOKEN?.trim();
+      const parsedTimeout = Number(process.env.TTS_TIMEOUT_MS || 60_000);
+      const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : 60_000;
+      const res = await fetch(`${serviceUrl.replace(/\/$/, '')}${route}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(colabUrl && apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+        },
         body: JSON.stringify({ 
           text: cleanText,
-          speaker: speakerName || "default",
-          voice: speakerName || "default"
+          speakerId: speakerName || 'default',
         }),
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(timeoutMs)
       });
 
       if (res.ok) {
@@ -56,24 +67,7 @@ export class LocalTTSProvider implements TTSProvider {
       // Local TTS endpoint offline
     }
 
-    // 2. Synthesize lightweight local WAV PCM tone fallback for testing without external API
-    return this.generateFallbackPCM(cleanText);
-  }
-
-  private generateFallbackPCM(text: string): Buffer {
-    // Generate a clean 16kHz PCM audio buffer corresponding to speech duration
-    const sampleRate = 16000;
-    const durationSec = Math.max(0.6, Math.min(3.0, text.length * 0.15));
-    const totalSamples = Math.floor(sampleRate * durationSec);
-    const buffer = Buffer.alloc(totalSamples * 2);
-
-    const freq = 440; // Gentle reference audio pitch tone
-    for (let i = 0; i < totalSamples; i++) {
-      const t = i / sampleRate;
-      const sample = Math.sin(2 * Math.PI * freq * t) * 0.1 * 32767;
-      buffer.writeInt16LE(Math.floor(sample), i * 2);
-    }
-
-    return buffer;
+    console.warn(`[LocalTTS] No cloned speech service available at ${process.env.COLAB_VOICE_URL || process.env.COLAB_TTS_URL || this.baseUrl}.`);
+    return null;
   }
 }
