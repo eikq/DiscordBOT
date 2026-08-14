@@ -52,26 +52,51 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
   console.log(`     -> Embedding Latency: ${result.embeddingLatencyMs}ms per batch`);
 
   // 2. Benchmark Local LLM Endpoint (or Fallback Engine)
-  console.log('[2/4] Benchmarking Local LLM (Typhoon2.5-Qwen3-4B / Local LLM Endpoint)...');
-  const llmUrl = process.env.LLM_BASE_URL || 'http://127.0.0.1:8080/v1';
+  console.log('[2/4] Benchmarking Local LLM (Qwen3 4B Instruct Q4 / Ollama)...');
+  const llmUrl = process.env.LLM_BASE_URL || 'http://127.0.0.1:11434/v1';
+  const parsedLlmUrl = new URL(llmUrl);
+  const ollamaNativeUrl = parsedLlmUrl.port === '11434' ? `${parsedLlmUrl.protocol}//${parsedLlmUrl.host}` : null;
   const llmStart = Date.now();
   try {
-    const res = await fetch(`${llmUrl}/chat/completions`, {
+    const res = await fetch(ollamaNativeUrl ? `${ollamaNativeUrl}/api/chat` : `${llmUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: process.env.LLM_MODEL || 'typhoon2.5-qwen3-4b',
+      body: JSON.stringify(ollamaNativeUrl ? {
+        model: process.env.LLM_MODEL || 'qwen3:4b-instruct',
         messages: [{ role: 'user', content: 'ตอบสั้นๆ: มึงเข้า valo ปะ' }],
-        max_tokens: 20
+        stream: false,
+        think: false,
+        keep_alive: -1,
+        options: {
+          num_predict: 20,
+          num_ctx: Math.max(512, Number(process.env.LLM_CONTEXT_TOKENS || 2048)),
+          num_gpu: Math.max(0, Number(process.env.LLM_GPU_LAYERS || 0)),
+        },
+      } : {
+        model: process.env.LLM_MODEL || 'qwen3:4b-instruct',
+        messages: [{ role: 'user', content: 'ตอบสั้นๆ: มึงเข้า valo ปะ' }],
+        max_tokens: 20,
+        reasoning_effort: 'none'
       }),
-      signal: AbortSignal.timeout(3000)
+      signal: AbortSignal.timeout(Math.max(3_000, Number(process.env.LLM_TIMEOUT_MS || 3_000)))
     });
     if (res.ok) {
       result.llmTotalMs = Date.now() - llmStart;
-      result.llmFirstTokenMs = Math.round(result.llmTotalMs * 0.3);
-      result.llmTokensPerSec = 28.5;
+      const payload = await res.json() as {
+        usage?: { completion_tokens?: number };
+        eval_count?: number;
+        eval_duration?: number;
+      };
+      const completionTokens = payload.usage?.completion_tokens || payload.eval_count || 0;
+      result.llmFirstTokenMs = result.llmTotalMs;
+      const generationSeconds = payload.eval_duration
+        ? payload.eval_duration / 1_000_000_000
+        : result.llmTotalMs / 1000;
+      result.llmTokensPerSec = completionTokens > 0
+        ? Number((completionTokens / Math.max(generationSeconds, 0.001)).toFixed(1))
+        : 0;
       result.services.llm = true;
-      console.log(`     -> Local LLM Server Connected! Total Latency: ${result.llmTotalMs}ms (~28.5 tok/s)`);
+      console.log(`     -> Local LLM Server Connected! Total Latency: ${result.llmTotalMs}ms (${result.llmTokensPerSec} tok/s)`);
     } else {
       throw new Error(`Local LLM server returned status ${res.status}`);
     }
@@ -99,7 +124,7 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
   }
 
   // 4. Benchmark Local TTS Endpoint
-  console.log('[4/4] Benchmarking Local Thai TTS (Edge-TTS / Colab RVC / ThonburianTTS)...');
+  console.log('[4/4] Benchmarking Local Thai TTS (JaiTTS source + RTX RVC, Edge fallback)...');
   const ttsUrl = process.env.TTS_BASE_URL || 'http://127.0.0.1:8766';
   const ttsStart = Date.now();
   try {

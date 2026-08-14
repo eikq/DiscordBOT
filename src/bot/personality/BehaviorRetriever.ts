@@ -11,22 +11,24 @@ export interface BehaviorExample {
   relationship: string;
   directlyAddressed: boolean;
   topic: string;
+  personaUserId?: string;
 }
 
 export class BehaviorRetriever {
   private examples: BehaviorExample[] = [];
   private embeddingProvider: LocalEmbeddingProvider;
+  private readonly dataPath: string;
 
-  constructor() {
+  constructor(dataPath = path.join(process.cwd(), 'data', 'behavior', 'examples.json')) {
     this.embeddingProvider = new LocalEmbeddingProvider();
+    this.dataPath = dataPath;
     this.loadExamples();
   }
 
   private loadExamples() {
     try {
-      const dataPath = path.join(process.cwd(), 'data', 'behavior', 'examples.json');
-      if (fs.existsSync(dataPath)) {
-        const data = fs.readFileSync(dataPath, 'utf-8');
+      if (fs.existsSync(this.dataPath)) {
+        const data = fs.readFileSync(this.dataPath, 'utf-8');
         this.examples = JSON.parse(data);
       }
     } catch (error) {
@@ -34,18 +36,21 @@ export class BehaviorRetriever {
     }
   }
 
-  public retrieveRelevant(action: string, limit: number = 3): BehaviorExample[] {
-    const relevant = this.examples.filter(e => e.ownerAction === action);
-    if (relevant.length === 0) return this.examples.slice(0, limit);
+  public retrieveRelevant(action: string, limit: number = 3, personaUserId?: string): BehaviorExample[] {
+    this.loadExamples();
+    const scoped = this.forPersona(personaUserId);
+    const relevant = scoped.filter(e => e.ownerAction === action);
+    if (relevant.length === 0) return scoped.slice(0, limit);
     return relevant.slice(0, limit);
   }
 
-  public retrieveBestTextMatch(query: string, action: string, minimumScore: number = 0.5): BehaviorExample | null {
+  public retrieveBestTextMatch(query: string, action: string, minimumScore: number = 0.5, personaUserId?: string): BehaviorExample | null {
+    this.loadExamples();
     const queryTokens = this.tokenize(query);
     if (queryTokens.size === 0) return null;
 
     let best: { example: BehaviorExample; score: number } | null = null;
-    for (const example of this.examples.filter(item => item.ownerAction === action)) {
+    for (const example of this.forPersona(personaUserId).filter(item => item.ownerAction === action)) {
       const exampleText = example.context.map(item => item.text).join(' ');
       const exampleTokens = this.tokenize(exampleText);
       const intersection = [...queryTokens].filter(token => exampleTokens.has(token)).length;
@@ -57,12 +62,13 @@ export class BehaviorRetriever {
     return best && best.score >= minimumScore ? best.example : null;
   }
 
-  public async retrieveSemantic(query: string, limit: number = 3): Promise<BehaviorExample[]> {
+  public async retrieveSemantic(query: string, limit: number = 3, personaUserId?: string): Promise<BehaviorExample[]> {
+    this.loadExamples();
     const queryEmbeddings = await this.embeddingProvider.embed([query]);
     const qVec = queryEmbeddings[0] || [];
 
     const scored = await Promise.all(
-      this.examples.map(async (ex) => {
+      this.forPersona(personaUserId).map(async (ex) => {
         const contextStr = ex.context.map(c => `${c.speaker}: ${c.text}`).join(" ");
         const exEmbeddings = await this.embeddingProvider.embed([contextStr]);
         const score = this.embeddingProvider.cosineSimilarity(qVec, exEmbeddings[0] || []);
@@ -82,5 +88,11 @@ export class BehaviorRetriever {
       .replace(/\s+/g, ' ')
       .trim();
     return new Set(normalized.split(' ').filter(Boolean));
+  }
+
+  private forPersona(personaUserId?: string): BehaviorExample[] {
+    return personaUserId
+      ? this.examples.filter(example => example.personaUserId === personaUserId)
+      : this.examples.filter(example => !example.personaUserId);
   }
 }

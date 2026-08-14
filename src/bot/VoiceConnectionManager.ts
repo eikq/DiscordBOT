@@ -36,7 +36,11 @@ export class VoiceConnectionManager {
     return connection;
   }
 
-  public async playAudio(guildId: string, audioBuffer: Buffer): Promise<boolean> {
+  public async playAudio(
+    guildId: string,
+    audioBuffer: Buffer,
+    options: { silencePaddingFrames?: number } = {},
+  ): Promise<boolean> {
     if (!audioBuffer || audioBuffer.length === 0) {
       console.error('[Voice] Cannot play an empty audio buffer.');
       return false;
@@ -58,8 +62,13 @@ export class VoiceConnectionManager {
 
     let resource;
     try {
-      const stream = Readable.from(audioBuffer);
-      resource = createAudioResource(stream, { inputType: StreamType.Arbitrary });
+      // Send the WAV as one stream chunk and retain extra Opus silence frames so
+      // Discord does not eat the final syllable of short Thai reactions.
+      const stream = Readable.from([audioBuffer]);
+      resource = createAudioResource(stream, {
+        inputType: StreamType.Arbitrary,
+        silencePaddingFrames: Math.max(1, Math.min(15, options.silencePaddingFrames ?? 15)),
+      });
     } catch (error) {
       console.error('[Voice] Failed to create audio resource:', error);
       return false;

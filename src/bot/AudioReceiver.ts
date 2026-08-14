@@ -1,20 +1,41 @@
 import { VoiceConnection, EndBehaviorType } from '@discordjs/voice';
-import fs from 'fs';
-import path from 'path';
 import { SafeOpusDecoder } from './SafeOpusDecoder';
 import { ConversationTimeline } from './timeline/ConversationTimeline';
 import { SpeechToTextProvider, SpeechStream } from './stt/SpeechToTextProvider';
 import { SocialBrain } from './brain/SocialBrain';
 import { GroupConversationState } from './brain/GroupConversationState';
 import { ResponseGenerator } from './personality/ResponseGenerator';
-import { Client } from 'discord.js';
+import { Client, VoiceChannel } from 'discord.js';
 import { VoiceConnectionManager } from './VoiceConnectionManager';
 import { VoiceOutputManager } from './tts/VoiceOutputManager';
 import { FriendMemoryManager } from './memory/FriendMemoryManager';
 import { VoiceConsentManager } from './voice/VoiceConsentManager';
-import { ColabVoiceClient } from './voice/ColabVoiceClient';
+import { VoiceServiceClient } from './voice/VoiceServiceClient';
+import { PersonaProfile } from './personality/PersonaProfileManager';
+import { VoiceDatasetWriter, VoiceTranscriptData, type VoiceUtteranceRecord } from './voice/VoiceDatasetWriter';
+import { SocialMemoryBrain } from './memory/SocialMemoryBrain';
+import { TranscriptFinalEvent } from './types/events';
+import { SustainedVoiceDetector } from './audio/SustainedVoiceDetector';
 
 export type BotState = 'LISTENING' | 'PREDICTING' | 'GENERATING' | 'SPEAKING' | 'INTERRUPTED' | 'COOLDOWN';
+
+function readTiming(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, Math.round(value))) : fallback;
+}
+
+const SPEECH_END_SILENCE_MS = readTiming('VOICE_END_SILENCE_MS', 650, 300, 2_000);
+const UTTERANCE_GRACE_MS = readTiming('VOICE_UTTERANCE_GRACE_MS', 350, 0, 1_500);
+const RESPONSE_COOLDOWN_MS = readTiming('VOICE_RESPONSE_COOLDOWN_MS', 700, 0, 5_000);
+const BARGE_IN_MIN_MS = readTiming('VOICE_BARGE_IN_MIN_MS', 320, 100, 1_500);
+const MIN_CONVERSATION_AUDIO_MS = readTiming('VOICE_MIN_UTTERANCE_MS', 250, 150, 1_000);
+
+function readLevel(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;
+}
+
+const BARGE_IN_MIN_RMS_DBFS = readLevel('VOICE_BARGE_IN_MIN_RMS_DBFS', -42, -70, -15);
 
 interface ActiveUserSession {
   userId: string;
@@ -24,6 +45,10 @@ interface ActiveUserSession {
   speechStartedAt: number;
   sttStream: SpeechStream;
   audioChunks: Buffer[];
+  overlapDetected: boolean;
+  voiceDetector: SustainedVoiceDetector;
+  voiceConfirmed: boolean;
+  nonSpeechDetected: boolean;
   silenceTimer?: NodeJS.Timeout;
   isReceivingStream: boolean;
 }
@@ -39,11 +64,21 @@ export class AudioReceiver {
   private voiceManager: VoiceConnectionManager;
   private voiceOutputManager: VoiceOutputManager;
   private memoryManager: FriendMemoryManager;
+  private socialMemory: SocialMemoryBrain;
   private consentManager: VoiceConsentManager;
-  private colabVoiceClient: ColabVoiceClient;
+  private voiceServiceClient: VoiceServiceClient;
   private selectedVoiceForGuild: (guildId: string) => string | undefined;
+  private personaForGuild: (guildId: string) => PersonaProfile | null;
+  private selectedCaptureTargetForGuild: (guildId: string) => string | undefined;
+  private learningSessionForGuild: (guildId: string) => { id: string; targetUserId: string } | null;
+  private onLearningUtterance: (guildId: string, record: VoiceUtteranceRecord) => void | Promise<void>;
+  private backgroundProcessingEnabledForGuild: (guildId: string) => boolean;
+  private datasetWriter = new VoiceDatasetWriter();
   private currentState: BotState = 'LISTENING';
   private activeSessions: Map<string, ActiveUserSession> = new Map();
+  private readonly pendingSampleWrites = new Set<Promise<void>>();
+  private speechRevision = 0;
+  private turnInProgress = false;
 
   constructor(
     connection: VoiceConnection, 
@@ -54,8 +89,14 @@ export class AudioReceiver {
     socialBrain: SocialBrain,
     voiceManager: VoiceConnectionManager,
     consentManager: VoiceConsentManager,
-    colabVoiceClient: ColabVoiceClient,
-    selectedVoiceForGuild: (guildId: string) => string | undefined
+    voiceServiceClient: VoiceServiceClient,
+    selectedVoiceForGuild: (guildId: string) => string | undefined,
+    selectedCaptureTargetForGuild: (guildId: string) => string | undefined,
+    personaForGuild: (guildId: string) => PersonaProfile | null,
+    socialMemory: SocialMemoryBrain,
+    learningSessionForGuild: (guildId: string) => { id: string; targetUserId: string } | null = () => null,
+    onLearningUtterance: (guildId: string, record: VoiceUtteranceRecord) => void | Promise<void> = () => undefined,
+    backgroundProcessingEnabledForGuild: (guildId: string) => boolean = () => true,
   ) {
     this.connection = connection;
     this.timeline = timeline;
@@ -65,8 +106,14 @@ export class AudioReceiver {
     this.socialBrain = socialBrain;
     this.voiceManager = voiceManager;
     this.consentManager = consentManager;
-    this.colabVoiceClient = colabVoiceClient;
+    this.voiceServiceClient = voiceServiceClient;
     this.selectedVoiceForGuild = selectedVoiceForGuild;
+    this.selectedCaptureTargetForGuild = selectedCaptureTargetForGuild;
+    this.personaForGuild = personaForGuild;
+    this.socialMemory = socialMemory;
+    this.learningSessionForGuild = learningSessionForGuild;
+    this.onLearningUtterance = onLearningUtterance;
+    this.backgroundProcessingEnabledForGuild = backgroundProcessingEnabledForGuild;
     this.responseGenerator = new ResponseGenerator();
     this.voiceOutputManager = new VoiceOutputManager(voiceManager);
     this.memoryManager = new FriendMemoryManager();
@@ -76,29 +123,45 @@ export class AudioReceiver {
     return this.currentState;
   }
 
+  public async flushPendingWrites(): Promise<void> {
+    await Promise.allSettled([...this.pendingSampleWrites]);
+  }
+
+  public pauseBackgroundProcessing(guildId: string): void {
+    this.speechRevision++;
+    for (const session of this.activeSessions.values()) {
+      if (session.silenceTimer) clearTimeout(session.silenceTimer);
+      session.sttStream.discard();
+      session.audioChunks = [];
+      session.isReceivingStream = false;
+    }
+    this.activeSessions.clear();
+    this.voiceOutputManager.cancelCurrentTurn(guildId);
+    this.currentState = 'LISTENING';
+  }
+
   public startListening() {
     const receiver = this.connection.receiver;
     const guildId = this.connection.joinConfig.guildId;
 
     receiver.speaking.on('start', async (userId) => {
-      // BARGE-IN INTERRUPTION HANDLER
-      if (this.currentState === 'SPEAKING' || this.currentState === 'GENERATING') {
-        console.log(`[AudioReceiver] Human speaking while bot active -> BARGE-IN TRIGGERED`);
-        this.currentState = 'INTERRUPTED';
-        this.voiceOutputManager.cancelCurrentTurn(guildId);
-        this.timeline.addEvent({
-          type: 'BOT_SPEECH_CANCELLED',
-          sessionId: this.sessionId,
-          timestamp: Date.now()
-        });
-      }
+      if (!this.backgroundProcessingEnabledForGuild(guildId)) return;
+      // The capture target limits raw training files, not conversation. Every
+      // actively consented participant may still address the selected persona.
+      if (!this.consentManager.hasActiveConsent(guildId, userId)) return;
 
-      this.currentState = 'LISTENING';
       const user = await this.client.users.fetch(userId).catch(() => null);
+      if (!this.backgroundProcessingEnabledForGuild(guildId)) return;
       if (!user || user.bot) return;
 
       const displayName = user.displayName ?? user.username;
       let session = this.activeSessions.get(userId);
+      const overlappingSessions = [...this.activeSessions.values()]
+        .filter(candidate => candidate.userId !== userId && candidate.isReceivingStream);
+      if (overlappingSessions.length > 0) {
+        for (const candidate of overlappingSessions) candidate.overlapDetected = true;
+        if (session) session.overlapDetected = true;
+      }
 
       if (session) {
         // Speaker is continuing or resuming speech in the same sentence
@@ -129,6 +192,13 @@ export class AudioReceiver {
           speechStartedAt,
           sttStream,
           audioChunks: [],
+          overlapDetected: overlappingSessions.length > 0,
+          voiceDetector: new SustainedVoiceDetector({
+            minimumVoicedMs: BARGE_IN_MIN_MS,
+            minimumRmsDbfs: BARGE_IN_MIN_RMS_DBFS,
+          }),
+          voiceConfirmed: false,
+          nonSpeechDetected: false,
           isReceivingStream: false
         };
 
@@ -159,10 +229,10 @@ export class AudioReceiver {
           });
         });
 
-        sttStream.on('final', (text, confidence, latencyMs) => {
+        sttStream.on('final', (text, confidence, latencyMs, metadata) => {
           if (!text || text.trim().length === 0) return;
 
-          this.timeline.addEvent({
+          const finalEvent: TranscriptFinalEvent = {
             type: 'TRANSCRIPT_FINAL',
             eventId,
             sessionId: this.sessionId,
@@ -174,13 +244,42 @@ export class AudioReceiver {
             timestamp: Date.now(),
             speechStartedAt,
             speechEndedAt: Date.now() - latencyMs,
-            sttLatencyMs: latencyMs
-          });
+            sttLatencyMs: latencyMs,
+            detectedLanguage: metadata?.detectedLanguage,
+            sttModel: metadata?.model,
+            languageFallbackApplied: metadata?.languageFallbackApplied,
+            verified: metadata?.verified,
+            verificationMethod: metadata?.verificationMethod,
+            speechConfidence: metadata?.speechConfidence,
+          };
+          this.timeline.addEvent(finalEvent);
 
           // Evaluate friend memory in background
           if (process.env.MEMORY_ENABLED !== 'false') {
             this.memoryManager.evaluateAndWriteMemory(userId, displayName, text);
+            this.socialMemory.recordTranscript(guildId, finalEvent, this.timeline.getRecentFinalTranscripts(30));
           }
+        });
+
+        sttStream.on('nonSpeech', metadata => {
+          if (metadata.subtype !== 'NOISE') return;
+          session!.nonSpeechDetected = true;
+          this.timeline.addEvent({
+            type: 'NON_SPEECH',
+            eventId,
+            sessionId: this.sessionId,
+            discordUserId: userId,
+            username: user.username,
+            displayName,
+            subtype: metadata.subtype,
+            displayText: metadata.displayText || '[เสียงรบกวน]',
+            durationMs: metadata.durationMs,
+            rmsDbfs: metadata.rmsDbfs,
+            reason: metadata.reason,
+            rejectedText: metadata.rejectedText,
+            debugAudioPath: metadata.debugAudioPath,
+            timestamp: Date.now(),
+          });
         });
 
         sttStream.on('error', (error) => {
@@ -194,7 +293,7 @@ export class AudioReceiver {
       const audioStream = receiver.subscribe(userId, {
         end: {
           behavior: EndBehaviorType.AfterSilence,
-          duration: 1200,
+          duration: SPEECH_END_SILENCE_MS,
         },
       });
 
@@ -202,18 +301,38 @@ export class AudioReceiver {
       const pcmStream = audioStream.pipe(opusDecoder);
 
       pcmStream.on('data', (chunk: Buffer) => {
+        if (!this.backgroundProcessingEnabledForGuild(guildId)) return;
         currentSession.audioChunks.push(chunk);
         currentSession.sttStream.write(chunk);
+        if (!currentSession.voiceConfirmed) {
+          const activity = currentSession.voiceDetector.observePcm(chunk);
+          if (activity.confirmed) {
+            currentSession.voiceConfirmed = true;
+            this.speechRevision++;
+            if (this.voiceOutputManager.cancelCurrentTurn(guildId)) {
+              console.log(
+                `[AudioReceiver] Confirmed human speech (${activity.voicedMs.toFixed(0)}ms, `
+                + `${activity.rmsDbfs.toFixed(1)} dBFS) -> barge-in.`
+              );
+              this.currentState = 'INTERRUPTED';
+              this.timeline.addEvent({
+                type: 'BOT_SPEECH_CANCELLED',
+                sessionId: this.sessionId,
+                timestamp: Date.now()
+              });
+            }
+          }
+        }
       });
 
       pcmStream.on('end', () => {
         currentSession.isReceivingStream = false;
 
-        // Grace period of 1500ms before finalizing user sentence (merges breath/pause gaps)
+        // Short grace period merges breath gaps without making every reply feel delayed.
         if (currentSession.silenceTimer) clearTimeout(currentSession.silenceTimer);
         currentSession.silenceTimer = setTimeout(() => {
           void this.finalizeUserUtterance(userId, guildId);
-        }, 1500);
+        }, UTTERANCE_GRACE_MS);
       });
 
       opusDecoder.on('error', (err) => {
@@ -223,11 +342,22 @@ export class AudioReceiver {
   }
 
   private async finalizeUserUtterance(userId: string, guildId: string): Promise<void> {
+    const finalizeStartedAt = Date.now();
     const session = this.activeSessions.get(userId);
     if (!session) return;
 
+    if (!this.backgroundProcessingEnabledForGuild(guildId)) {
+      if (session.silenceTimer) clearTimeout(session.silenceTimer);
+      session.sttStream.discard();
+      session.audioChunks = [];
+      this.activeSessions.delete(userId);
+      this.currentState = 'LISTENING';
+      return;
+    }
+
     this.activeSessions.delete(userId);
 
+    const speechEndedAt = Date.now();
     this.timeline.addEvent({
       type: 'SPEECH_ENDED',
       eventId: session.eventId,
@@ -235,7 +365,7 @@ export class AudioReceiver {
       discordUserId: userId,
       username: session.username,
       displayName: session.displayName,
-      timestamp: Date.now()
+      timestamp: speechEndedAt
     });
 
     try {
@@ -245,20 +375,34 @@ export class AudioReceiver {
       this.currentState = 'LISTENING';
       return;
     }
+    console.log(`[Latency] End-of-turn + STT: ${Date.now() - finalizeStartedAt}ms for ${session.displayName}.`);
 
     const rawPcm = Buffer.concat(session.audioChunks);
+    const selectedCaptureTarget = this.selectedCaptureTargetForGuild(guildId);
+    const finalTranscript = this.timeline
+      .getRecentFinalTranscripts(20)
+      .find(event => event.eventId === session.eventId);
+    const transcript: VoiceTranscriptData | null = finalTranscript ? {
+      text: finalTranscript.rawText,
+      confidence: finalTranscript.confidence,
+      latencyMs: finalTranscript.sttLatencyMs,
+      detectedLanguage: finalTranscript.detectedLanguage,
+      model: finalTranscript.sttModel,
+      languageFallbackApplied: finalTranscript.languageFallbackApplied,
+    } : null;
+
     // Raw voice capture requires both the owner-side switch and this Discord user's explicit consent.
     if (
       process.env.RECORD_RAW_AUDIO === 'true'
       && this.consentManager.hasActiveConsent(guildId, userId)
+      && selectedCaptureTarget === userId
+      && !session.nonSpeechDetected
       && rawPcm.length >= 115200
     ) {
-      void this.saveVoiceSample(guildId, session.displayName, userId, rawPcm);
+      const pendingWrite = this.saveVoiceSample(guildId, session, rawPcm, transcript, speechEndedAt);
+      this.pendingSampleWrites.add(pendingWrite);
+      void pendingWrite.finally(() => this.pendingSampleWrites.delete(pendingWrite));
     }
-
-    const finalTranscript = this.timeline
-      .getRecentFinalTranscripts(20)
-      .find(event => event.eventId === session.eventId);
 
     if (!finalTranscript) {
       console.log(`[AudioReceiver] No transcript produced for ${session.displayName}; skipping response generation.`);
@@ -266,29 +410,65 @@ export class AudioReceiver {
       return;
     }
 
-    if (rawPcm.length >= 115200) {
+    const rawAudioMs = rawPcm.length / (48_000 * 2 * 2) * 1_000;
+    if (rawAudioMs >= MIN_CONVERSATION_AUDIO_MS) {
       await this.processConversationTurn(guildId);
     } else {
-      console.log(`[AudioReceiver] 🔇 Filtered short syllable/click noise (${(rawPcm.length / (48000 * 4)).toFixed(2)}s) from ${session.displayName}`);
+      console.log(`[AudioReceiver] 🔇 Filtered click/noise (${(rawAudioMs / 1_000).toFixed(2)}s) from ${session.displayName}`);
     }
   }
 
   private async processConversationTurn(guildId: string) {
+    if (!this.backgroundProcessingEnabledForGuild(guildId)) return;
+    if (this.turnInProgress) {
+      console.log('[AudioReceiver] A response turn is already active; the newer transcript remains in conversation context.');
+      return;
+    }
+    this.turnInProgress = true;
+    const turnStartedAt = Date.now();
+    const turnSpeechRevision = this.speechRevision;
     this.currentState = 'PREDICTING';
     const state = new GroupConversationState(this.timeline);
 
     try {
-      const decision = await this.socialBrain.evaluate(state);
+      const persona = this.personaForGuild(guildId);
+      const decision = await this.socialBrain.evaluate(state, persona, {
+        oneOnOneVoiceConversation: this.isOneOnOneVoiceConversation(guildId),
+      });
+      if (!this.backgroundProcessingEnabledForGuild(guildId)) {
+        this.currentState = 'LISTENING';
+        return;
+      }
+      const decisionFinishedAt = Date.now();
 
-      if (decision.action === 'IGNORE') {
+      if (decision.action === 'IGNORE' || decision.action === 'LISTEN') {
         this.currentState = 'LISTENING';
         return;
       }
 
       this.currentState = 'GENERATING';
-      const response = await this.responseGenerator.generate(decision, state);
+      const memoryContext = this.socialMemory.getContextForTurn(this.timeline.getRecentFinalTranscripts(12));
+      const response = await this.responseGenerator.generate(decision, state, persona, memoryContext);
+      if (!this.backgroundProcessingEnabledForGuild(guildId)) {
+        this.currentState = 'LISTENING';
+        return;
+      }
+      const responseFinishedAt = Date.now();
 
       if (!response) {
+        this.currentState = 'LISTENING';
+        return;
+      }
+
+      // If somebody continued with a real, sustained utterance while the reply
+      // was being composed, do not play an obsolete answer over them. The newer
+      // finalized turn will produce the relevant response.
+      if (this.speechRevision !== turnSpeechRevision) {
+        console.log('[AudioReceiver] Dropping stale response because newer confirmed speech arrived.');
+        this.currentState = 'LISTENING';
+        return;
+      }
+      if (!this.backgroundProcessingEnabledForGuild(guildId)) {
         this.currentState = 'LISTENING';
         return;
       }
@@ -304,9 +484,33 @@ export class AudioReceiver {
 
       // Play audio and handle turn completion
       const ownerId = process.env.OWNER_DISCORD_USER_ID;
-      const voiceSpeaker = this.selectedVoiceForGuild(guildId)
+      const defaultSpeakerId = process.env.DEFAULT_SPEAKER_ID?.trim();
+      const voiceSpeaker = (persona?.userId && this.consentManager.hasActiveConsent(guildId, persona.userId) ? persona.userId : undefined)
+        || this.selectedVoiceForGuild(guildId)
+        || (defaultSpeakerId && this.consentManager.hasActiveConsent(guildId, defaultSpeakerId) ? defaultSpeakerId : undefined)
         || (ownerId && this.consentManager.hasActiveConsent(guildId, ownerId) ? ownerId : undefined);
-      const spoke = await this.voiceOutputManager.speakTurn(guildId, response, voiceSpeaker);
+      const spoke = await this.voiceOutputManager.speakTurn(guildId, response, voiceSpeaker, {
+        tone: decision.tone,
+        action: decision.action,
+        speechAct: decision.action === 'ANSWER'
+          ? 'answer'
+          : decision.action === 'ASK'
+            ? 'question'
+            : decision.action === 'JOKE'
+              ? 'joke'
+              : 'acknowledgement',
+        emotion: decision.tone,
+        intensity: decision.tone === 'excited' ? 0.82 : decision.tone === 'annoyed' ? 0.68 : 0.42,
+        pace: decision.action === 'SHORT_REACTION' ? 1.06 : 1,
+        energy: decision.tone === 'soft' ? 0.28 : decision.tone === 'excited' ? 0.8 : 0.48,
+        variation: decision.action === 'SHORT_REACTION' ? 0.68 : 0.42,
+        variationSeed: `${this.sessionId}:${Date.now()}:${Math.random()}`,
+        context: this.timeline.getRecentFinalTranscripts(1).at(0)?.rawText,
+      });
+      console.log(
+        `[Latency] Decision ${decisionFinishedAt - turnStartedAt}ms, response ${responseFinishedAt - decisionFinishedAt}ms, `
+        + `TTS + playback ${Date.now() - responseFinishedAt}ms.`
+      );
       if (!spoke) {
         this.currentState = 'LISTENING';
         return;
@@ -315,79 +519,77 @@ export class AudioReceiver {
       this.currentState = 'COOLDOWN';
       setTimeout(() => {
         if (this.currentState === 'COOLDOWN') this.currentState = 'LISTENING';
-      }, 1500);
+      }, RESPONSE_COOLDOWN_MS);
 
     } catch (err) {
       console.error('[AudioReceiver] Pipeline turn error:', err);
       this.currentState = 'LISTENING';
+    } finally {
+      this.turnInProgress = false;
     }
   }
 
-  private async saveVoiceSample(guildId: string, speakerName: string, userId: string, pcmBuffer: Buffer): Promise<void> {
+  private isOneOnOneVoiceConversation(guildId: string): boolean {
+    const guild = this.client.guilds.cache.get(guildId);
+    const channelId = this.connection.joinConfig.channelId;
+    const channel = channelId ? guild?.channels.cache.get(channelId) : null;
+    if (!(channel instanceof VoiceChannel)) return false;
+    return channel.members.filter(member => !member.user.bot).size === 1;
+  }
+
+  private async saveVoiceSample(
+    guildId: string,
+    session: ActiveUserSession,
+    pcmBuffer: Buffer,
+    transcript: VoiceTranscriptData | null,
+    speechEndedAt: number,
+  ): Promise<void> {
     if (!pcmBuffer || pcmBuffer.length < 96000) return; // ignore <0.5 sec short noise or clicks
     try {
-      const dirPath = path.join(process.cwd(), 'data', 'voice_samples', userId);
-      if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-      }
-
-      const timestamp = Date.now();
-      const fileName = `sample_${timestamp}.wav`;
-      const filePath = path.join(dirPath, fileName);
-
-      // Create 44-byte WAV header (48000Hz, 2 channels, 16bit PCM)
-      const wavHeader = Buffer.alloc(44);
-      const dataSize = pcmBuffer.length;
-      wavHeader.write('RIFF', 0);
-      wavHeader.writeUInt32LE(36 + dataSize, 4);
-      wavHeader.write('WAVE', 8);
-      wavHeader.write('fmt ', 12);
-      wavHeader.writeUInt32LE(16, 16);
-      wavHeader.writeUInt16LE(1, 20);
-      wavHeader.writeUInt16LE(2, 22);
-      wavHeader.writeUInt32LE(48000, 24);
-      wavHeader.writeUInt32LE(48000 * 4, 28);
-      wavHeader.writeUInt16LE(4, 32);
-      wavHeader.writeUInt16LE(16, 34);
-      wavHeader.write('data', 36);
-      wavHeader.writeUInt32LE(dataSize, 40);
-
-      const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
-      fs.writeFileSync(filePath, wavBuffer);
-
-      // Update catalog
-      const catalogPath = path.join(process.cwd(), 'data', 'voice_samples', 'catalog.json');
-      let catalog = [];
-      if (fs.existsSync(catalogPath)) {
-        try { catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf-8')); } catch { catalog = []; }
-      }
-      catalog.unshift({
-        speaker: speakerName,
-        userId,
-        file: `/data/voice_samples/${userId}/${fileName}`,
-        sizeBytes: wavBuffer.length,
-        durationSec: (pcmBuffer.length / (48000 * 4)).toFixed(1),
-        timestamp
+      const saved = this.datasetWriter.save({
+        guildId,
+        sessionId: this.sessionId,
+        learningSessionId: this.learningSessionForGuild(guildId)?.id,
+        eventId: session.eventId,
+        userId: session.userId,
+        username: session.username,
+        displayName: session.displayName,
+        speechStartedAt: session.speechStartedAt,
+        speechEndedAt,
+        pcmBuffer,
+        transcript,
+        suspectedOverlap: session.overlapDetected,
       });
-      if (catalog.length > 300) catalog = catalog.slice(0, 300);
-      fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
+      const fileName = saved.record.audioFile.split('/').at(-1) || `${saved.record.id}.wav`;
+      await this.onLearningUtterance(guildId, saved.record);
 
-      if (this.colabVoiceClient.isConfigured()) {
+      if (this.voiceServiceClient.isConfigured() && saved.record.analysis.quality.acceptedForVoiceTraining) {
         try {
-          const status = await this.colabVoiceClient.uploadSample({
+          const status = await this.voiceServiceClient.uploadSample({
             guildId,
-            userId,
-            displayName: speakerName,
+            userId: session.userId,
+            displayName: session.displayName,
             filename: fileName,
-            wavBuffer,
+            wavBuffer: saved.wavBuffer,
           });
-          console.log(`[ColabSync] Uploaded ${fileName}; ${status.durationSeconds.toFixed(1)}s stored, modelReady=${status.modelReady}.`);
+          console.log(`[VoiceService] Uploaded ${fileName}; ${status.durationSeconds.toFixed(1)}s stored, modelReady=${status.modelReady}.`);
         } catch (error) {
-          console.error('[ColabSync Error]', error instanceof Error ? error.message : error);
+          console.error('[VoiceService Upload Error]', error instanceof Error ? error.message : error);
         }
       }
 
-      console.log(`[VoiceRecorder] Recorded consented sample for "${speakerName}" (${(pcmBuffer.length / (48000 * 4)).toFixed(1)}s) -> ${fileName}`);
+      if (!saved.record.analysis.quality.acceptedForVoiceTraining) {
+        console.log(
+          `[VoiceRecorder] Excluded ${fileName} from voice training (quality ${saved.record.analysis.quality.score.toFixed(2)}): `
+          + `${saved.record.analysis.quality.reasons.join(', ') || 'policy rejection'}.`,
+        );
+      }
+
+      console.log(
+        `[VoiceRecorder] Saved consented WAV/TXT/JSON for "${session.displayName}" `
+        + `(${saved.record.durationSeconds.toFixed(1)}s, quality=${saved.record.analysis.quality.score.toFixed(2)}, `
+        + `style=${saved.record.analysis.prosody.style}) -> ${fileName}`,
+      );
     } catch (err) {
       console.error('[VoiceRecorder Error]', err);
     }

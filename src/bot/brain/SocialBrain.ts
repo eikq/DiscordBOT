@@ -1,13 +1,19 @@
 import { SocialDecision } from "./types";
 import { GroupConversationState } from "./GroupConversationState";
 import { LocalLlmProvider } from "../llm/LocalLlmProvider";
+import { PersonaProfile } from "../personality/PersonaProfileManager";
+import { looksLikeConversationalQuestion } from "./QuestionDetector";
+
+export interface SocialEvaluationContext {
+  oneOnOneVoiceConversation?: boolean;
+}
 
 export class SocialBrain {
   private localLlm: LocalLlmProvider;
   private botName: string = "Digital Me";
   private ownerAliases: string[] = ["Spin", "สปิน", "digital me"];
   private lastSpeakTime: number = 0;
-  private socialCooldownMs: number = 3000; // 3 seconds social cooldown
+  private socialCooldownMs: number;
 
   constructor(botName: string = "Digital Me") {
     this.botName = botName;
@@ -16,31 +22,42 @@ export class SocialBrain {
       ...aliasesFromEnv.split(","),
       botName,
     ].map(alias => alias.trim().toLowerCase()).filter(Boolean)));
+    const configuredCooldown = Number(process.env.UNPROMPTED_RESPONSE_COOLDOWN_MS || 10_000);
+    this.socialCooldownMs = Number.isFinite(configuredCooldown)
+      ? Math.min(60_000, Math.max(3_000, Math.round(configuredCooldown)))
+      : 10_000;
     this.localLlm = new LocalLlmProvider();
   }
 
-  public async evaluate(state: GroupConversationState): Promise<SocialDecision> {
-    const context = state.getContext(10);
+  public async evaluate(
+    state: GroupConversationState,
+    persona?: PersonaProfile | null,
+    liveContext: SocialEvaluationContext = {},
+  ): Promise<SocialDecision> {
+    const context = state.getContext(6);
     
     if (context.recentTranscripts.length === 0) {
       return this.getDefaultDecision();
     }
 
-    const transcriptEvents = state.getRecentTranscriptEvents(10);
+    const transcriptEvents = state.getRecentTranscriptEvents(6);
     const lastEvent = transcriptEvents[transcriptEvents.length - 1];
     const lowerLast = lastEvent.rawText.trim().toLowerCase();
 
     // 1. FAST DETERMINISTIC HYBRID RULES (High Confidence / Zero Cost)
     // Rule A: Was the owner directly addressed by alias?
-    const directlyAddressed = this.containsOwnerAlias(lowerLast);
+    const activeAliases = persona?.aliases?.length ? persona.aliases : this.ownerAliases;
+    const directlyAddressed = this.containsOwnerAlias(lowerLast, activeAliases);
     
     // Rule B: Is it a direct question targeting the owner?
-    const isDirectQuestion = directlyAddressed && this.looksLikeQuestion(lowerLast);
+    const isDirectQuestion = directlyAddressed && looksLikeConversationalQuestion(
+      this.removeOwnerAliases(lowerLast, activeAliases),
+    );
     const isFollowUpQuestion = !directlyAddressed &&
       this.looksLikeFollowUpQuestion(lowerLast) &&
       transcriptEvents.slice(0, -1).slice(-4).some(event =>
         event.discordUserId === lastEvent.discordUserId &&
-        this.containsOwnerAlias(event.rawText.toLowerCase())
+        this.containsOwnerAlias(event.rawText.toLowerCase(), activeAliases)
       );
 
     if (isDirectQuestion || isFollowUpQuestion) {
@@ -51,8 +68,8 @@ export class SocialBrain {
         directlyAddressed: isDirectQuestion,
         responseExpected: isDirectQuestion ? 0.95 : 0.8,
         interruptAppropriate: false,
-        desiredLength: 'very_short',
-        tone: 'casual',
+        desiredLength: 'short',
+        tone: 'curious',
         reasonCode: isDirectQuestion ? 'DIRECT_QUESTION_TARGETED' : 'FOLLOW_UP_TO_OWNER'
       };
       this.logDecision(decision);
@@ -76,6 +93,25 @@ export class SocialBrain {
       return decision;
     }
 
+    // With one human plus the bot in the VC, ordinary speech is directed at
+    // the bot by conversational context; repeating the clone's name is not required.
+    if (liveContext.oneOnOneVoiceConversation && process.env.RESPOND_IN_ONE_ON_ONE !== 'false') {
+      const question = looksLikeConversationalQuestion(lowerLast);
+      const decision: SocialDecision = {
+        action: question ? 'ANSWER' : 'SHORT_REACTION',
+        targetUserIds: [lastEvent.discordUserId],
+        confidence: 0.9,
+        directlyAddressed: true,
+        responseExpected: 0.9,
+        interruptAppropriate: false,
+        desiredLength: question ? 'short' : 'very_short',
+        tone: question ? 'curious' : 'casual',
+        reasonCode: question ? 'ONE_ON_ONE_QUESTION' : 'ONE_ON_ONE_CONVERSATION',
+      };
+      this.logDecision(decision);
+      return decision;
+    }
+
     // Rule D: Silence Bias / Cooldown Protection - If not addressed and banter between others, default IGNORE
     if (Date.now() - this.lastSpeakTime < this.socialCooldownMs && !directlyAddressed) {
       return this.getDefaultDecision('SOCIAL_COOLDOWN');
@@ -88,16 +124,19 @@ export class SocialBrain {
     }
 
     // 2. LOCAL LLM STRUCTURED CLASSIFICATION
-    const systemPrompt = `You are the social brain for a Discord voice bot named "${this.botName}" (behaving like owner "Spin").
-Decide if the bot should speak.
-Return JSON with keys: action ("IGNORE"|"LISTEN"|"SHORT_REACTION"|"ANSWER"|"JOKE"), targetUserIds (array), confidence (number), directlyAddressed (boolean), responseExpected (number), interruptAppropriate (boolean), desiredLength ("very_short"|"short"|"medium"), tone (string), reasonCode (string).`;
+    const activeName = persona?.displayName || this.botName;
+    const systemPrompt = `You decide whether "${activeName}" should naturally join a Discord voice conversation.
+Return only a tiny JSON object with one key named action.
+The action must be IGNORE, SHORT_REACTION, ANSWER, or JOKE.
+Use IGNORE for most ordinary statements. Use SHORT_REACTION only when the latest line is funny, emotional, or clearly invites a group reaction. Use ANSWER only for a clear question. Never speak merely because somebody produced a transcript.`;
 
     const userPrompt = `Participants: ${context.participants.join(", ")}\nRecent Speech:\n${context.recentTranscripts.join("\n")}`;
 
     const llmDecision = await this.localLlm.generateStructured<SocialDecision>({
       systemPrompt,
       userPrompt,
-      temperature: 0.1
+      temperature: 0.1,
+      maxTokens: 20,
     });
 
     const validatedDecision = this.validateDecision(llmDecision, lastEvent.discordUserId);
@@ -114,16 +153,35 @@ Return JSON with keys: action ("IGNORE"|"LISTEN"|"SHORT_REACTION"|"ANSWER"|"JOKE
     this.lastSpeakTime = Date.now();
   }
 
-  private containsOwnerAlias(text: string): boolean {
-    return this.ownerAliases.some(alias => text.includes(alias));
+  private containsOwnerAlias(text: string, aliases: string[]): boolean {
+    return aliases.some(rawAlias => {
+      const alias = rawAlias.trim().toLowerCase();
+      if (!alias) return false;
+      if (/^[a-z0-9 _.-]+$/iu.test(alias)) {
+        const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'iu').test(text);
+      }
+      return text.includes(alias);
+    });
   }
 
-  private looksLikeQuestion(text: string): boolean {
-    return /[?？]|(?:ปะ|ป่ะ|ไหม|มั้ย|ไม|ว่าไง|เล่นไร|ทำไร|เอาไง)(?:\s|$)/i.test(text);
+  private removeOwnerAliases(text: string, aliases: string[]): string {
+    let cleaned = text;
+    for (const rawAlias of aliases) {
+      const alias = rawAlias.trim().toLowerCase();
+      if (!alias) continue;
+      if (/^[a-z0-9 _.-]+$/iu.test(alias)) {
+        const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        cleaned = cleaned.replace(new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'giu'), ' ');
+      } else {
+        cleaned = cleaned.split(alias).join(' ');
+      }
+    }
+    return cleaned.replace(/\s+/gu, ' ').trim();
   }
 
   private looksLikeFollowUpQuestion(text: string): boolean {
-    return this.looksLikeQuestion(text) || /(?:แล้ว|ละ|ล่ะ).*มึง|มึง.*(?:อะ|ล่ะ|ละ)$/.test(text);
+    return looksLikeConversationalQuestion(text) || /(?:แล้ว|ละ|ล่ะ).*มึง|มึง.*(?:อะ|ล่ะ|ละ)$/.test(text);
   }
 
   private validateDecision(value: SocialDecision | null, fallbackTarget: string): SocialDecision | null {

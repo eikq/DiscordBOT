@@ -13,6 +13,9 @@ async function runSimulation() {
   const fixturesPath = path.join(process.cwd(), 'tests', 'fixtures', 'thai_social_cases.jsonl');
   const cases = fs.readFileSync(fixturesPath, 'utf-8').trim().split('\n').map(line => JSON.parse(line));
 
+  // Fixture verification must not change when a developer happens to have a
+  // local LLM online. Live-model behavior is evaluated separately.
+  process.env.LLM_ENABLED = 'false';
   const brain = new SocialBrain("Spin");
 
   let passed = 0;

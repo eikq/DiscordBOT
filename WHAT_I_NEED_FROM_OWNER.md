@@ -20,17 +20,17 @@ For the real voice loop, start compatible services for:
 
 - STT at `STT_BASE_URL` (default `http://127.0.0.1:8765`)
 - LLM at `LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`)
-- either local TTS at `TTS_BASE_URL`, or the RVC Colab service configured with `COLAB_VOICE_URL` and `COLAB_API_TOKEN`
+- the local RTX RVC service installed with `npm run voice:setup`
 
 Run `npm run benchmark` and confirm that the services you need are no longer reported as unavailable.
 
 ## 3. Recording consent
 
-`RECORD_RAW_AUDIO=false` is the safe default. Set it to `true` only for a consented test. Every recorded participant must also run `/voice-consent grant` themselves; the global switch alone cannot authorize capture. They can later use `revoke` or `delete`.
+`RECORD_RAW_AUDIO=false` is the safe default. Set it to `true` only for a consented test. `/train target:@name` presents the tagged person with an Allow/Decline button before capture can start. They can later use `/voice-consent action:revoke` to stop future capture.
 
-## 4. Colab RVC service
+## 4. Local RVC service
 
-Run `colab/DigitalMe_RVC_Colab.ipynb` in a Python 3.12 NVIDIA GPU runtime, authorize Drive, and copy the printed URL/token into `.env`. A first experimental model needs at least 120 seconds of clean consented speech. The official RVC project recommends substantially more clean audio for quality.
+Run `npm run voice:setup` once, then use `npm run start:local`. A first experimental model needs at least 120 seconds of clean consented speech. Substantially more clean audio generally improves quality.
 
 ## 5. Live smoke test
 

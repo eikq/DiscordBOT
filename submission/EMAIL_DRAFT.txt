@@ -1,0 +1,16 @@
+Subject: AI Code Hackathon Submission — Digital Me
+
+เรียนทีมงาน AI Code Hackathon
+
+ขอส่งผลงาน Digital Me — Thai Voice AI for Discord
+
+Public app: https://digital-me-thai-voice.piriyapong2551.chatgpt.site
+Source code: https://github.com/eikq/DiscordBOT
+Demo video: [ใส่ลิงก์วิดีโอหลังอัปโหลด]
+Presentation: [แนบไฟล์ Digital-Me-Hackathon-Pitch.pptx หรือใส่ลิงก์]
+
+Digital Me เป็น Discord voice AI สำหรับภาษาไทย/ไทยปนอังกฤษ ที่รวม speech-to-text, social memory, response generation, TTS และ consented voice conversion เข้าด้วยกัน หน้า public demo เปิดให้ทดลอง flow หลักได้โดยไม่เผยแพร่ token, ข้อมูลส่วนตัว, dataset เสียง หรือน้ำหนักโมเดลของบุคคลจริง
+
+ผู้พัฒนา: Eikq
+
+ขอบคุณครับ
