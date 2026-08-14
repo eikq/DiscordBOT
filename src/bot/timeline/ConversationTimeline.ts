@@ -14,6 +14,9 @@ export class ConversationTimeline {
             console.log(`[${this.formatTime(event.timestamp)}] PARTIAL ${event.displayName}:\n"${event.rawText}"`);
         } else if (event.type === 'TRANSCRIPT_FINAL') {
             console.log(`[${this.formatTime(event.timestamp)}] FINAL ${event.displayName}:\n"${event.rawText}"`);
+        } else if (event.type === 'NON_SPEECH' && event.subtype === 'NOISE') {
+            const detail = event.reason ? ` (${event.reason})` : '';
+            console.log(`[${this.formatTime(event.timestamp)}] NOISE ${event.displayName}: ${event.displayText}${detail}`);
         } else if (event.type === 'BOT_RESPONSE') {
             console.log(`[${this.formatTime(event.timestamp)}] BOT_RESPONSE Digital Me:\n"${event.text}"`);
         } else if (event.type === 'SPEECH_ENDED') {

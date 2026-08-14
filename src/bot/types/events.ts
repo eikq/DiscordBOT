@@ -6,6 +6,7 @@ export type ConversationEvent =
     | SpeechStartedEvent
     | TranscriptPartialEvent
     | TranscriptFinalEvent
+    | NonSpeechEvent
     | SpeechEndedEvent
     | STTErrorEvent
     | VoiceErrorEvent
@@ -94,6 +95,29 @@ export interface TranscriptFinalEvent {
     speechStartedAt: number;
     speechEndedAt: number;
     sttLatencyMs: number;
+    detectedLanguage?: string;
+    sttModel?: string;
+    languageFallbackApplied?: boolean;
+    verified?: boolean;
+    verificationMethod?: string;
+    speechConfidence?: number;
+}
+
+export interface NonSpeechEvent {
+    type: 'NON_SPEECH';
+    eventId: string;
+    sessionId: string;
+    discordUserId: string;
+    username: string;
+    displayName: string;
+    subtype: 'NOISE' | 'SILENCE';
+    displayText: string;
+    durationMs: number;
+    rmsDbfs?: number;
+    reason?: string;
+    rejectedText?: string;
+    debugAudioPath?: string;
+    timestamp: number;
 }
 
 export interface SpeechEndedEvent {

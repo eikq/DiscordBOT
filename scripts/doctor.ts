@@ -109,7 +109,7 @@ if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('doct
     console.log('   - ASR: Qwen3-ASR 0.6B / faster-whisper local server');
     console.log('   - LLM: Typhoon 2.5 4B Q4_K_M resident on GPU');
     console.log('   - Embeddings: Qwen3-Embedding-0.6B on CPU/RAM');
-    console.log('   - TTS: Local ThonburianTTS / Edge-TTS / Colab RVC');
+    console.log('   - TTS: Local JaiTTS source + RTX RVC voice conversion (Edge fallback)');
   } else {
     console.log('-> Optimization Plan:');
     console.log('   - Keep all local models (ASR, LLM, TTS, Embeddings) resident in VRAM for lowest latency');

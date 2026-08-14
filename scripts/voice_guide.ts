@@ -3,7 +3,7 @@ import path from 'path';
 
 export function runVoiceRecordingGuide() {
   console.log('=== DIGITAL ME OWNER VOICE DATASET GUIDE ===\n');
-  console.log('Prepare a clean, consented owner reference recording for a future voice-cloning backend:');
+  console.log('Prepare clean, consented speech for the local RVC voice-cloning backend:');
   console.log('\n1. RECORD YOUR VOICE SAMPLE:');
   console.log('   - Record 1 to 3 minutes of clean audio of your voice (16kHz or 44.1kHz WAV).');
   console.log('   - No background music, game noise, or friend voices in the clip.');
@@ -17,10 +17,10 @@ export function runVoiceRecordingGuide() {
   console.log('   - "เชี่ย จริงดิ"');
   console.log('   - "มึงเล่นไปก่อนเลย"');
 
-  console.log('\n3. SAVE YOUR REFERENCE WAV:');
-  console.log('   - Place the file at: data/voice/owner_reference.wav');
-  console.log('   - The current Colab helper is stock Thai Edge-TTS and does not train a voice clone.');
-  console.log('   - Connect a compatible, separately validated cloning backend before using this reference.');
+  console.log('\n3. USE THE LOCAL TRAINING FLOW:');
+  console.log('   - Run npm run voice:setup once, then npm run start:local.');
+  console.log('   - Grant consent and choose the target user in Discord.');
+  console.log('   - Collect at least 120 seconds, then use /voice-train action:start.');
 
   const targetDir = path.join(process.cwd(), 'data', 'voice');
   if (!fs.existsSync(targetDir)) {

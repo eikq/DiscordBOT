@@ -1,4 +1,8 @@
 node_modules/
+.runtime/
+.venv-rvc/
+.venv-stt/
+.venv-jaitts/
 build/
 dist/
 coverage/
@@ -11,8 +15,17 @@ __pycache__/
 data/colab_url.txt
 data/fine_tuning/
 data/memory/
+data/brain/
 data/sessions/
 data/voice/
+data/local_voice/
 data/voice_samples/
 data/voice_consents.json
 project-recovered.tar.gz
+output/
+benchmarks/
+data/learning_sessions/
+data/personas.json
+*.pptx.inspect.ndjson
+!public-demo/build/
+!public-demo/build/sites-vite-plugin.ts
