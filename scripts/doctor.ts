@@ -100,18 +100,19 @@ if (import.meta.url.endsWith(process.argv[1]) || process.argv[1]?.includes('doct
   
   if (report.recommendedProfile === 'LOW_VRAM') {
     console.log('-> Optimization Plan:');
-    console.log('   - ASR: Lightweight / local Whisper or Qwen3-ASR 0.6B Q4');
-    console.log('   - LLM: Typhoon 2.5 4B Q4_K_M with CPU/GPU hybrid offload');
-    console.log('   - Embeddings: Local CPU cosine similarity');
-    console.log('   - TTS: Sequential chunking / Edge-TTS fallback');
+    console.log('   - ASR: Qwen3-ASR 0.6B');
+    console.log('   - LLM: Ollama Qwen3.8 only if system RAM allows; otherwise a smaller local GGUF');
+    console.log('   - Embeddings: Local CPU cosine fallback');
+    console.log('   - TTS: Sequential Edge-TTS fallback; skip resident JaiTTS/RVC if VRAM is exhausted');
   } else if (report.recommendedProfile === 'MID_VRAM') {
     console.log('-> Optimization Plan:');
-    console.log('   - ASR: Qwen3-ASR 0.6B / faster-whisper local server');
-    console.log('   - LLM: Typhoon 2.5 4B Q4_K_M resident on GPU');
-    console.log('   - Embeddings: Qwen3-Embedding-0.6B on CPU/RAM');
+    console.log('   - ASR: Qwen3-ASR 0.6B resident');
+    console.log('   - LLM: Ollama Qwen3.8 with a conservative GPU-layer cap');
+    console.log('   - Embeddings: Optional HTTP embeddings or CPU fallback');
     console.log('   - TTS: Local JaiTTS source + RTX RVC voice conversion (Edge fallback)');
   } else {
     console.log('-> Optimization Plan:');
-    console.log('   - Keep all local models (ASR, LLM, TTS, Embeddings) resident in VRAM for lowest latency');
+    console.log('   - Start ASR/TTS first, then cap Qwen3.8 at 48 GPU layers so lazy RVC loading keeps safe headroom');
+    console.log('   - Keep the LLM warm only during active use so RVC training can reclaim the GPU');
   }
 }

@@ -19,7 +19,7 @@ Enable the bot's Message Content intent and invite it with permission to view/co
 For the real voice loop, start compatible services for:
 
 - STT at `STT_BASE_URL` (default `http://127.0.0.1:8765`)
-- LLM at `LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`)
+- LLM at `LLM_BASE_URL` (default `http://127.0.0.1:11434/v1`, Ollama model `digital-me-qwen38:27b-ad-q4km`)
 - the local RTX RVC service installed with `npm run voice:setup`
 
 Run `npm run benchmark` and confirm that the services you need are no longer reported as unavailable.

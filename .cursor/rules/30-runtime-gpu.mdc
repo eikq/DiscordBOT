@@ -1,0 +1,12 @@
+---
+description: Apply when changing local model loading, Ollama, GPU layers, context, launcher behavior, STT/TTS/RVC startup, or memory/resource settings.
+alwaysApply: false
+---
+# Runtime / GPU Rule
+
+- The current voice launcher intentionally caps LLM GPU layers so ASR, JaiTTS, and RVC can coexist.
+- Do not increase LLM offload/context as a "free" optimization without measuring coexistence.
+- Distinguish model-file size, VRAM usage, KV/cache usage, and system RAM.
+- Prefer explicit runtime profiles over one configuration for every workload.
+- Never claim performance numbers that were not measured on the current machine.
+- If an optional service is offline, report it honestly and preserve degraded fallback behavior.

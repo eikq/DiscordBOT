@@ -26,6 +26,7 @@ output/
 benchmarks/
 data/learning_sessions/
 data/personas.json
+data/jarvis/
 *.pptx.inspect.ndjson
 !public-demo/build/
 !public-demo/build/sites-vite-plugin.ts

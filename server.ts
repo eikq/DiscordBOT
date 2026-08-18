@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import { getVoiceBackend, getVoiceServiceApiToken, getVoiceServiceBaseUrl } from "./src/bot/voice/VoiceServiceConfig";
 import { PersonaProfileManager } from "./src/bot/personality/PersonaProfileManager";
 import { VoiceServiceClient, VoiceTrainingExportOptions } from "./src/bot/voice/VoiceServiceClient";
+import { ResearchAssistant } from "./src/bot/research/ResearchAssistant";
 
 dotenv.config({ quiet: true });
 
@@ -84,9 +85,11 @@ async function startServer() {
   const HOST = process.env.HOST || '127.0.0.1';
 
   // Initialize Discord Bot
-  const botService = new BotService();
+  const researchAssistant = new ResearchAssistant();
+  const botService = new BotService({ researchAssistant });
   const personaProfiles = new PersonaProfileManager();
   const voiceServiceClient = new VoiceServiceClient();
+  let activeResearchRequest: ReturnType<ResearchAssistant['ask']> | null = null;
   let botStatus = "Disconnected";
   let dashboardControlRefresh: Promise<unknown> | null = null;
   let dashboardControlCache: { value: unknown; expiresAt: number } | null = null;
@@ -144,6 +147,32 @@ async function startServer() {
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.get('/api/intelligence/status', async (_req, res) => {
+    try {
+      res.json(await researchAssistant.getStatus());
+    } catch (error) {
+      res.status(503).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post('/api/intelligence/ask', async (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Research requests are restricted to the local dashboard.' });
+    }
+    if (activeResearchRequest) {
+      return res.status(409).json({ error: 'The local research core is already answering another request.' });
+    }
+    const query = typeof req.body?.query === 'string' ? req.body.query : '';
+    activeResearchRequest = researchAssistant.ask(query);
+    try {
+      return res.json({ success: true, ...(await activeResearchRequest) });
+    } catch (error) {
+      return res.status(502).json({ success: false, error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      activeResearchRequest = null;
+    }
   });
 
   app.get("/api/bot/status", (req, res) => {

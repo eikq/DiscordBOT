@@ -30,6 +30,10 @@
     "jaitts:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_local_jaitts.ps1",
     "jaitts:start": ".venv-jaitts\\Scripts\\python.exe python/jaitts_service.py",
     "jaitts:benchmark": ".venv-jaitts\\Scripts\\python.exe scripts/benchmark_jaitts.py",
+    "research:setup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_world_intel.ps1",
+    "research:smoke": "tsx scripts/smoke_world_intel.ts",
+    "model:qwen38": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_qwen38.ps1",
+    "benchmark:qwen38": "tsx scripts/benchmark_qwen38.ts",
     "fine-tune:prepare": "tsx scripts/validate_dataset.ts",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
@@ -38,6 +42,7 @@
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
     "@google/genai": "^2.4.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "discord.js": "^14.27.0",
@@ -53,12 +58,12 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "@types/express": "^4.17.21"
+    "typescript": "~5.8.2"
   }
 }

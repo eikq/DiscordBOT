@@ -21,6 +21,18 @@ async function dashboardIsAlreadyRunning(): Promise<boolean> {
   }
 }
 
+function reserveGpuForLiveVoice(): void {
+  const requested = Number(process.env.LLM_GPU_LAYERS || 999);
+  const voiceSafeMaximum = Number(process.env.LLM_VOICE_GPU_LAYERS || 48);
+  const safeRequested = Number.isFinite(requested) && requested >= 0 ? Math.floor(requested) : 999;
+  const safeMaximum = Number.isFinite(voiceSafeMaximum) && voiceSafeMaximum >= 0
+    ? Math.floor(voiceSafeMaximum)
+    : 48;
+  const selected = Math.min(safeRequested, safeMaximum);
+  process.env.LLM_GPU_LAYERS = String(selected);
+  console.log(`[Launcher] Qwen GPU offload capped at ${selected} layers so ASR, JaiTTS, and RVC can remain resident.`);
+}
+
 async function startLocalZeroCostSystem() {
   console.log('====================================================');
   console.log('   DIGITAL ME — ZERO-COST LOCAL LAUNCHER           ');
@@ -62,7 +74,8 @@ async function startLocalZeroCostSystem() {
     throw new Error(`Local STT service could not start: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 4. Keep a compact multilingual LLM resident so the first Discord answer is not a cold start.
+  // 4. Warm the configured Thai-first LLM after reserving space for lazy RVC model loading.
+  reserveGpuForLiveVoice();
   const llmService = await startLocalLlmService();
   attachVoiceServiceShutdown(llmService.child);
 

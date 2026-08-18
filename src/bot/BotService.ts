@@ -29,6 +29,7 @@ import {
   LearningSessionController,
   type LearningSessionRecord,
 } from './voice/LearningSessionController';
+import { ResearchAssistant } from './research/ResearchAssistant';
 
 interface PendingTrainConsent {
   guildId: string;
@@ -70,6 +71,7 @@ export class BotService {
   private voiceCaptureTargets: VoiceCaptureTargetManager;
   private personaProfiles: PersonaProfileManager;
   private socialMemory: SocialMemoryBrain;
+  private researchAssistant: ResearchAssistant;
   private learningSessions: LearningSessionController;
   private activeReceivers: Map<string, AudioReceiver> = new Map();
   private activeVoiceSpeakers: Map<string, string> = new Map();
@@ -82,7 +84,7 @@ export class BotService {
   private sessionIdCounter = 1;
   private startPromise: Promise<void> | null = null;
 
-  constructor() {
+  constructor(options: { researchAssistant?: ResearchAssistant } = {}) {
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -101,6 +103,7 @@ export class BotService {
     this.voiceCaptureTargets = new VoiceCaptureTargetManager();
     this.personaProfiles = new PersonaProfileManager();
     this.socialMemory = new SocialMemoryBrain();
+    this.researchAssistant = options.researchAssistant || new ResearchAssistant();
     this.learningSessions = new LearningSessionController();
     for (const session of this.learningSessions.listRecent(100)) {
       if (session.status === 'listening') {
@@ -133,6 +136,19 @@ export class BotService {
           { name: 'status', description: 'Shows bot connection status' },
           { name: 'debug', description: 'Shows recent debug events' },
           { name: 'transcript', description: 'Shows recent Thai transcriptions' },
+          {
+            name: 'research',
+            description: 'Ask the local Qwen model to research current public information with citations',
+            options: [
+              {
+                name: 'question',
+                description: 'Question about current news, markets, AI, disasters, or world events',
+                type: 3,
+                required: true,
+                max_length: 2000,
+              },
+            ],
+          },
           {
             name: 'voice',
             description: 'Select a consented Discord user voice for this server',
@@ -391,6 +407,21 @@ export class BotService {
           replyText = replyText.slice(0, 1990) + '...';
         }
         await interaction.reply(replyText);
+      }
+      else if (commandName === 'research') {
+        const question = interaction.options.getString('question', true);
+        await interaction.deferReply();
+        const result = await this.researchAssistant.ask(question);
+        const sourceLines = result.sources.slice(0, 4).map((source, index) => `${index + 1}. ${source}`);
+        const suffix = [
+          result.toolsUsed.length ? `\n\nTools: ${result.toolsUsed.join(', ')}` : '',
+          sourceLines.length ? `\n\nSources:\n${sourceLines.join('\n')}` : '',
+        ].join('');
+        const availableAnswerLength = Math.max(200, 1_990 - suffix.length);
+        const answer = result.answer.length > availableAnswerLength
+          ? `${result.answer.slice(0, availableAnswerLength - 1)}…`
+          : result.answer;
+        await interaction.editReply(`${answer}${suffix}`.slice(0, 1_990));
       }
       else if (commandName === 'voice-consent') {
         const guildId = interaction.guildId;

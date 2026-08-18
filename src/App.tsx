@@ -62,6 +62,24 @@ const supportedAudioExtension = (name: string, mimeType = '') => {
   return mimeExtensions[mimeType.split(';', 1)[0].toLowerCase()] || '.wav';
 };
 
+const JarvisCore = ({ phase, ready }: { phase: string; ready: boolean }) => {
+  const normalizedPhase = ['thinking', 'researching', 'composing'].includes(phase) ? 'active' : phase;
+  return (
+    <div
+      className={`jarvis-core jarvis-core--${ready ? normalizedPhase : 'offline'}`}
+      role="img"
+      aria-label={`Local intelligence core ${ready ? phase : 'offline'}`}
+    >
+      <span className="jarvis-core__halo" />
+      <span className="jarvis-core__ring jarvis-core__ring--outer" />
+      <span className="jarvis-core__ring jarvis-core__ring--middle" />
+      <span className="jarvis-core__ring jarvis-core__ring--inner" />
+      <span className="jarvis-core__scanner" />
+      <span className="jarvis-core__nucleus">DM</span>
+    </div>
+  );
+};
+
 const encodePcm16Wav = (samples: Float32Array, sampleRate: number) => {
   const bytes = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(bytes);
@@ -153,6 +171,11 @@ export default function App() {
   const [colabUrl, setColabUrl] = useState<string | null>(null);
   const [recordRawAudio, setRecordRawAudio] = useState<boolean>(false);
   const [colabAuthenticated, setColabAuthenticated] = useState<boolean>(false);
+  const [intelligenceStatus, setIntelligenceStatus] = useState<any>(null);
+  const [researchQuery, setResearchQuery] = useState<string>('วันนี้มีข่าวเทคโนโลยีหรือ AI อะไรสำคัญบ้าง สรุปพร้อมแหล่งอ้างอิง');
+  const [researchResult, setResearchResult] = useState<any>(null);
+  const [researchBusy, setResearchBusy] = useState<boolean>(false);
+  const [researchError, setResearchError] = useState<string | null>(null);
   
   // TTS Test state
   const [testText, setTestText] = useState<string>('สวัสดีครับเพื่อน มึงจะเล่นเกมปะเนี่ย');
@@ -341,11 +364,13 @@ export default function App() {
         fetch('/api/behavior').then(res => res.json()),
         fetch('/api/voice-samples').then(res => res.json()),
         fetch('/api/transcripts').then(res => res.json()),
+        fetch('/api/intelligence/status').then(res => res.json()),
       ])
-        .then(([behavior, samples, transcripts]) => {
+        .then(([behavior, samples, transcripts, intelligence]) => {
           if (behavior.examples) setExamples(behavior.examples);
           if (samples.samples) setVoiceSamples(samples.samples);
           if (transcripts.events) setLiveEvents(transcripts.events);
+          if (!intelligence.error) setIntelligenceStatus(intelligence);
         })
         .catch(() => {})
         .finally(() => { dashboardDataRefreshInFlightRef.current = false; });
@@ -378,6 +403,29 @@ export default function App() {
       setStatus(`Error: ${err.message}`);
     } finally {
       setIsConnectingBot(false);
+    }
+  };
+
+  const handleResearch = async () => {
+    if (!researchQuery.trim() || researchBusy) return;
+    setResearchBusy(true);
+    setResearchError(null);
+    setResearchResult(null);
+    try {
+      const response = await fetch('/api/intelligence/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: researchQuery.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || `Research failed with HTTP ${response.status}.`);
+      setResearchResult(data);
+      const latestStatus = await fetch('/api/intelligence/status').then(result => result.json());
+      if (!latestStatus.error) setIntelligenceStatus(latestStatus);
+    } catch (error: any) {
+      setResearchError(error.message || String(error));
+    } finally {
+      setResearchBusy(false);
     }
   };
 
@@ -1193,6 +1241,94 @@ export default function App() {
               )}
             </div>
 
+          </div>
+        </div>
+
+        {/* Local Intelligence + read-only research */}
+        <div className="bg-[#071419] p-6 md:p-8 rounded-2xl border border-cyan-400/20 space-y-5 relative overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none opacity-30 bg-[radial-gradient(circle_at_75%_20%,rgba(34,211,238,0.16),transparent_35%)]"></div>
+          <div className="relative flex flex-wrap items-start justify-between gap-5">
+            <div className="flex items-center gap-5 min-w-0">
+              <JarvisCore
+                phase={intelligenceStatus?.activity?.phase || 'idle'}
+                ready={Boolean(intelligenceStatus?.llm?.modelAvailable && intelligenceStatus?.research?.connected)}
+              />
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold tracking-[0.24em] uppercase text-cyan-300">Local Intelligence Core</p>
+                <h3 className="text-xl font-bold text-white mt-1">JARVIS Research Console</h3>
+                <p className="text-xs text-cyan-100/55 mt-1 max-w-xl">Qwen3.8 chooses from a pinned, read-only MCP allowlist and keeps a source ledger.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-mono">
+              <span className={`px-3 py-2 rounded-lg border ${intelligenceStatus?.llm?.modelAvailable ? 'text-emerald-300 border-emerald-400/25 bg-emerald-400/5' : 'text-amber-300 border-amber-400/25 bg-amber-400/5'}`}>
+                {intelligenceStatus?.llm?.modelAvailable ? 'MODEL READY' : intelligenceStatus?.llm?.reachable ? 'MODEL MISSING' : 'OLLAMA OFFLINE'}
+              </span>
+              <span className={`px-3 py-2 rounded-lg border ${intelligenceStatus?.research?.availability === 'up' || intelligenceStatus?.research?.connected ? 'text-emerald-300 border-emerald-400/25 bg-emerald-400/5' : 'text-amber-300 border-amber-400/25 bg-amber-400/5'}`}>
+                MCP {intelligenceStatus?.research?.availability === 'up' || intelligenceStatus?.research?.connected
+                  ? 'READY'
+                  : intelligenceStatus?.research?.availability === 'not_configured'
+                    ? 'NOT CONFIGURED'
+                    : intelligenceStatus?.research?.availability === 'disabled'
+                      ? 'DISABLED'
+                      : intelligenceStatus?.research?.availability === 'failed'
+                        ? 'FAILED'
+                        : 'OFFLINE'}
+              </span>
+              <span className="px-3 py-2 rounded-lg border border-cyan-400/20 text-cyan-200 bg-cyan-400/5">
+                {intelligenceStatus?.research?.allowedTools?.length || 0} SAFE TOOLS
+              </span>
+              <span className="px-3 py-2 rounded-lg border border-cyan-400/20 text-cyan-200 bg-cyan-400/5 uppercase">
+                {intelligenceStatus?.activity?.phase || 'idle'}
+              </span>
+            </div>
+          </div>
+
+          <div className="relative grid grid-cols-1 xl:grid-cols-[1.05fr_0.95fr] gap-4">
+            <div className="space-y-3">
+              <textarea
+                value={researchQuery}
+                onChange={event => setResearchQuery(event.target.value)}
+                rows={4}
+                maxLength={2000}
+                className="w-full resize-y bg-black/30 border border-cyan-300/15 rounded-xl p-4 text-sm text-cyan-50 placeholder-cyan-100/30 focus:outline-none focus:border-cyan-300/40"
+                placeholder="ถามข่าว ตลาด AI ภัยพิบัติ งานวิจัย หรือข้อมูลโลกปัจจุบัน..."
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-[10px] text-cyan-100/40">Read-only · external data treated as untrusted · localhost only</span>
+                <button
+                  onClick={handleResearch}
+                  disabled={researchBusy || !researchQuery.trim() || !intelligenceStatus?.llm?.modelAvailable}
+                  className="px-5 py-2.5 rounded-xl bg-cyan-300 disabled:bg-cyan-950 disabled:text-cyan-700 text-slate-950 text-xs font-bold transition-colors"
+                >
+                  {researchBusy ? 'RESEARCHING...' : 'RUN LIVE RESEARCH'}
+                </button>
+              </div>
+              {researchError && <p className="text-xs text-red-300 bg-red-400/5 border border-red-400/15 rounded-lg p-3">{researchError}</p>}
+            </div>
+
+            <div className="min-h-40 rounded-xl bg-black/25 border border-cyan-300/10 p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-cyan-300">Response Preview</span>
+                <span className="text-[10px] text-cyan-100/35 truncate max-w-[60%]">{intelligenceStatus?.llm?.model || 'No model loaded'}</span>
+              </div>
+              {researchResult ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-cyan-50 whitespace-pre-wrap leading-6">{researchResult.answer}</p>
+                  {researchResult.toolsUsed?.length > 0 && <p className="text-[10px] text-cyan-200/55">Tools: {researchResult.toolsUsed.join(', ')}</p>}
+                  {researchResult.sources?.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-cyan-300/10">
+                      {researchResult.sources.map((source: string) => (
+                        <a key={source} href={source} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-cyan-300 hover:text-cyan-100">{source}</a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="h-28 grid place-items-center text-center">
+                  <p className="text-xs text-cyan-100/35">{researchBusy ? intelligenceStatus?.activity?.detail || 'The local model is selecting sources...' : 'Live answers and citations will appear here.'}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
