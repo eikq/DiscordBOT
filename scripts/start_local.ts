@@ -33,20 +33,9 @@ function reserveGpuForLiveVoice(): void {
   console.log(`[Launcher] Qwen GPU offload capped at ${selected} layers so ASR, JaiTTS, and RVC can remain resident.`);
 }
 
-async function startLocalZeroCostSystem() {
-  console.log('====================================================');
-  console.log('   DIGITAL ME — ZERO-COST LOCAL LAUNCHER           ');
-  console.log('====================================================\n');
-
-  if (await dashboardIsAlreadyRunning()) {
-    console.log('[Launcher] Digital Me is already running at http://127.0.0.1:3000.');
-    console.log('[Launcher] Nothing else needs to be started.\n');
-    return;
-  }
-
+async function startLocalVoiceStack(): Promise<string> {
   let localVoiceUrl = '';
 
-  // 1. Start the authenticated local RVC service before the bot begins capturing samples.
   try {
     const voiceService = await startLocalVoiceService();
     localVoiceUrl = voiceService.url;
@@ -55,7 +44,6 @@ async function startLocalZeroCostSystem() {
     throw new Error(`Local voice service could not start: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 2. Load the expressive Thai source model. RVC falls back to Edge-TTS if this optional service fails.
   try {
     const jaiTtsService = await startLocalJaiTtsService();
     process.env.JAITTS_ENABLED = jaiTtsService.ready ? 'true' : 'false';
@@ -66,7 +54,6 @@ async function startLocalZeroCostSystem() {
     console.warn('[JaiTTS] Continuing with the existing Edge-TTS -> RVC fallback.');
   }
 
-  // 3. Start Thai-English speech recognition before the Discord receiver is created.
   try {
     const sttService = await startLocalSttService();
     attachVoiceServiceShutdown(sttService.child);
@@ -74,13 +61,29 @@ async function startLocalZeroCostSystem() {
     throw new Error(`Local STT service could not start: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // 4. Warm the configured Thai-first LLM after reserving space for lazy RVC model loading.
   reserveGpuForLiveVoice();
   const llmService = await startLocalLlmService();
   attachVoiceServiceShutdown(llmService.child);
 
-  // 5. Load the selected voice now so the first live Discord reply is not a 30-second cold start.
   if (localVoiceUrl) await warmLocalVoiceService(localVoiceUrl);
+  return localVoiceUrl;
+}
+
+async function startLocalZeroCostSystem() {
+  console.log('====================================================');
+  console.log('   DIGITAL ME — ZERO-COST LOCAL LAUNCHER           ');
+  console.log('====================================================\n');
+
+  if (await dashboardIsAlreadyRunning()) {
+    console.log('[Launcher] Digital Me is already running at http://127.0.0.1:3000.');
+    console.log('[Launcher] Starting missing STT / RVC / JaiTTS services for that live bot.\n');
+    await startLocalVoiceStack();
+    console.log('[Launcher] Voice services are up. Keep this process running so they stay alive.');
+    await new Promise<void>(() => undefined);
+    return;
+  }
+
+  await startLocalVoiceStack();
 
   // 6. Run Hardware Doctor
   const hw = runHardwareDoctor();

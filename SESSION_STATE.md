@@ -5,58 +5,42 @@ Agent/model: Cursor Grok 4.6 (primary builder)
 
 ## Git state
 
-- Product progress branch: `feature/jarvis-platform-contracts` tracking `origin/feature/jarvis-platform-contracts`
-- Previous session commit: `5f1d69a Add Jarvis Core presentation contracts...`
-- Dirty pre-existing product work left unstaged:
-  - `data/behavior/examples.json`
-  - `data/language/custom_dictionary.json`
-  - `python/local_stt_service.py`
-  - `scripts/benchmark.ts`, `local_llm_process.ts`, `local_voice_process.ts`
-  - `src/bot/personality/ResponseGenerator.ts`
-  - `src/index.css`
-- Unrelated local files left untouched:
-  - `ChatGPT-Website-Creator-Prompt-Pack.pdf`
-  - `Digital_Me_Cursor_Handoff_Pack.zip`
-  - `Jarvis_Core_Discord_Presentation_Addendum.zip`
+- Product progress branch: `feature/jarvis-platform-contracts`
+- Live Discord was tested from `npm run dev` plus a companion `npm run start:local`
 
-## Baseline actually run
+## Live Discord evidence (2026-08-18 ~22:02–22:13)
 
-| Command | Result | Notes |
-|---|---|---|
-| `npm run lint` | PASS | After JARVIS-003 adapter path fix |
-| `npx tsx --test tests/jarvis_platform.test.ts tests/core.test.ts` | PASS | 53 tests |
-| `npx tsx --test tests/jarvis_memory.test.ts tests/research.test.ts` | PASS | 12 tests |
-| Combined unique TS tests this wrap-up | PASS | 65 |
-| `python -m unittest discover -s tests -p "test_*.py"` | NOT RE-RUN | Earlier session: 35 passed, 8 skipped |
-| `npm run build` | NOT RE-RUN | Earlier P0: PASS |
-| Discord live session | NOT RUN | Needs token + human |
+Bot login: `GAMGAMGAM-bot#4471` joined voice and received Opus (`SPEECH_START` / `SPEECH_END` for several speakers).
 
-## Work completed this session
+First failure was **not Discord login**. `npm run dev` alone left STT/RVC/JaiTTS down:
 
-- JARVIS-001 / JARVIS-002: presentation-neutral contracts + independent PresentationProfile.
-- JARVIS-003: wrap production `ResponseGenerator` behind `ResponseGeneratorPresentationEngine`.
-  - Live `AudioReceiver` uses `presentLegacyTurn` with no independent profile.
-  - `/voice` and `/persona` still both write `activeVoiceSpeakers`.
-  - Voice-only profiles do not load persona examples.
-  - Structured Core facts skip `generate()` and cannot be dropped.
-  - Consent model unchanged.
+- `[LocalSTT] No transcription service available at http://127.0.0.1:8765`
+- `[LocalTTS] No cloned speech service available at http://127.0.0.1:8766`
+- every utterance: `No transcript produced; skipping response generation`
 
-## Current compatibility behavior
+After starting the local voice stack beside the running dashboard:
 
-Live Discord is unchanged: selecting `/voice` or `/persona` still sets both voice and identity. Independent setters exist under `src/jarvis/presentation/compatibility.ts` and are used only when a caller supplies an explicit `PresentationProfile`.
+- RVC `:8766` CUDA healthy
+- JaiTTS `:8768` CUDA ready
+- Qwen3-ASR-1.7B `:8765` CUDA ready
+- STT began returning `FINAL` Thai transcripts (~22:12)
 
-## Current blockers
+Group VC still will not answer every line unless the clone is addressed (or the session is one-on-one). That is existing SocialBrain policy, not a crash.
 
-- Live Discord login/join/STT/playback/barge-in: needs owner token and a real VC test.
-- Consented voice clone listening test: needs owner consent + clean audio + human judgment.
-- Live `/research` citation freshness: needs `npm run research:smoke` while Ollama and MCP are up.
-- Owner LoRA still targets Typhoon 4B relative to current Qwen3.8 runtime.
-- Embedding server still not part of the one-command launcher.
-- MEMORY-002 SQLite dual-write should not start until reviewed.
-- JARVIS-004 live command decoupling should not start until reviewed.
+Dashboard was restarted so the bot can read `.runtime/voice_api_token` for RVC. Re-join the voice channel after that restart.
 
-## Next recommended task
+## Work completed this wrap-up
 
-`JARVIS-004` with caution: allow independent voice vs persona internally in live commands, keeping current `/voice` as a compatibility mapping.
+- JARVIS-001/002/003 already on the branch
+- `start:local` now starts missing STT/RVC/JaiTTS when `:3000` is already up, and stays alive
+- `getVoiceServiceApiToken()` falls back to `.runtime/voice_api_token` so `npm run dev` can speak
+- `stt:start` keeps the STT child process alive
 
-Do not start MEMORY-002 or dashboard redesign without a go-ahead.
+## Tests
+
+- `npm run lint` PASS
+- `npx tsx --test tests/core.test.ts` PASS (41)
+
+## Next
+
+If live talk still fails after re-join: say the selected persona name in the group, or `/speak` from the dashboard. JARVIS-004 remains the next architecture task.

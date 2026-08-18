@@ -21,7 +21,7 @@ import { SustainedVoiceDetector } from '../src/bot/audio/SustainedVoiceDetector'
 import { LocalLlmProvider } from '../src/bot/llm/LocalLlmProvider';
 import { VoiceConsentManager } from '../src/bot/voice/VoiceConsentManager';
 import { VoiceServiceClient } from '../src/bot/voice/VoiceServiceClient';
-import { getVoiceServiceBaseUrl } from '../src/bot/voice/VoiceServiceConfig';
+import { getVoiceServiceApiToken, getVoiceServiceBaseUrl } from '../src/bot/voice/VoiceServiceConfig';
 import { VoiceCaptureTargetManager } from '../src/bot/voice/VoiceCaptureTargetManager';
 import { VoiceDatasetWriter } from '../src/bot/voice/VoiceDatasetWriter';
 import { analyzeVoiceUtterance } from '../src/bot/voice/VoiceUtteranceAnalyzer';
@@ -771,6 +771,16 @@ test('automatic learning chooses first training, best-model fine-tuning, or more
     modelReady: true, serviceDurationSeconds: 500, newAcceptedSeconds: 500,
     jobStatus: 'training', minimumFreshSeconds: 120, minimumFinetuneSeconds: 180,
   }).action, 'wait');
+});
+
+test('voice API token uses the env value when present', () => {
+  const previous = process.env.VOICE_API_TOKEN;
+  process.env.VOICE_API_TOKEN = 'env-token-with-at-least-24-chars!!';
+  try {
+    assert.equal(getVoiceServiceApiToken(), 'env-token-with-at-least-24-chars!!');
+  } finally {
+    restoreEnvironment('VOICE_API_TOKEN', previous);
+  }
 });
 
 test('local voice backend ignores a stale Colab tunnel URL', () => {

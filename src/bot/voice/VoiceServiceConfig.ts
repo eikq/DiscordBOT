@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 export type VoiceBackend = 'local' | 'colab';
 
 export function getVoiceBackend(): VoiceBackend {
@@ -16,5 +19,13 @@ export function getVoiceServiceBaseUrl(): string {
 }
 
 export function getVoiceServiceApiToken(): string {
-  return (process.env.VOICE_API_TOKEN || process.env.COLAB_API_TOKEN || '').trim();
+  const fromEnv = (process.env.VOICE_API_TOKEN || process.env.COLAB_API_TOKEN || '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const saved = fs.readFileSync(path.join(process.cwd(), '.runtime', 'voice_api_token'), 'utf8').trim();
+    if (saved.length >= 24) return saved;
+  } catch {
+    // The launcher writes this file; npm run dev should reuse it.
+  }
+  return '';
 }
