@@ -119,7 +119,7 @@ Keep major concerns separated:
 - `src/bot/voice` — consent/dataset/RVC workflow
 - `src/bot/llm` — local LLM provider/tool loop
 - `src/bot/research` — research/MCP
-- `src/jarvis` — presentation-neutral Core + PresentationProfile contracts (not wired into the live Discord loop yet)
+- `src/jarvis` — presentation-neutral Core + PresentationProfile contracts; live Discord text goes through `ResponseGeneratorPresentationEngine.presentLegacyTurn` without an independent profile, so `/voice` coupling is unchanged. Jarvis Core itself is not wired.
 - dashboard/server code — operator control surface
 
 Brain, Persona, and Voice are independent selections. Voice selection alone must not load persona memory; persona selection alone must not select an RVC model. Preserve live `/voice` coupling through the compatibility mapper until an explicit command-behavior task.

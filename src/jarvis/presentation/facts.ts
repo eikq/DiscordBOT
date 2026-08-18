@@ -20,15 +20,18 @@ export function presentationContradictsFacts(text: string, result: JarvisCoreRes
   });
 }
 
-export function styleSuggestedContent(result: JarvisCoreResult, slangPrefix = ''): string {
-  const prefix = slangPrefix.trim();
-  const base = result.suggestedContent.trim();
-  const styled = [prefix, base].filter(Boolean).join(' ');
-  const missing = presentationContradictsFacts(styled, result);
-  if (missing.length === 0) return styled;
+export function ensureImmutableFacts(text: string, result: JarvisCoreResult): string {
+  const trimmed = text.trim();
+  if (presentationContradictsFacts(trimmed, result).length === 0) return trimmed;
   const restored = immutableFacts(result)
     .map(fact => factValueText(fact.value))
     .filter((value): value is string => Boolean(value))
     .join(' ');
-  return [styled, restored].filter(Boolean).join(' ').trim();
+  return [trimmed, restored].filter(Boolean).join(' ').trim();
+}
+
+export function styleSuggestedContent(result: JarvisCoreResult, slangPrefix = ''): string {
+  const prefix = slangPrefix.trim();
+  const base = result.suggestedContent.trim();
+  return ensureImmutableFacts([prefix, base].filter(Boolean).join(' '), result);
 }

@@ -53,4 +53,6 @@ export {
   withPersona,
   withVoice,
 } from './presentation/compatibility';
-export { immutableFacts, presentationContradictsFacts, styleSuggestedContent } from './presentation/facts';
+export { ensureImmutableFacts, immutableFacts, presentationContradictsFacts, styleSuggestedContent } from './presentation/facts';
+export { ResponseGeneratorPresentationEngine } from './clients/discord/ResponseGeneratorPresentationEngine';
+export type { LegacyTurnInput } from './clients/discord/ResponseGeneratorPresentationEngine';

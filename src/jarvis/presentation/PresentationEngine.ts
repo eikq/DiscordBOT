@@ -13,8 +13,8 @@ export interface PresentationEngine {
 }
 
 /**
- * Style-only renderer for contract tests. Does not wrap ResponseGenerator,
- * does not call tools, and does not load TTS/RVC.
+ * Style-only renderer for contract tests and structured Core results.
+ * Does not wrap ResponseGenerator, does not call tools, and does not load TTS/RVC.
  */
 export class FactPreservingPresentationEngine implements PresentationEngine {
   public async render(

@@ -5,6 +5,7 @@ import { SpeechToTextProvider, SpeechStream } from './stt/SpeechToTextProvider';
 import { SocialBrain } from './brain/SocialBrain';
 import { GroupConversationState } from './brain/GroupConversationState';
 import { ResponseGenerator } from './personality/ResponseGenerator';
+import { ResponseGeneratorPresentationEngine } from '../jarvis/clients/discord/ResponseGeneratorPresentationEngine';
 import { Client, VoiceChannel } from 'discord.js';
 import { VoiceConnectionManager } from './VoiceConnectionManager';
 import { VoiceOutputManager } from './tts/VoiceOutputManager';
@@ -61,6 +62,7 @@ export class AudioReceiver {
   private client: Client;
   private socialBrain: SocialBrain;
   private responseGenerator: ResponseGenerator;
+  private presentationEngine: ResponseGeneratorPresentationEngine;
   private voiceManager: VoiceConnectionManager;
   private voiceOutputManager: VoiceOutputManager;
   private memoryManager: FriendMemoryManager;
@@ -115,6 +117,7 @@ export class AudioReceiver {
     this.onLearningUtterance = onLearningUtterance;
     this.backgroundProcessingEnabledForGuild = backgroundProcessingEnabledForGuild;
     this.responseGenerator = new ResponseGenerator();
+    this.presentationEngine = new ResponseGeneratorPresentationEngine(this.responseGenerator);
     this.voiceOutputManager = new VoiceOutputManager(voiceManager);
     this.memoryManager = new FriendMemoryManager();
   }
@@ -448,7 +451,14 @@ export class AudioReceiver {
 
       this.currentState = 'GENERATING';
       const memoryContext = this.socialMemory.getContextForTurn(this.timeline.getRecentFinalTranscripts(12));
-      const response = await this.responseGenerator.generate(decision, state, persona, memoryContext);
+      const presented = await this.presentationEngine.presentLegacyTurn({
+        sessionId: guildId,
+        decision,
+        state,
+        persona,
+        memoryContext,
+      });
+      const response = presented?.text ?? null;
       if (!this.backgroundProcessingEnabledForGuild(guildId)) {
         this.currentState = 'LISTENING';
         return;

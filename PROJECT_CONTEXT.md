@@ -124,6 +124,7 @@ src/bot/SafeOpusDecoder.ts        Crash-contained Opus decode
 src/bot/timeline/                 Session transcript events
 src/bot/brain/                    SocialBrain, question detector, group state
 src/bot/personality/              ResponseGenerator, persona, behavior retrieval
+src/jarvis/                       Jarvis Core contracts + presentation engine (Discord adapter wraps ResponseGenerator)
 src/bot/memory/                   FriendMemoryManager + SocialMemoryBrain
 src/bot/stt/                      Local + mock STT
 src/bot/tts/                      Local / Colab / Gemini / ElevenLabs TTS + VoiceOutputManager
@@ -171,7 +172,7 @@ Per-user Opus packets are decoded to PCM. A `SustainedVoiceDetector` ignores sho
 - `VOICE_BARGE_IN_MIN_RMS_DBFS` default -42
 - `VOICE_MIN_UTTERANCE_MS` default 250
 
-Final transcripts from consented users are written into `SocialMemoryBrain`. Response generation waits for the **final** transcript, not a partial. Low-confidence / hallucinated STT is excluded from learned facts. `ResponseGenerator` then:
+Final transcripts from consented users are written into `SocialMemoryBrain`. Response generation waits for the **final** transcript, not a partial. Low-confidence / hallucinated STT is excluded from learned facts. `AudioReceiver` now calls `ResponseGeneratorPresentationEngine.presentLegacyTurn` with no independent profile, so `ResponseGenerator` still receives the same coupled persona as `/voice`. `ResponseGenerator` then:
 
 1. retrieve a close owner/persona example
 2. answer common daily questions with a deterministic line
@@ -444,7 +445,7 @@ Required for those tests: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_I
 - Physical confirmation that deleting a voice after a **live** Discord session removes every expected local file
 - Recovering `project.tar.gz` (corrupted; Git is authoritative)
 - Treating PHASE status checkboxes or old benchmark millisecond tables as current measurements
-- Wiring Jarvis Core into the live Discord voice loop (JARVIS-003+) or changing `/voice` so it no longer also selects persona (JARVIS-004)
+- Wiring Jarvis Core reasoning into the live Discord voice loop (JARVIS-005) or changing `/voice` so it no longer also selects persona (JARVIS-004)
 - MEMORY-002 SQLite dual-write
 - Dashboard redesign / `/jarvis-lab`
 
@@ -550,7 +551,7 @@ Hackathon packaging: `submission/HACKATHON_SUBMISSION.md`.
 
 In likely dependency order:
 
-1. JARVIS-003: wrap production `ResponseGenerator` behind PresentationEngine without changing live command behavior
+1. JARVIS-004 only after review: independent live `/voice` vs persona commands
 2. Confirm `git status`, then commit remaining unrelated dirty voice/STT work only when asked
 3. Run `npm run start:local` and `npm run benchmark` on this machine; record which services are actually UP
 4. Live Discord smoke: `/join` → talk → barge-in → `/leave` without cloning

@@ -276,7 +276,7 @@ Keep `MEMORY-002+` and dashboard integration blocked until those are reviewed.
 
 ## P9 — Jarvis Core / presentation platform
 
-Status: JARVIS-001 and JARVIS-002 DONE; later tasks READY
+Status: JARVIS-001, JARVIS-002, and JARVIS-003 DONE; later tasks READY
 
 Detailed queue: `JARVIS_PLATFORM_TASKS.md`  
 Design: `JARVIS_PLATFORM_ARCHITECTURE.md`, `PRESENTATION_ENGINE_SPEC.md`, `DISCORD_JARVIS_ADAPTER_SPEC.md`  
@@ -286,10 +286,10 @@ Safe completed pieces:
 
 - `JARVIS-001` presentation-neutral request/result contracts — DONE
 - `JARVIS-002` independent Brain/Persona/Voice profile + legacy `/voice` mapping — DONE
+- `JARVIS-003` wrap `ResponseGenerator` behind PresentationEngine — DONE (live `/voice` still coupled)
 
 Do not start without review:
 
-- `JARVIS-003` wrapping production `ResponseGenerator`
 - `JARVIS-004` changing live `/voice` / `/persona` command behavior
 - `MEMORY-002` SQLite dual-write
 - dashboard redesign / `/jarvis-lab`

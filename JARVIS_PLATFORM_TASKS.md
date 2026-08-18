@@ -48,7 +48,7 @@ Evidence:
 
 ## JARVIS-003 — Backward-compatible PresentationEngine
 Depends on JARVIS-002
-Status: READY
+Status: DONE
 
 Goal:
 Wrap existing persona/behavior generation behind a presentation boundary.
@@ -58,6 +58,12 @@ Acceptance:
 - factual structured fields are preserved
 - no change to consent model
 - legacy output tests pass
+
+Evidence:
+- `src/jarvis/clients/discord/ResponseGeneratorPresentationEngine.ts`
+- live `AudioReceiver` calls `presentLegacyTurn` without an independent profile
+- `/voice` / `/persona` still both write `activeVoiceSpeakers`
+- `tests/jarvis_platform.test.ts` covers legacy parity, voice-only isolation, and fact preservation
 
 ## JARVIS-004 — Decouple voice selection from persona selection
 Depends on JARVIS-003

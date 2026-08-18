@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
+import { ConversationTimeline } from '../src/bot/timeline/ConversationTimeline';
+import { GroupConversationState } from '../src/bot/brain/GroupConversationState';
+import { SocialDecision } from '../src/bot/brain/types';
+import { BehaviorRetriever } from '../src/bot/personality/BehaviorRetriever';
+import type { PersonaProfile } from '../src/bot/personality/PersonaProfileManager';
+import { ResponseGenerator } from '../src/bot/personality/ResponseGenerator';
+import type { LocalLlmProvider } from '../src/bot/llm/LocalLlmProvider';
 import {
   FactPreservingPresentationEngine,
   JARVIS_BRAIN_ID,
@@ -10,6 +20,7 @@ import {
   LEGACY_DISCORD_COUPLING,
   PassThroughJarvisCore,
   PresentationProfile,
+  ResponseGeneratorPresentationEngine,
   UnavailableJarvisCore,
   applySessionUpdate,
   createPresentationSession,
@@ -178,4 +189,182 @@ test('persona styling cannot drop immutable verified facts and does not call too
   assert.deepEqual(presentationContradictsFacts('วันนี้ไม่มีฝน', result), ['missing immutable fact temperature_c=31']);
   assert.deepEqual(presentationContradictsFacts(presented.text, result), []);
   assert.equal(result.toolResults[0]?.toolName, 'weather');
+});
+
+const GAM_PERSONA: PersonaProfile = {
+  userId: '897089867752808479',
+  displayName: 'Gam',
+  aliases: ['Gam', 'แก้ม'],
+  description: '',
+  updatedAt: 0,
+};
+
+const ANSWER_DECISION: SocialDecision = {
+  action: 'ANSWER',
+  targetUserIds: ['Bank'],
+  confidence: 1,
+  directlyAddressed: true,
+  responseExpected: 1,
+  interruptAppropriate: false,
+  desiredLength: 'very_short',
+  tone: 'casual',
+  reasonCode: 'TEST',
+};
+
+function conversationState(text: string): GroupConversationState {
+  const timeline = new ConversationTimeline();
+  timeline.addEvent({
+    type: 'VOICE_SESSION_STARTED',
+    sessionId: 'test-session',
+    guildId: 'test-guild',
+    channelId: 'test-channel',
+    timestamp: 0,
+  });
+  timeline.addEvent({
+    type: 'TRANSCRIPT_FINAL',
+    eventId: 'event-0',
+    sessionId: 'test-session',
+    discordUserId: 'Bank',
+    username: 'Bank',
+    displayName: 'Bank',
+    rawText: text,
+    confidence: 0.99,
+    timestamp: 1000,
+    speechStartedAt: 900,
+    speechEndedAt: 1000,
+    sttLatencyMs: 10,
+  });
+  return new GroupConversationState(timeline);
+}
+
+function throwingLlm(): LocalLlmProvider {
+  return {
+    generateText: async () => {
+      throw new Error('LLM must not be called for this presentation test');
+    },
+  } as unknown as LocalLlmProvider;
+}
+
+test('legacy presentLegacyTurn matches ResponseGenerator when no independent profile is supplied', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'digital-me-presentation-'));
+  try {
+    const examplesPath = path.join(tempDir, 'examples.json');
+    fs.writeFileSync(examplesPath, JSON.stringify([{
+      conversationId: 'gam',
+      context: [{ speaker: 'Bank', text: 'banana-split-xyz ไปไหม' }],
+      ownerAction: 'ANSWER',
+      ownerResponse: 'ไปดิแก้ม',
+      responseDelayMs: 1,
+      relationship: 'friend',
+      directlyAddressed: true,
+      topic: 'gaming',
+      personaUserId: GAM_PERSONA.userId,
+    }]));
+    const generator = new ResponseGenerator({
+      retriever: new BehaviorRetriever(examplesPath),
+      localLlm: throwingLlm(),
+    });
+    const engine = new ResponseGeneratorPresentationEngine(generator);
+    const state = conversationState('banana-split-xyz ไปไหม');
+    const direct = await generator.generate(ANSWER_DECISION, state, GAM_PERSONA);
+    const presented = await engine.presentLegacyTurn({
+      sessionId: 'guild-1',
+      decision: ANSWER_DECISION,
+      state,
+      persona: GAM_PERSONA,
+    });
+    assert.equal(direct, 'ไปดิแก้ม');
+    assert.equal(presented?.text, direct);
+    assert.equal(presented?.personaProfileId, GAM_PERSONA.userId);
+    assert.equal(presented?.voiceProfileId, GAM_PERSONA.userId);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('voice-only profile does not load persona behavior examples', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'digital-me-presentation-voice-'));
+  try {
+    const examplesPath = path.join(tempDir, 'examples.json');
+    fs.writeFileSync(examplesPath, JSON.stringify([{
+      conversationId: 'gam',
+      context: [{ speaker: 'Bank', text: 'banana-split-xyz ไปไหม' }],
+      ownerAction: 'ANSWER',
+      ownerResponse: 'ไปดิแก้ม',
+      responseDelayMs: 1,
+      relationship: 'friend',
+      directlyAddressed: true,
+      topic: 'gaming',
+      personaUserId: GAM_PERSONA.userId,
+    }]));
+    let systemPrompt = '';
+    const engine = new ResponseGeneratorPresentationEngine(new ResponseGenerator({
+      retriever: new BehaviorRetriever(examplesPath),
+      localLlm: {
+        generateText: async (request: { systemPrompt?: string }) => {
+          systemPrompt = request.systemPrompt || '';
+          return 'ยังไม่รู้ว่ะ มึงว่าไง';
+        },
+      } as unknown as LocalLlmProvider,
+    }));
+    const presented = await engine.presentLegacyTurn({
+      sessionId: 'guild-1',
+      decision: ANSWER_DECISION,
+      state: conversationState('banana-split-xyz ไปไหม'),
+      persona: GAM_PERSONA,
+      profile: withVoice(defaultJarvisPresentation(), GAM_PERSONA.userId),
+    });
+    assert.notEqual(presented?.text, 'ไปดิแก้ม');
+    assert.equal(presented?.text, 'ยังไม่รู้ว่ะ มึงว่าไง');
+    assert.match(systemPrompt, /คุณคือ Spin/u);
+    assert.equal(presented?.personaProfileId, JARVIS_PERSONA_ID);
+    assert.equal(presented?.voiceProfileId, GAM_PERSONA.userId);
+    assert.equal(presented?.behaviorPersonaId, undefined);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('structured Core facts skip ResponseGenerator and do not load a voice model', async () => {
+  let generateCalls = 0;
+  let voiceLoads = 0;
+  const generator = {
+    generate: async () => {
+      generateCalls += 1;
+      return 'วันนี้ไม่มีฝน';
+    },
+  } as unknown as ResponseGenerator;
+  const engine = new ResponseGeneratorPresentationEngine(generator);
+  const presented = await engine.presentLegacyTurn({
+    sessionId: 'guild-1',
+    decision: ANSWER_DECISION,
+    state: conversationState('วันนี้อากาศเป็นไง'),
+    persona: GAM_PERSONA,
+    profile: withPersona(defaultJarvisPresentation(), GAM_PERSONA.userId, 'STYLE'),
+    result: weatherResult('req-weather'),
+  });
+  assert.equal(generateCalls, 0);
+  assert.equal(voiceLoads, 0);
+  assert.match(presented?.text || '', /31/u);
+  assert.equal(presented?.personaProfileId, GAM_PERSONA.userId);
+  assert.equal(presented?.voiceProfileId, JARVIS_VOICE_ID);
+  assert.ok(presented?.transformations.includes('structured-facts-skip-legacy-generate'));
+});
+
+test('PresentationEngine.render does not call ResponseGenerator', async () => {
+  let generateCalls = 0;
+  const generator = {
+    generate: async () => {
+      generateCalls += 1;
+      return 'nope';
+    },
+  } as unknown as ResponseGenerator;
+  const engine = new ResponseGeneratorPresentationEngine(generator);
+  const presented = await engine.render(
+    weatherResult('req-weather'),
+    defaultJarvisPresentation(),
+    { sessionId: 'guild-1' },
+  );
+  assert.equal(generateCalls, 0);
+  assert.match(presented.text, /31/u);
 });
