@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "trustedOrigins": [
+    "http://127.0.0.1:3010",
+    "http://localhost:3010"
+  ],
+  "trustedPathPrefixes": [
+    "/jarvis-lab"
+  ]
+}

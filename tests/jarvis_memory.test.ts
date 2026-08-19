@@ -29,7 +29,7 @@ test('canonical memory ids are typed and parseable', () => {
   assert.throws(() => parseCanonicalMemoryId('not-an-id'), /Invalid canonical memory id/u);
 });
 
-test('canonical SQL schema lists required tables and forbids live migration', () => {
+test('canonical SQL schema lists required tables and refuses data/brain JSON paths', () => {
   const sql = loadCanonicalSchemaSql();
   const tables = assertCanonicalSchemaSql(sql);
   assert.ok(tables.includes('facts'));

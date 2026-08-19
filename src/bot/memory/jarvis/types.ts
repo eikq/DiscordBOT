@@ -1,4 +1,4 @@
-export const JARVIS_MEMORY_SCHEMA_VERSION = 1;
+export const JARVIS_MEMORY_SCHEMA_VERSION = 2;
 
 export const MEMORY_KINDS = [
   'entity',
@@ -113,6 +113,51 @@ export interface ArtifactRecord extends CanonicalMemoryRecord {
   artifactKind: 'audio' | 'image' | 'video' | 'document' | 'snapshot' | 'other';
   localPath: string;
   sha256?: string;
+}
+
+export interface AliasRecord {
+  id: string;
+  entityId: string;
+  alias: string;
+  confidence: number;
+  evidenceIds: string[];
+  status: MemoryStatus;
+}
+
+export interface IdentitySettingRecord {
+  id: string;
+  settingKey: string;
+  settingValue: unknown;
+  updatedAt: number;
+  sourceSystem: string;
+  status: MemoryStatus;
+}
+
+export interface MemoryFeedbackRecord {
+  id: string;
+  targetId: string;
+  action: FeedbackAction;
+  note?: string;
+  createdAt: number;
+  actor: string;
+}
+
+export interface MemoryLinkRecord {
+  id: string;
+  fromId: string;
+  toId: string;
+  relation: string;
+  createdAt: number;
+}
+
+export class MemoryConflictError extends Error {
+  constructor(
+    public readonly existingId: string,
+    public readonly factKey: string,
+  ) {
+    super(`Active fact ${existingId} already occupies ${factKey}; supersede instead of overwrite.`);
+    this.name = 'MemoryConflictError';
+  }
 }
 
 export type QdrantMemoryPayload = {

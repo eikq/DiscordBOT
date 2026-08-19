@@ -10,8 +10,20 @@ import { getVoiceBackend, getVoiceServiceApiToken, getVoiceServiceBaseUrl } from
 import { PersonaProfileManager } from "./src/bot/personality/PersonaProfileManager";
 import { VoiceServiceClient, VoiceTrainingExportOptions } from "./src/bot/voice/VoiceServiceClient";
 import { ResearchAssistant } from "./src/bot/research/ResearchAssistant";
+import { createJarvisLabRuntime } from "./src/jarvis/standalone/labRuntime";
+import { probeStandaloneStt } from "./src/jarvis/audio/sttAvailability";
+import { applyJarvisInteractiveProfile } from "./src/jarvis/standalone/runtimeProfile";
+import { MemoryGraphAdapter, emptyMemoryGraph, type MemoryGraphSnapshot } from "./src/jarvis/memory/graphAdapter";
+import { nightAgentSnapshot, systemHealthSnapshot } from "./src/jarvis/standalone/labSystem";
+import { assertLocalMutationRequest, enforceLoopbackBindHost } from "./src/jarvis/standalone/localMutationGuard";
+import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants";
+import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
 
 dotenv.config({ quiet: true });
+if (process.env.JARVIS_STANDALONE === '1') {
+  const profile = applyJarvisInteractiveProfile();
+  console.log(`[Jarvis] runtime profile=${profile.id} keep_alive=${profile.keepAlive} ctx=${profile.contextTokens} timeoutMs=${profile.timeoutMs} gpu_layers=${profile.gpuLayers}`);
+}
 
 type VoiceConversionJob = {
   id: string;
@@ -82,7 +94,54 @@ async function startServer() {
   const app = express();
   const parsedPort = Number(process.env.PORT || 3000);
   const PORT = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 3000;
-  const HOST = process.env.HOST || '127.0.0.1';
+  const HOST = enforceLoopbackBindHost(process.env.HOST || '127.0.0.1', process.env.JARVIS_STANDALONE === '1');
+  if (process.env.JARVIS_STANDALONE === '1' && process.env.HOST && process.env.HOST !== HOST) {
+    console.warn(`[Server] JARVIS_STANDALONE refuses non-loopback HOST=${process.env.HOST}; binding ${HOST}.`);
+  }
+
+  const rejectIfMutationBlocked = (req: express.Request, res: express.Response): boolean => {
+    const guarded = assertLocalMutationRequest({
+      method: req.method,
+      host: typeof req.headers.host === 'string' ? req.headers.host : undefined,
+      origin: typeof req.headers.origin === 'string' ? req.headers.origin : undefined,
+      referer: typeof req.headers.referer === 'string' ? req.headers.referer : undefined,
+      secFetchSite: typeof req.headers['sec-fetch-site'] === 'string' ? req.headers['sec-fetch-site'] : undefined,
+      contentType: typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : undefined,
+      contentLength: Number(req.headers['content-length']),
+      url: req.originalUrl || req.url,
+    }, { bindHost: HOST, port: PORT });
+    if (guarded.ok === false) {
+      res.status(guarded.status).json({ error: guarded.error, reasonCode: guarded.reasonCode });
+      return true;
+    }
+    try {
+      if (Buffer.byteLength(JSON.stringify(req.body ?? {}), 'utf8') > 16_384) {
+        res.status(413).json({ error: 'Request body is too large.', reasonCode: 'BODY_TOO_LARGE' });
+        return true;
+      }
+    } catch {
+      res.status(400).json({ error: 'Malformed action payload.', reasonCode: 'MALFORMED_BODY' });
+      return true;
+    }
+    return false;
+  };
+
+  const parseLabCapabilityCalls = (raw: unknown): { ok: true; calls?: Array<{ id: string; input: Record<string, unknown> }> } | { ok: false } => {
+    if (raw === undefined) return { ok: true };
+    if (!Array.isArray(raw)) return { ok: false };
+    const calls: Array<{ id: string; input: Record<string, unknown> }> = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return { ok: false };
+      const record = item as { id?: unknown; input?: unknown };
+      const id = typeof record.id === 'string' ? record.id.trim() : '';
+      if (!id || !isGatedCapabilityId(id)) return { ok: false };
+      if (record.input !== undefined && (typeof record.input !== 'object' || Array.isArray(record.input))) {
+        return { ok: false };
+      }
+      calls.push({ id, input: (record.input as Record<string, unknown> | undefined) ?? {} });
+    }
+    return { ok: true, calls: calls.length ? calls : undefined };
+  };
 
   // Initialize Discord Bot
   const researchAssistant = new ResearchAssistant();
@@ -114,7 +173,10 @@ async function startServer() {
     retainVoiceConversionJob(jobId);
   };
   
-  if (process.env.DISCORD_TOKEN) {
+  if (process.env.JARVIS_STANDALONE === '1') {
+    botStatus = "Standalone Jarvis; Discord client not started.";
+    console.log('[Server] JARVIS_STANDALONE=1; Discord client not started.');
+  } else if (process.env.DISCORD_TOKEN) {
     botService.start(process.env.DISCORD_TOKEN).then(() => {
         botStatus = "Connected";
     }).catch(err => {
@@ -130,7 +192,7 @@ async function startServer() {
   }
 
   // API routes
-  app.use(express.json());
+  app.use(express.json({ limit: "100kb" }));
 
   // A saved tunnel URL is loaded only when the legacy Colab backend is explicitly selected.
   const colabUrlFilePath = path.join(process.cwd(), 'data', 'colab_url.txt');
@@ -695,6 +757,366 @@ async function startServer() {
       return res.status(404).json({ error: 'Colab notebook is not present in this checkout.' });
     }
     return res.download(notebookPath);
+  });
+
+  const jarvisLab = createJarvisLabRuntime({
+    attachDefaultMemory: true,
+    attachDefaultCapabilities: true,
+    attachDefaultSkills: true,
+    attachDefaultPresentation: true,
+    attachDefaultSpeech: true,
+    probeStt: probeStandaloneStt,
+  });
+  app.get('/api/jarvis/status', async (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      res.json(await jarvisLab.status());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/presentation', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const sessionId = typeof req.body?.sessionId === 'string' && req.body.sessionId.trim()
+        ? req.body.sessionId.trim()
+        : 'jarvis-lab';
+      if (typeof req.body?.personaProfileId === 'string') {
+        jarvisLab.selectPersona(sessionId, req.body.personaProfileId);
+      }
+      if (typeof req.body?.voiceProfileId === 'string') {
+        jarvisLab.selectVoice(sessionId, req.body.voiceProfileId);
+      }
+      return res.json(await jarvisLab.presentationStatus(sessionId));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/ask', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const parsedCalls = parseLabCapabilityCalls(req.body?.capabilityCalls);
+      if (!parsedCalls.ok) return res.status(400).json({ error: 'Malformed action payload.', reasonCode: 'MALFORMED_BODY' });
+      const text = typeof req.body?.text === 'string' ? req.body.text : '';
+      const personaProfileId = typeof req.body?.personaProfileId === 'string' ? req.body.personaProfileId : undefined;
+      const voiceProfileId = typeof req.body?.voiceProfileId === 'string' ? req.body.voiceProfileId : undefined;
+      const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
+      const oneTurn = Boolean(req.body?.oneTurn);
+      const capabilities = Array.isArray(req.body?.capabilities)
+        ? req.body.capabilities.filter((id: unknown) => typeof id === 'string')
+        : [];
+      const speak = Boolean(req.body?.speak);
+      const actionSource = req.body?.actionSource === 'voice' || req.body?.actionSource === 'ui'
+        ? req.body.actionSource
+        : 'text';
+      return res.json(await jarvisLab.ask({
+        text,
+        personaProfileId,
+        voiceProfileId,
+        sessionId,
+        oneTurn,
+        capabilities,
+        capabilityCalls: parsedCalls.calls,
+        speak,
+        actionSource,
+      }));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/ask-stream', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const parsedCalls = parseLabCapabilityCalls(req.body?.capabilityCalls);
+      if (!parsedCalls.ok) return res.status(400).json({ error: 'Malformed action payload.', reasonCode: 'MALFORMED_BODY' });
+      const text = typeof req.body?.text === 'string' ? req.body.text : '';
+      const personaProfileId = typeof req.body?.personaProfileId === 'string' ? req.body.personaProfileId : undefined;
+      const voiceProfileId = typeof req.body?.voiceProfileId === 'string' ? req.body.voiceProfileId : undefined;
+      const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
+      const oneTurn = Boolean(req.body?.oneTurn);
+      const capabilities = Array.isArray(req.body?.capabilities)
+        ? req.body.capabilities.filter((id: unknown) => typeof id === 'string')
+        : [];
+      const speak = Boolean(req.body?.speak);
+      const actionSource = req.body?.actionSource === 'voice' || req.body?.actionSource === 'ui'
+        ? req.body.actionSource
+        : 'text';
+      res.status(200);
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Cache-Control', 'no-cache');
+      await jarvisLab.askStream({
+        text,
+        personaProfileId,
+        voiceProfileId,
+        sessionId,
+        oneTurn,
+        capabilities,
+        capabilityCalls: parsedCalls.calls,
+        speak,
+        actionSource,
+      }, event => {
+        res.write(`${JSON.stringify(event)}\n`);
+      });
+      res.end();
+    } catch (error) {
+      if (res.headersSent) {
+        res.write(`${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) })}\n`);
+        return res.end();
+      }
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/actions/confirm', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : '';
+      const token = typeof req.body?.token === 'string' ? req.body.token : '';
+      if (!proposalId || !token) return res.status(400).json({ error: 'proposalId and token are required.' });
+      const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
+      const speak = Boolean(req.body?.speak);
+      const actionSource = req.body?.actionSource === 'voice' ? 'voice' : 'ui';
+      return res.json(await jarvisLab.confirmAction({ proposalId, token, sessionId, speak, actionSource }));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/actions/deny', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : '';
+      if (!proposalId) return res.status(400).json({ error: 'proposalId is required.' });
+      const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
+      const speak = Boolean(req.body?.speak);
+      const actionSource = req.body?.actionSource === 'voice' ? 'voice' : 'ui';
+      return res.json(await jarvisLab.denyAction({ proposalId, sessionId, speak, actionSource }));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/speak/cancel', async (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const turnId = typeof req.body?.turnId === 'string' ? req.body.turnId : '';
+      if (!turnId) return res.status(400).json({ error: 'turnId is required.' });
+      await jarvisLab.cancelSpeech(turnId);
+      return res.json({ cancelled: true, turnId });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  let labGraphAdapter: MemoryGraphAdapter | null | undefined;
+  let labGraphCache: { at: number; snapshot: MemoryGraphSnapshot } | null = null;
+  const labGraph = (): MemoryGraphAdapter | null => {
+    if (labGraphAdapter !== undefined) return labGraphAdapter;
+    try {
+      labGraphAdapter = new MemoryGraphAdapter();
+    } catch (error) {
+      console.warn(`[JarvisLab] Memory graph not attached: ${error instanceof Error ? error.message : error}`);
+      labGraphAdapter = null;
+    }
+    return labGraphAdapter;
+  };
+  app.get('/api/jarvis/memory/graph', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const adapter = labGraph();
+      if (!adapter) return res.json(emptyMemoryGraph('Memory store is not attached.'));
+      if (labGraphCache && Date.now() - labGraphCache.at < 15_000) {
+        return res.json(labGraphCache.snapshot);
+      }
+      const snapshot = adapter.snapshot();
+      labGraphCache = { at: Date.now(), snapshot };
+      return res.json(snapshot);
+    } catch (error) {
+      return res.json(emptyMemoryGraph(error instanceof Error ? error.message : String(error)));
+    }
+  });
+  app.get('/api/jarvis/memory/node', (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const adapter = labGraph();
+      const id = String(req.query.id || '').trim();
+      if (!adapter) return res.json({ found: false, id, relations: [], reason: 'Memory store is not attached.' });
+      return res.json(adapter.nodeDetail(id));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/system', async (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      res.json(await systemHealthSnapshot());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/night', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      res.json(nightAgentSnapshot());
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/events', (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    if (req.query.stream === '1') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      const unsubscribe = sharedJarvisEventBus().subscribe(event => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      });
+      req.on('close', unsubscribe);
+      return;
+    }
+    try {
+      return res.json({ events: jarvisLab.recentOperations() });
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/security', async (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      return res.json(await jarvisLab.securitySnapshot());
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/private-research', async (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      return res.json(await jarvisLab.privateResearchSnapshot());
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/research', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      return res.json(jarvisLab.researchSnapshot());
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/workspace', (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    if (req.query.path || req.query.file || req.query.root) {
+      return res.status(400).json({ error: 'Raw filesystem paths are not allowed.', reasonCode: 'FORBIDDEN_ARGUMENT' });
+    }
+    try {
+      return res.json(jarvisLab.workspaceSnapshot());
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/workspace/refresh', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    if (req.body?.path || req.query.path) {
+      return res.status(400).json({ error: 'Raw filesystem paths are not allowed.', reasonCode: 'FORBIDDEN_ARGUMENT' });
+    }
+    try {
+      const workspaceId = typeof req.body?.workspaceId === 'string' ? req.body.workspaceId : 'jarvis-project';
+      return res.json(jarvisLab.refreshWorkspace(workspaceId));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/reminders', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      return res.json(jarvisLab.reminderSnapshot());
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/reminders/ack', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const reminderId = typeof req.body?.reminderId === 'string' ? req.body.reminderId : '';
+      const occurrenceAt = typeof req.body?.occurrenceAt === 'string' ? req.body.occurrenceAt : '';
+      const action = req.body?.action === 'complete' || req.body?.action === 'snooze' ? req.body.action : 'dismiss';
+      const minutes = typeof req.body?.minutes === 'number' ? req.body.minutes : undefined;
+      if (!reminderId || !occurrenceAt) {
+        return res.status(400).json({ error: 'reminderId and occurrenceAt are required.', reasonCode: 'INVALID_ARGUMENT' });
+      }
+      return res.json(await jarvisLab.ackReminder({ reminderId, occurrenceAt, action, minutes }));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/transcribe', express.raw({ type: '*/*', limit: '8mb' }), async (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+      if (body.length < 2) return res.status(400).json({ error: 'Microphone audio was empty.' });
+      const sampleRate = Number(req.headers['x-jarvis-sample-rate'] || 48_000);
+      const channels = Number(req.headers['x-jarvis-channels'] || 2);
+      const turnId = typeof req.headers['x-jarvis-turn-id'] === 'string' ? req.headers['x-jarvis-turn-id'] : undefined;
+      const captureDurationMs = Number(req.headers['x-jarvis-capture-ms']);
+      const voicedMs = Number(req.headers['x-jarvis-voiced-ms']);
+      const result = await jarvisLab.transcribe({
+        pcm: new Uint8Array(body.buffer, body.byteOffset, body.byteLength),
+        sampleRate: Number.isFinite(sampleRate) ? sampleRate : 48_000,
+        channels: Number.isFinite(channels) ? channels : 2,
+        turnId,
+        ...(Number.isFinite(captureDurationMs) && captureDurationMs > 0 ? { captureDurationMs } : {}),
+        ...(Number.isFinite(voicedMs) && voicedMs > 0 ? { voicedMs } : {}),
+      });
+      return res.json(result);
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
   });
 
   // Vite middleware for development

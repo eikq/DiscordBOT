@@ -1,0 +1,17 @@
+---
+description: Apply when editing `/jarvis-lab` or Jarvis command-center frontend.
+alwaysApply: false
+---
+# Jarvis UI Quality Rule
+
+- `/jarvis-lab` is a real Jarvis command center, not a debug form.
+- Preserve working Core/API behavior.
+- Central Jarvis Core must dominate visually.
+- Reduce pill/card overload.
+- Show real memory/tool/status data only.
+- Never expose hidden chain-of-thought.
+- Persona and Voice remain independent.
+- Keep Discord out of this standalone UI.
+- Prefer lightweight effects before WebGL.
+- Support reduced motion and minimal-GPU behavior.
+- UI effects must not destabilize local AI runtime.

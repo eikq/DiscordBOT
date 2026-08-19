@@ -19,9 +19,9 @@ from stt_quality import analyze_audio_quality, hallucination_reason
 
 HOST = os.environ.get("STT_HOST", "127.0.0.1")
 PORT = int(os.environ.get("STT_PORT", "8765"))
-MODEL_ID = os.environ.get("STT_MODEL", "Qwen/Qwen3-ASR-0.6B")
+MODEL_ID = os.environ.get("STT_MODEL", "Qwen/Qwen3-ASR-1.7B")
 FALLBACK_MODEL_ID = os.environ.get("STT_FALLBACK_MODEL", "Qwen/Qwen3-ASR-0.6B")
-LARGE_MODEL_MIN_FREE_GB = float(os.environ.get("STT_LARGE_MODEL_MIN_FREE_GB", "5.25"))
+LARGE_MODEL_MIN_FREE_GB = float(os.environ.get("STT_LARGE_MODEL_MIN_FREE_GB", "6.5"))
 VOICE_HEALTH_URL = os.environ.get("VOICE_HEALTH_URL", "http://127.0.0.1:8766/health")
 ASR_CONTEXT = os.environ.get(
     "STT_CONTEXT",

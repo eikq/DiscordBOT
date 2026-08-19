@@ -6,7 +6,7 @@ import { LlmToolCall, LlmToolDefinition, ToolExecutionResult } from '../llm/Loca
 
 export const WORLD_INTEL_PINNED_COMMIT = '9254192d83f88bd7e5312b074c11f09398b84ca9';
 
-const DEFAULT_ALLOWED_TOOLS = [
+export const DEFAULT_ALLOWED_TOOLS = [
   'intel_status',
   'intel_news_feed',
   'intel_trending_keywords',
@@ -240,9 +240,18 @@ export class McpResearchGateway {
   }
 
   private timeoutForTool(toolName: string): number {
-    const standard = this.positiveInteger(process.env.WORLD_INTEL_TIMEOUT_MS, 30_000);
-    if (!['intel_world_brief', 'intel_daily_digest'].includes(toolName)) return standard;
-    const expensive = this.positiveInteger(process.env.WORLD_INTEL_EXPENSIVE_TIMEOUT_MS, 60_000);
-    return Math.max(standard, expensive);
+    return worldIntelTimeoutMs(toolName);
   }
+}
+
+export function worldIntelTimeoutMs(toolName: string): number {
+  const standard = parsePositiveInteger(process.env.WORLD_INTEL_TIMEOUT_MS, 30_000);
+  if (!['intel_world_brief', 'intel_daily_digest'].includes(toolName)) return standard;
+  const expensive = parsePositiveInteger(process.env.WORLD_INTEL_EXPENSIVE_TIMEOUT_MS, 60_000);
+  return Math.max(standard, expensive);
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

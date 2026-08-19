@@ -32,10 +32,16 @@ export function isRetrievable(record: Pick<CanonicalMemoryRecord, 'status' | 're
   return true;
 }
 
-export function canSupersede(previous: { factKey: string; polarity: string; status: MemoryStatus }, next: { factKey: string; polarity: string }): boolean {
-  return previous.status === 'active'
-    && previous.factKey === next.factKey
-    && previous.polarity !== next.polarity;
+export function canSupersede(
+  previous: { factKey: string; polarity: string; status: MemoryStatus; objectValue?: string },
+  next: { factKey: string; polarity: string; objectValue?: string },
+): boolean {
+  if (previous.status !== 'active' || previous.factKey !== next.factKey) return false;
+  if (previous.polarity !== next.polarity) return true;
+  if (previous.objectValue !== undefined && next.objectValue !== undefined) {
+    return previous.objectValue !== next.objectValue;
+  }
+  return false;
 }
 
 export function applySupersession<T extends { id: string; status: MemoryStatus; confidence: number; supersededBy?: string }>(

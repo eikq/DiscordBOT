@@ -35,9 +35,10 @@ function placeholderResult(requestId: string): JarvisCoreResult {
 /**
  * Wraps Digital Me `ResponseGenerator` behind the presentation boundary.
  *
- * Live Discord should call `presentLegacyTurn` without a profile so current
- * persona+voice coupling is unchanged. Independent profiles are honored only
- * when the caller supplies one (JARVIS-004).
+ * Live Discord should pass the guild `PresentationProfile` so independent
+ * voice/persona selection is honored. If the caller omits `profile`, the engine
+ * falls back to `legacyVoiceCommandProfile(persona.userId)`. Voice-only profiles
+ * must not pass a cloned persona into `ResponseGenerator`.
  */
 export class ResponseGeneratorPresentationEngine implements PresentationEngine {
   private readonly factEngine = new FactPreservingPresentationEngine();

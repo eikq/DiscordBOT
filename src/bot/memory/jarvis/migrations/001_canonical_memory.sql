@@ -1,6 +1,7 @@
 -- Digital Me / Jarvis canonical memory schema
 -- Version: 1
--- Status: design only. Do not run against existing user data yet.
+-- Status: production schema v1. Applied only to SQLite files by the migrator.
+-- Never run against data/brain JSON or JSONL files.
 -- SQLite is the intended source of truth. JSONL remains the current SocialMemoryBrain audit stream.
 
 PRAGMA foreign_keys = ON;

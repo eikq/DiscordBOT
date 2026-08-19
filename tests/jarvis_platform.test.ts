@@ -12,6 +12,7 @@ import { ResponseGenerator } from '../src/bot/personality/ResponseGenerator';
 import type { LocalLlmProvider } from '../src/bot/llm/LocalLlmProvider';
 import {
   FactPreservingPresentationEngine,
+  DiscordJarvisAdapter,
   JARVIS_BRAIN_ID,
   JARVIS_PERSONA_ID,
   JARVIS_VOICE_ID,
@@ -20,6 +21,7 @@ import {
   LEGACY_DISCORD_COUPLING,
   PassThroughJarvisCore,
   PresentationProfile,
+  PresentationSessionStore,
   ResponseGeneratorPresentationEngine,
   UnavailableJarvisCore,
   applySessionUpdate,
@@ -87,10 +89,10 @@ test('Jarvis Core is presentation-neutral and can carry facts, tool refs, and me
   assert.equal(result.memoryRefs[0]?.canonicalId, 'fact:weather-today');
 });
 
-test('UnavailableJarvisCore is honest that the live Discord path is not wired', async () => {
+test('UnavailableJarvisCore is honest that Core is unavailable', async () => {
   const result = await new UnavailableJarvisCore().handle(requestWith(defaultJarvisPresentation()));
   assert.equal(result.answerIntent, 'unavailable');
-  assert.match(result.uncertainty[0] || '', /not wired/u);
+  assert.match(result.uncertainty[0] || '', /unavailable/u);
   assertPresentationNeutral(result);
 });
 
@@ -367,4 +369,223 @@ test('PresentationEngine.render does not call ResponseGenerator', async () => {
   );
   assert.equal(generateCalls, 0);
   assert.match(presented.text, /31/u);
+});
+
+const GAM_ID = '897089867752808479';
+
+test('legacy /voice mapping still sets both axes SOCIAL and persona memory scope', () => {
+  const store = new PresentationSessionStore();
+  const profile = store.applyLegacyVoiceAndPersona('guild-1', GAM_ID);
+  assert.equal(profile.voiceProfileId, GAM_ID);
+  assert.equal(profile.personaProfileId, GAM_ID);
+  assert.equal(profile.personaMode, 'SOCIAL');
+  assert.equal(store.playbackSpeakerId(profile), GAM_ID);
+  assert.equal(store.behaviorPersonaId(profile), GAM_ID);
+  assert.equal(memoryScopePersonaId(profile), GAM_ID);
+  assert.deepEqual(memoryDomainsFor(profile), ['global', 'discord', 'persona']);
+  assert.deepEqual(LEGACY_DISCORD_COUPLING.commandsThatSetBoth, ['/voice', '/persona']);
+  assert.match(LEGACY_DISCORD_COUPLING.independentApi, /selectVoice/u);
+});
+
+test('selectVoice(gam) with jarvis persona does not load persona memory', () => {
+  const store = new PresentationSessionStore();
+  store.selectVoice('guild-1', GAM_ID);
+  const profile = store.getProfile('guild-1');
+  assert.equal(profile.voiceProfileId, GAM_ID);
+  assert.equal(profile.personaProfileId, JARVIS_PERSONA_ID);
+  assert.equal(profile.personaMode, 'NONE');
+  assert.equal(store.playbackSpeakerId(profile), GAM_ID);
+  assert.equal(store.behaviorPersonaId(profile), undefined);
+  assert.equal(memoryScopePersonaId(profile), undefined);
+  assert.deepEqual(memoryDomainsFor(profile), ['global', 'discord']);
+});
+
+test('selectPersona(gam) with jarvis voice does not select an RVC speaker', () => {
+  const store = new PresentationSessionStore();
+  store.selectPersona('guild-1', GAM_ID);
+  const profile = store.getProfile('guild-1');
+  assert.equal(profile.personaProfileId, GAM_ID);
+  assert.equal(profile.personaMode, 'STYLE');
+  assert.equal(profile.voiceProfileId, JARVIS_VOICE_ID);
+  assert.equal(store.playbackSpeakerId(profile), undefined);
+  assert.equal(store.behaviorPersonaId(profile), GAM_ID);
+  assert.equal(memoryScopePersonaId(profile), GAM_ID);
+  assert.deepEqual(memoryDomainsFor(profile), ['global', 'discord', 'persona']);
+});
+
+test('mixed Gam voice + Gam persona vs Jarvis voice + Gam persona stay independent', () => {
+  const store = new PresentationSessionStore();
+  store.selectVoice('guild-1', GAM_ID);
+  store.selectPersona('guild-1', GAM_ID, 'SOCIAL');
+  const both = store.getProfile('guild-1');
+  assert.equal(both.voiceProfileId, GAM_ID);
+  assert.equal(both.personaProfileId, GAM_ID);
+  assert.equal(store.playbackSpeakerId(both), GAM_ID);
+  assert.equal(store.behaviorPersonaId(both), GAM_ID);
+
+  store.selectVoice('guild-1', JARVIS_VOICE_ID);
+  const personaOnly = store.getProfile('guild-1');
+  assert.equal(personaOnly.voiceProfileId, JARVIS_VOICE_ID);
+  assert.equal(personaOnly.personaProfileId, GAM_ID);
+  assert.equal(store.playbackSpeakerId(personaOnly), undefined);
+  assert.equal(store.behaviorPersonaId(personaOnly), GAM_ID);
+
+  store.resetToJarvis('guild-1');
+  store.selectVoice('guild-1', GAM_ID);
+  const voiceOnly = store.getProfile('guild-1');
+  assert.equal(voiceOnly.voiceProfileId, GAM_ID);
+  assert.equal(voiceOnly.personaProfileId, JARVIS_PERSONA_ID);
+  assert.equal(store.playbackSpeakerId(voiceOnly), GAM_ID);
+  assert.equal(store.behaviorPersonaId(voiceOnly), undefined);
+});
+
+test('PresentationSessionStore isolates guilds', () => {
+  const store = new PresentationSessionStore();
+  store.selectVoice('guild-a', GAM_ID);
+  store.selectPersona('guild-b', 'elemisu-user');
+  const a = store.getProfile('guild-a');
+  const b = store.getProfile('guild-b');
+  assert.equal(a.voiceProfileId, GAM_ID);
+  assert.equal(a.personaProfileId, JARVIS_PERSONA_ID);
+  assert.equal(b.voiceProfileId, JARVIS_VOICE_ID);
+  assert.equal(b.personaProfileId, 'elemisu-user');
+  assert.equal(store.getProfile('guild-c').voiceProfileId, JARVIS_VOICE_ID);
+  assert.equal(store.hasSession('guild-c'), false);
+});
+
+test('clearMatchingUser resets only the revoked user axes', () => {
+  const store = new PresentationSessionStore();
+  store.applyLegacyVoiceAndPersona('guild-1', GAM_ID);
+  store.clearMatchingUser('guild-1', GAM_ID);
+  const cleared = store.getProfile('guild-1');
+  assert.equal(cleared.voiceProfileId, JARVIS_VOICE_ID);
+  assert.equal(cleared.personaProfileId, JARVIS_PERSONA_ID);
+  assert.equal(store.playbackSpeakerId(cleared), undefined);
+  assert.equal(store.behaviorPersonaId(cleared), undefined);
+
+  store.selectVoice('guild-1', GAM_ID);
+  store.selectPersona('guild-1', 'elemisu-user');
+  store.clearMatchingUser('guild-1', GAM_ID);
+  const voiceCleared = store.getProfile('guild-1');
+  assert.equal(voiceCleared.voiceProfileId, JARVIS_VOICE_ID);
+  assert.equal(voiceCleared.personaProfileId, 'elemisu-user');
+});
+
+test('DiscordJarvisAdapter does not call Core until SocialBrain decides to speak', async () => {
+  let coreCalls = 0;
+  const adapter = new DiscordJarvisAdapter(new PassThroughJarvisCore((request) => {
+    coreCalls += 1;
+    return weatherResult(request.requestId);
+  }));
+  const listen = await adapter.reasonAfterSocialDecision({
+    requestId: 'req-listen',
+    sessionId: 'sess-1',
+    text: 'someone talking',
+    presentation: defaultJarvisPresentation(),
+    decision: { ...ANSWER_DECISION, action: 'LISTEN' },
+  });
+  assert.equal(coreCalls, 0);
+  assert.equal(listen.coreResult, undefined);
+  assert.equal(listen.usedLegacyGenerateFallback, false);
+
+  const speak = await adapter.reasonAfterSocialDecision({
+    requestId: 'req-weather',
+    sessionId: 'sess-1',
+    guildId: 'guild-1',
+    text: 'วันนี้อากาศเป็นไง',
+    presentation: withVoice(defaultJarvisPresentation(), GAM_ID),
+    decision: ANSWER_DECISION,
+  });
+  assert.equal(coreCalls, 1);
+  assert.equal(speak.usedLegacyGenerateFallback, false);
+  assert.equal(speak.coreResult?.answerIntent, 'weather');
+  assertPresentationNeutral(speak.coreResult!);
+});
+
+test('DiscordJarvisAdapter falls back to ResponseGenerator when Core is unavailable', async () => {
+  const adapter = new DiscordJarvisAdapter(new UnavailableJarvisCore());
+  const result = await adapter.reasonAfterSocialDecision({
+    requestId: 'req-fallback',
+    sessionId: 'sess-1',
+    text: 'banana-split-xyz ไปไหม',
+    presentation: legacyVoiceCommandProfile(GAM_ID),
+    decision: ANSWER_DECISION,
+  });
+  assert.equal(result.usedLegacyGenerateFallback, true);
+  assert.equal(result.coreResult, undefined);
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'digital-me-adapter-fallback-'));
+  try {
+    const examplesPath = path.join(tempDir, 'examples.json');
+    fs.writeFileSync(examplesPath, JSON.stringify([{
+      conversationId: 'gam',
+      context: [{ speaker: 'Bank', text: 'banana-split-xyz ไปไหม' }],
+      ownerAction: 'ANSWER',
+      ownerResponse: 'ไปดิแก้ม',
+      responseDelayMs: 1,
+      relationship: 'friend',
+      directlyAddressed: true,
+      topic: 'gaming',
+      personaUserId: GAM_PERSONA.userId,
+    }]));
+    const engine = new ResponseGeneratorPresentationEngine(new ResponseGenerator({
+      retriever: new BehaviorRetriever(examplesPath),
+      localLlm: throwingLlm(),
+    }));
+    const presented = await engine.presentLegacyTurn({
+      sessionId: 'guild-1',
+      decision: ANSWER_DECISION,
+      state: conversationState('banana-split-xyz ไปไหม'),
+      persona: GAM_PERSONA,
+      profile: legacyVoiceCommandProfile(GAM_ID),
+      result: result.coreResult,
+    });
+    assert.equal(presented?.text, 'ไปดิแก้ม');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('voice-only store profile still does not pass persona into generate', async () => {
+  const store = new PresentationSessionStore();
+  store.selectVoice('guild-1', GAM_PERSONA.userId);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'digital-me-store-voice-'));
+  try {
+    const examplesPath = path.join(tempDir, 'examples.json');
+    fs.writeFileSync(examplesPath, JSON.stringify([{
+      conversationId: 'gam',
+      context: [{ speaker: 'Bank', text: 'banana-split-xyz ไปไหม' }],
+      ownerAction: 'ANSWER',
+      ownerResponse: 'ไปดิแก้ม',
+      responseDelayMs: 1,
+      relationship: 'friend',
+      directlyAddressed: true,
+      topic: 'gaming',
+      personaUserId: GAM_PERSONA.userId,
+    }]));
+    let systemPrompt = '';
+    const engine = new ResponseGeneratorPresentationEngine(new ResponseGenerator({
+      retriever: new BehaviorRetriever(examplesPath),
+      localLlm: {
+        generateText: async (request: { systemPrompt?: string }) => {
+          systemPrompt = request.systemPrompt || '';
+          return 'ยังไม่รู้ว่ะ มึงว่าไง';
+        },
+      } as unknown as LocalLlmProvider,
+    }));
+    const presented = await engine.presentLegacyTurn({
+      sessionId: 'guild-1',
+      decision: ANSWER_DECISION,
+      state: conversationState('banana-split-xyz ไปไหม'),
+      persona: GAM_PERSONA,
+      profile: store.getProfile('guild-1'),
+    });
+    assert.notEqual(presented?.text, 'ไปดิแก้ม');
+    assert.match(systemPrompt, /คุณคือ Spin/u);
+    assert.equal(presented?.personaProfileId, JARVIS_PERSONA_ID);
+    assert.equal(presented?.voiceProfileId, GAM_PERSONA.userId);
+    assert.equal(presented?.behaviorPersonaId, undefined);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

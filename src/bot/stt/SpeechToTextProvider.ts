@@ -7,6 +7,10 @@ export interface STTStreamOptions {
     displayName: string;
     sessionId: string;
     codeSwitchLanguages?: string[];
+    /** Discord debug dumps stay opt-out. Standalone mic capture must pass false. */
+    persistRejectedAudio?: boolean;
+    /** When true, provider failures emit `error` instead of failing silently. */
+    reportFailures?: boolean;
 }
 
 export interface SpeechStreamEvents {

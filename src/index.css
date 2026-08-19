@@ -1,1 +1,91 @@
 @import "tailwindcss";
+
+.jarvis-core {
+  --core-color: 34 211 238;
+  position: relative;
+  width: 7rem;
+  height: 7rem;
+  flex: 0 0 7rem;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 0 1rem rgb(var(--core-color) / 0.22));
+}
+
+.jarvis-core--complete { --core-color: 52 211 153; }
+.jarvis-core--error { --core-color: 248 113 113; }
+.jarvis-core--offline { --core-color: 251 191 36; opacity: 0.72; }
+
+.jarvis-core__halo,
+.jarvis-core__ring,
+.jarvis-core__scanner,
+.jarvis-core__nucleus {
+  position: absolute;
+  border-radius: 9999px;
+}
+
+.jarvis-core__halo {
+  inset: 8%;
+  background: radial-gradient(circle, rgb(var(--core-color) / 0.22), transparent 65%);
+  animation: jarvis-pulse 2.8s ease-in-out infinite;
+}
+
+.jarvis-core__ring {
+  border: 1px solid rgb(var(--core-color) / 0.55);
+  box-shadow: inset 0 0 0.75rem rgb(var(--core-color) / 0.12), 0 0 0.5rem rgb(var(--core-color) / 0.12);
+}
+
+.jarvis-core__ring::before,
+.jarvis-core__ring::after {
+  content: "";
+  position: absolute;
+  width: 0.32rem;
+  height: 0.32rem;
+  border-radius: 9999px;
+  background: rgb(var(--core-color));
+  box-shadow: 0 0 0.65rem rgb(var(--core-color));
+}
+
+.jarvis-core__ring::before { top: -0.17rem; left: 50%; }
+.jarvis-core__ring::after { bottom: -0.17rem; right: 18%; }
+.jarvis-core__ring--outer { inset: 4%; border-style: dashed; animation: jarvis-spin 16s linear infinite; }
+.jarvis-core__ring--middle { inset: 18%; border-width: 2px; animation: jarvis-spin-reverse 9s linear infinite; }
+.jarvis-core__ring--inner { inset: 31%; border-style: dotted; animation: jarvis-spin 5s linear infinite; }
+
+.jarvis-core__scanner {
+  inset: 12%;
+  background: conic-gradient(from 0deg, transparent 0 78%, rgb(var(--core-color) / 0.6) 94%, transparent 100%);
+  mask: radial-gradient(circle, transparent 0 65%, #000 67% 72%, transparent 74%);
+  animation: jarvis-spin 3.4s linear infinite;
+}
+
+.jarvis-core__nucleus {
+  width: 2.15rem;
+  height: 2.15rem;
+  display: grid;
+  place-items: center;
+  color: rgb(var(--core-color));
+  border: 1px solid rgb(var(--core-color) / 0.7);
+  background: rgb(3 14 20 / 0.92);
+  box-shadow: 0 0 1.2rem rgb(var(--core-color) / 0.38), inset 0 0 0.8rem rgb(var(--core-color) / 0.18);
+  font: 700 0.58rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+}
+
+.jarvis-core--active .jarvis-core__ring--outer,
+.jarvis-core--active .jarvis-core__scanner { animation-duration: 1.6s; }
+.jarvis-core--active .jarvis-core__halo { animation-duration: 0.9s; }
+
+@keyframes jarvis-spin { to { transform: rotate(360deg); } }
+@keyframes jarvis-spin-reverse { to { transform: rotate(-360deg); } }
+@keyframes jarvis-pulse {
+  0%, 100% { opacity: 0.42; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@media (max-width: 640px) {
+  .jarvis-core { width: 5.5rem; height: 5.5rem; flex-basis: 5.5rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-core * { animation: none !important; }
+}

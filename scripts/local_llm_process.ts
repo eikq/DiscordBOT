@@ -55,8 +55,11 @@ async function modelIsInstalled(url: string, model: string): Promise<boolean> {
 }
 
 async function preloadModel(url: string, model: string): Promise<void> {
-  const contextTokens = Math.max(512, Number(process.env.LLM_CONTEXT_TOKENS || 2048));
-  const gpuLayers = Math.max(0, Number(process.env.LLM_GPU_LAYERS || 0));
+  const contextTokens = Math.max(512, Number(process.env.LLM_CONTEXT_TOKENS || 8192));
+  const gpuLayers = Math.max(0, Number(process.env.LLM_GPU_LAYERS || 999));
+  const configuredKeepAlive = process.env.LLM_KEEP_ALIVE?.trim() || '10m';
+  const numericKeepAlive = Number(configuredKeepAlive);
+  const keepAlive = Number.isFinite(numericKeepAlive) ? numericKeepAlive : configuredKeepAlive;
   const response = await fetch(`${url}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -65,7 +68,7 @@ async function preloadModel(url: string, model: string): Promise<void> {
       messages: [{ role: 'user', content: 'ตอบคำเดียว: พร้อม' }],
       stream: false,
       think: false,
-      keep_alive: -1,
+      keep_alive: keepAlive,
       options: { num_ctx: contextTokens, num_gpu: gpuLayers, num_predict: 3 },
     }),
     signal: AbortSignal.timeout(120_000),
@@ -75,7 +78,7 @@ async function preloadModel(url: string, model: string): Promise<void> {
 
 export async function startLocalLlmService(): Promise<LocalLlmProcess> {
   const url = nativeUrl();
-  const model = process.env.LLM_MODEL || 'qwen3:4b-instruct';
+  const model = process.env.LLM_MODEL || 'digital-me-qwen38:27b-ad-q4km';
   if (process.env.LLM_ENABLED === 'false') {
     return { child: null, reusedExistingService: false, ready: false, url, model };
   }
@@ -115,7 +118,7 @@ export async function startLocalLlmService(): Promise<LocalLlmProcess> {
   console.log(`[LocalLLM] Preloading ${model} with thinking disabled...`);
   try {
     await preloadModel(url, model);
-    console.log(`[LocalLLM] ${model} is warm and kept resident for real-time replies.`);
+    console.log(`[LocalLLM] ${model} is warm; Ollama will release it after the configured idle window.`);
     return { child, reusedExistingService, ready: true, url, model };
   } catch (error) {
     console.warn(`[LocalLLM] Preload failed: ${error instanceof Error ? error.message : String(error)}`);

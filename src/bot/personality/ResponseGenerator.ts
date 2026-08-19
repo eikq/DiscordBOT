@@ -101,12 +101,17 @@ export class ResponseGenerator {
     const examplesInstruction = learnedExamples
       ? `ตัวอย่างคำตอบจริงของ ${personaName}:\n${learnedExamples}`
       : '';
+    const configuredWordLimit = Number(process.env.VOICE_REPLY_MAX_WORDS || 22);
+    const voiceWordLimit = Number.isFinite(configuredWordLimit)
+      ? Math.min(40, Math.max(8, Math.round(configuredWordLimit)))
+      : 22;
 
     const systemPrompt = `คุณคือ ${personaName} กำลังคุยในห้องเสียง Discord กับเพื่อนสนิท
 ถ้าเพื่อนเรียกชื่อเหล่านี้ เขากำลังเรียกคุณ: ${aliases}
 ${personaDescription}
 ${memoryContext ? `สิ่งที่จำได้จากบทสนทนาจริง (ใช้เฉพาะเมื่อเกี่ยวข้อง ห้ามแต่งเพิ่ม):\n${memoryContext}` : ''}
-ตอบประโยคล่าสุดอย่างเป็นธรรมชาติด้วยภาษาไทยไม่เกิน 8 คำ ใช้คำอังกฤษเฉพาะศัพท์เกมที่จำเป็น
+ตอบประโยคล่าสุดเหมือนมนุษย์คุยกับเพื่อนจริง ๆ ใช้จังหวะภาษาไทยธรรมชาติ ปกติ 1 ประโยค และยาวได้ไม่เกิน ${voiceWordLimit} คำเมื่อจำเป็น ใช้คำอังกฤษเฉพาะศัพท์เกมหรือชื่อเฉพาะ
+ไม่ต้องยัดมุกหรือคำหยาบทุกครั้ง ให้ปรับตามอารมณ์และบริบทก่อนหน้า และอย่าพูดซ้ำรูปประโยคเดิมติดกัน
 ถ้าประโยคล่าสุดเป็นคำถาม ต้องตอบสิ่งที่ถูกถามโดยตรง ห้ามตอบเพียงคำอุทานลอยๆ เช่น "จริงดิ" "เอาดิ" "เอาดี" "ห้ะ" หรือ "อ๋อ"
 คำถามสถานะทั่วไปอย่าง "กินข้าวยัง" ให้ตอบเป็นตัวเองแบบเพื่อนจริงๆ แล้วถามกลับสั้นๆ ได้
 ถ้าจะถามกลับ ต้องตอบคำถามเดิมก่อนเสมอ เช่น "ยังเลย มึงอะ" ไม่ใช่ถามคำถามใหม่อย่างเดียว
@@ -122,8 +127,8 @@ ${examplesInstruction}
     const text = await this.localLlm.generateText({
       systemPrompt,
       userPrompt,
-      temperature: 0.45,
-      maxTokens: responseAction === 'ANSWER' ? 40 : 18
+      temperature: 0.52,
+      maxTokens: responseAction === 'ANSWER' ? 72 : 24
     });
 
     if (text) {
@@ -135,7 +140,7 @@ ${examplesInstruction}
         .split(/\r?\n/gu)
         .find(line => line.trim().length > 0)
         ?.trim()
-        .slice(0, 160);
+        .slice(0, this.voiceReplyCharacterLimit());
       if (cleaned && this.isNaturalThaiReply(cleaned) && (!questionDetected || this.answersQuestionDirectly(lastText, cleaned))) {
         return cleaned;
       }
@@ -163,6 +168,11 @@ ${examplesInstruction}
     const visibleCharacters = [...text].filter(character => /[\p{L}\p{N}]/u.test(character));
     const thaiCharacters = visibleCharacters.filter(character => /[\u0E00-\u0E7F]/u.test(character));
     return visibleCharacters.length === 0 || thaiCharacters.length / visibleCharacters.length >= 0.35;
+  }
+
+  private voiceReplyCharacterLimit(): number {
+    const configured = Number(process.env.VOICE_REPLY_MAX_CHARS || 240);
+    return Number.isFinite(configured) ? Math.min(400, Math.max(120, Math.round(configured))) : 240;
   }
 
   /**

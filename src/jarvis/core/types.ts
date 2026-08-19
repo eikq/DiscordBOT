@@ -11,7 +11,9 @@ export type JarvisClientSource = 'discord' | 'desktop' | 'android' | 'cctv' | 's
 
 export interface JarvisClientContext {
   sessionId: string;
+  /** Optional opaque group/session id from any client. Not a Discord.js type. */
   guildId?: string;
+  /** Optional opaque channel/conversation id from any client. */
   channelId?: string;
   speakerUserId?: string;
   participants?: string[];
@@ -41,12 +43,46 @@ export interface ToolResultRef {
 export interface MemoryRef {
   canonicalId: string;
   domain: 'global' | 'discord' | 'persona' | 'restricted';
+  type?: string;
+  confidence?: number;
+  sourceRefs?: string[];
+  status?: string;
 }
+
+export interface SkillRef {
+  id: string;
+  source: string;
+  version?: string;
+}
+
+export type ActionResultStatus =
+  | 'planned'
+  | 'completed'
+  | 'denied'
+  | 'failed'
+  | 'confirmation_required'
+  | 'unavailable';
 
 export interface ActionResult {
   name: string;
-  status: 'planned' | 'completed' | 'denied' | 'failed';
+  status: ActionResultStatus;
   detail?: string;
+  proposalId?: string;
+  capabilityId?: string;
+  summary?: string;
+  risk?: 'READ_ONLY' | 'LOW_RISK_ACTION' | 'CONFIRM_REQUIRED' | 'BLOCKED';
+  errorCode?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface CapabilityCall {
+  id: string;
+  input?: Record<string, unknown>;
+  confirmation?: {
+    proposalId: string;
+    token: string;
+  };
 }
 
 export interface JarvisRequest {
@@ -59,6 +95,10 @@ export interface JarvisRequest {
   clientContext: JarvisClientContext;
   presentation: PresentationProfile;
   capabilities: string[];
+  capabilityCalls?: CapabilityCall[];
+  actionOnly?: boolean;
+  presetActionResults?: ActionResult[];
+  actionSource?: 'text' | 'voice' | 'ui' | 'system';
 }
 
 export interface JarvisCoreResult {
@@ -68,6 +108,10 @@ export interface JarvisCoreResult {
   unverifiedClaims: Claim[];
   toolResults: ToolResultRef[];
   memoryRefs: MemoryRef[];
+  /** Vetted instruction/reference skills that materially shaped this result. */
+  skillRefs?: SkillRef[];
+  documentRefs?: string[];
+  sourceRefs?: string[];
   actionResults: ActionResult[];
   uncertainty: string[];
   suggestedContent: string;

@@ -1,0 +1,16 @@
+---
+description: Temporary rule for the first real unattended Night Agent run using Cursor/Grok only.
+alwaysApply: false
+---
+# Grok-Only Tonight Rule
+
+- Cursor/Grok is the only coding provider tonight.
+- Local Qwen and Codex fallback are disabled.
+- Never guess the Cursor CLI model id.
+- Require installed/authenticated Cursor CLI and exact model resolution before unattended start.
+- Primary repo may remain dirty only if it is controller-only and all coding targets a separate clean isolated worktree.
+- Grok receives file read/write capability only; deny Shell, WebFetch and MCP.
+- NightToolHost runs acceptance commands.
+- Fresh Cursor process per task.
+- Provider/quota failure stops the run cleanly; do not switch models.
+- No commit, push, reset, clean, merge, or worktree deletion automatically.

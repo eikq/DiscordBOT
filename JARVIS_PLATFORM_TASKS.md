@@ -2,6 +2,8 @@
 
 These tasks supersede the previous assumption that Jarvis should become a Discord-resident assistant.
 
+**Priority update (2026-08-18):** `JARVIS_FIRST_TASKS.md` now outranks further Discord work. JARVIS-004/005 code in this tree is kept; JARVIS-006+ Discord items are deferred until Jarvis Core v1.
+
 Do not mark them DONE without evidence.
 
 ## JARVIS-001 — Core contracts
@@ -61,13 +63,13 @@ Acceptance:
 
 Evidence:
 - `src/jarvis/clients/discord/ResponseGeneratorPresentationEngine.ts`
-- live `AudioReceiver` calls `presentLegacyTurn` without an independent profile
-- `/voice` / `/persona` still both write `activeVoiceSpeakers`
+- originally live `AudioReceiver` called `presentLegacyTurn` without an independent profile; JARVIS-004 now passes the guild profile
+- `/voice` / `/persona` still both set voice+persona via compatibility mapping
 - `tests/jarvis_platform.test.ts` covers legacy parity, voice-only isolation, and fact preservation
 
 ## JARVIS-004 — Decouple voice selection from persona selection
 Depends on JARVIS-003
-Status: READY with caution
+Status: DONE
 
 Goal:
 Allow:
@@ -82,9 +84,18 @@ Acceptance:
 - voice change does not load persona memory
 - tests cover isolation
 
+Evidence:
+- `src/jarvis/clients/discord/PresentationSessionStore.ts`
+- `BotService` keeps `/voice` and `/persona` on `applyLegacyVoiceAndPersona` (both axes, SOCIAL)
+- dashboard-only `voice-only` / `persona-only` commands select one axis
+- `AudioReceiver.presentLegacyTurn` now receives the guild `PresentationProfile`
+- `npx tsx --test tests/jarvis_platform.test.ts` PASS 22/22 (2026-08-18)
+- `npm run lint` PASS
+- not live Discord verified
+
 ## JARVIS-005 — DiscordJarvisAdapter
 Depends on JARVIS-001/003
-Status: READY
+Status: DONE
 
 Goal:
 Create an adapter boundary between Discord/Digital Me and Jarvis Core.
@@ -94,6 +105,14 @@ Acceptance:
 - Jarvis handles reasoning only after response decision
 - Discord transport remains outside Jarvis Core
 - fallback behavior remains honest if Jarvis is unavailable
+
+Evidence:
+- `src/jarvis/clients/discord/DiscordJarvisAdapter.ts`
+- live `AudioReceiver` calls the adapter after SocialBrain SPEAK
+- live Core is `UnavailableJarvisCore`; `presentLegacyTurn` then uses `ResponseGenerator.generate()`
+- `PassThroughJarvisCore` covered in unit tests only
+- `npx tsx --test tests/jarvis_platform.test.ts` PASS 22/22 (2026-08-18)
+- not live Discord verified
 
 ## JARVIS-006 — InvocationResolver
 Depends on JARVIS-002

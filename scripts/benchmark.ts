@@ -52,7 +52,7 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
   console.log(`     -> Embedding Latency: ${result.embeddingLatencyMs}ms per batch`);
 
   // 2. Benchmark Local LLM Endpoint (or Fallback Engine)
-  console.log('[2/4] Benchmarking Local LLM (Qwen3 4B Instruct Q4 / Ollama)...');
+  console.log('[2/4] Benchmarking Local LLM (Qwen3.8 27B AD-Q4_K_M / Ollama)...');
   const llmUrl = process.env.LLM_BASE_URL || 'http://127.0.0.1:11434/v1';
   const parsedLlmUrl = new URL(llmUrl);
   const ollamaNativeUrl = parsedLlmUrl.port === '11434' ? `${parsedLlmUrl.protocol}//${parsedLlmUrl.host}` : null;
@@ -62,23 +62,23 @@ export async function runLocalBenchmark(): Promise<BenchmarkResult> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ollamaNativeUrl ? {
-        model: process.env.LLM_MODEL || 'qwen3:4b-instruct',
+        model: process.env.LLM_MODEL || 'digital-me-qwen38:27b-ad-q4km',
         messages: [{ role: 'user', content: 'ตอบสั้นๆ: มึงเข้า valo ปะ' }],
         stream: false,
         think: false,
-        keep_alive: -1,
+        keep_alive: process.env.LLM_KEEP_ALIVE || '10m',
         options: {
           num_predict: 20,
-          num_ctx: Math.max(512, Number(process.env.LLM_CONTEXT_TOKENS || 2048)),
-          num_gpu: Math.max(0, Number(process.env.LLM_GPU_LAYERS || 0)),
+          num_ctx: Math.max(512, Number(process.env.LLM_CONTEXT_TOKENS || 8192)),
+          num_gpu: Math.max(0, Number(process.env.LLM_GPU_LAYERS || 999)),
         },
       } : {
-        model: process.env.LLM_MODEL || 'qwen3:4b-instruct',
+        model: process.env.LLM_MODEL || 'digital-me-qwen38:27b-ad-q4km',
         messages: [{ role: 'user', content: 'ตอบสั้นๆ: มึงเข้า valo ปะ' }],
         max_tokens: 20,
         reasoning_effort: 'none'
       }),
-      signal: AbortSignal.timeout(Math.max(3_000, Number(process.env.LLM_TIMEOUT_MS || 3_000)))
+      signal: AbortSignal.timeout(Math.max(60_000, Number(process.env.LLM_TIMEOUT_MS || 60_000)))
     });
     if (res.ok) {
       result.llmTotalMs = Date.now() - llmStart;

@@ -5,7 +5,10 @@ import { SpeechToTextProvider, SpeechStream } from './stt/SpeechToTextProvider';
 import { SocialBrain } from './brain/SocialBrain';
 import { GroupConversationState } from './brain/GroupConversationState';
 import { ResponseGenerator } from './personality/ResponseGenerator';
+import { DiscordJarvisAdapter } from '../jarvis/clients/discord/DiscordJarvisAdapter';
 import { ResponseGeneratorPresentationEngine } from '../jarvis/clients/discord/ResponseGeneratorPresentationEngine';
+import { defaultJarvisPresentation, legacyVoiceCommandProfile } from '../jarvis/presentation/compatibility';
+import type { PresentationProfile } from '../jarvis/presentation/types';
 import { Client, VoiceChannel } from 'discord.js';
 import { VoiceConnectionManager } from './VoiceConnectionManager';
 import { VoiceOutputManager } from './tts/VoiceOutputManager';
@@ -71,6 +74,8 @@ export class AudioReceiver {
   private voiceServiceClient: VoiceServiceClient;
   private selectedVoiceForGuild: (guildId: string) => string | undefined;
   private personaForGuild: (guildId: string) => PersonaProfile | null;
+  private presentationForGuild: (guildId: string) => PresentationProfile | undefined;
+  private discordJarvisAdapter: DiscordJarvisAdapter;
   private selectedCaptureTargetForGuild: (guildId: string) => string | undefined;
   private learningSessionForGuild: (guildId: string) => { id: string; targetUserId: string } | null;
   private onLearningUtterance: (guildId: string, record: VoiceUtteranceRecord) => void | Promise<void>;
@@ -99,6 +104,8 @@ export class AudioReceiver {
     learningSessionForGuild: (guildId: string) => { id: string; targetUserId: string } | null = () => null,
     onLearningUtterance: (guildId: string, record: VoiceUtteranceRecord) => void | Promise<void> = () => undefined,
     backgroundProcessingEnabledForGuild: (guildId: string) => boolean = () => true,
+    presentationForGuild: (guildId: string) => PresentationProfile | undefined = () => undefined,
+    discordJarvisAdapter: DiscordJarvisAdapter = new DiscordJarvisAdapter(),
   ) {
     this.connection = connection;
     this.timeline = timeline;
@@ -112,6 +119,8 @@ export class AudioReceiver {
     this.selectedVoiceForGuild = selectedVoiceForGuild;
     this.selectedCaptureTargetForGuild = selectedCaptureTargetForGuild;
     this.personaForGuild = personaForGuild;
+    this.presentationForGuild = presentationForGuild;
+    this.discordJarvisAdapter = discordJarvisAdapter;
     this.socialMemory = socialMemory;
     this.learningSessionForGuild = learningSessionForGuild;
     this.onLearningUtterance = onLearningUtterance;
@@ -451,12 +460,27 @@ export class AudioReceiver {
 
       this.currentState = 'GENERATING';
       const memoryContext = this.socialMemory.getContextForTurn(this.timeline.getRecentFinalTranscripts(12));
+      const profile = this.presentationForGuild(guildId);
+      const latest = state.getRecentTranscriptEvents(1).at(-1);
+      const adapterResult = await this.discordJarvisAdapter.reasonAfterSocialDecision({
+        requestId: `${this.sessionId}:${turnStartedAt}`,
+        sessionId: this.sessionId,
+        guildId,
+        channelId: this.connection.joinConfig.channelId ?? undefined,
+        speakerUserId: latest?.discordUserId,
+        participants: state.getContext(6).participants,
+        text: latest?.rawText ?? '',
+        presentation: profile ?? (persona ? legacyVoiceCommandProfile(persona.userId) : defaultJarvisPresentation()),
+        decision,
+      });
       const presented = await this.presentationEngine.presentLegacyTurn({
         sessionId: guildId,
         decision,
         state,
         persona,
         memoryContext,
+        profile,
+        result: adapterResult.coreResult,
       });
       const response = presented?.text ?? null;
       if (!this.backgroundProcessingEnabledForGuild(guildId)) {
@@ -493,12 +517,15 @@ export class AudioReceiver {
       });
 
       // Play audio and handle turn completion
-      const ownerId = process.env.OWNER_DISCORD_USER_ID;
+      const ownerId = process.env.OWNER_DISCORD_USER_ID?.trim();
       const defaultSpeakerId = process.env.DEFAULT_SPEAKER_ID?.trim();
-      const voiceSpeaker = (persona?.userId && this.consentManager.hasActiveConsent(guildId, persona.userId) ? persona.userId : undefined)
-        || this.selectedVoiceForGuild(guildId)
-        || (defaultSpeakerId && this.consentManager.hasActiveConsent(guildId, defaultSpeakerId) ? defaultSpeakerId : undefined)
-        || (ownerId && this.consentManager.hasActiveConsent(guildId, ownerId) ? ownerId : undefined);
+      const selectedVoice = this.selectedVoiceForGuild(guildId);
+      const consentedSpeaker = (userId: string | undefined) =>
+        userId && this.consentManager.hasActiveConsent(guildId, userId) ? userId : undefined;
+      const voiceSpeaker = consentedSpeaker(selectedVoice)
+        || (profile
+          ? undefined
+          : consentedSpeaker(defaultSpeakerId) || consentedSpeaker(ownerId));
       const spoke = await this.voiceOutputManager.speakTurn(guildId, response, voiceSpeaker, {
         tone: decision.tone,
         action: decision.action,

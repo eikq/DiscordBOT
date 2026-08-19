@@ -22,6 +22,7 @@ Acceptance:
 
 ## MEMORY-002 — SQLite canonical memory adapter
 Depends on MEMORY-001
+Status: DONE (JF-003; unit-tested; JSON/JSONL still authoritative)
 
 Goal:
 Introduce SQLite behind an adapter while preserving current files during transition.

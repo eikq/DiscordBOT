@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "jarvis-project",
+      "displayName": "Jarvis repository",
+      "path": ".",
+      "openWith": "explorer"
+    }
+  ]
+}

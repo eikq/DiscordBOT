@@ -2,16 +2,16 @@ import type { MemoryDomain, PersonaMode, PresentationOverride, PresentationProfi
 import { JARVIS_BRAIN_ID, JARVIS_PERSONA_ID, JARVIS_VOICE_ID } from './types';
 
 /**
- * Live Discord still couples voice and persona through one map:
- * `BotService.activeVoiceSpeakers`. Both `/voice` and `/persona` write that map,
- * and `personaForGuild()` reads it. These helpers model the *new* independent
- * API plus a compatibility mapper. They do not change BotService.
+ * Live `/voice` and `/persona` still set BOTH axes (SOCIAL) via
+ * `PresentationSessionStore.applyLegacyVoiceAndPersona`. Independent selection
+ * uses `selectVoice` / `selectPersona`. `BotService.activeVoiceSpeakers` is a
+ * playback-speaker cache synced from the store.
  */
 export const LEGACY_DISCORD_COUPLING = {
-  stateField: 'BotService.activeVoiceSpeakers',
+  stateField: 'PresentationSessionStore (activeVoiceSpeakers is a playback-speaker cache)',
   commandsThatSetBoth: ['/voice', '/persona'] as const,
-  personaLookup: 'personaForGuild reads the same guild map as the selected voice',
-  independentApi: 'src/jarvis/presentation/compatibility.ts',
+  personaLookup: 'personaForGuild reads the persona axis via PresentationSessionStore',
+  independentApi: 'PresentationSessionStore.selectVoice / selectPersona',
 } as const;
 
 export function defaultJarvisPresentation(): PresentationProfile {

@@ -233,6 +233,13 @@ Return ONLY the exact transcribed words spoken in Thai and/or English. If it is 
         console.warn(`[LocalSTT] No transcription service available at ${this.baseUrl}.`);
         LocalSpeechStream.offlineWarningShown = true;
       }
+      if (this.options.reportFailures) {
+        const message = err instanceof Error ? err.message : String(err);
+        const timedOut = /timeout|aborted|AbortError/i.test(message);
+        this.emit('error', timedOut
+          ? Object.assign(new Error('STT timed out'), { code: 'STT_TIMEOUT' })
+          : Object.assign(err instanceof Error ? err : new Error(message), { code: 'STT_UNAVAILABLE' }));
+      }
     } finally {
       this.pcmChunks = [];
       this.totalBytes = 0;
@@ -275,6 +282,7 @@ Return ONLY the exact transcribed words spoken in Thai and/or English. If it is 
   }
 
   private saveRejectedDebugAudio(wavBuffer: Buffer, reason: string): string | undefined {
+    if (this.options.persistRejectedAudio === false) return undefined;
     if (process.env.STT_SAVE_REJECTED_AUDIO === 'false') return undefined;
     try {
       const directory = path.join(process.cwd(), '.runtime', 'stt-rejected');

@@ -1,6 +1,6 @@
 # Digital Me — Project Context for the Next Chat
 
-**Updated:** 2026-08-18  
+**Updated:** 2026-08-19  
 **Repo:** `C:\Users\piriy\Documents\DiscordBOT`  
 **Package name:** `digital-me-discord-bot` `0.1.0`  
 **Owner / operator:** digitalallthingsonline (Discord aliases default: Spin / สปิน)
@@ -11,7 +11,7 @@ A Cursor operating pack is now in the repo. For a new chat, start from `CURSOR_B
 
 A later addendum proposes a hybrid Jarvis memory system and a real-time 3D command UI. Those files are design only: `JARVIS_MEMORY_ARCHITECTURE.md`, `JARVIS_UI_UX_VISION.md`, `MEMORY_UI_TASKS.md`. Do not treat them as implemented. For a chat focused on that work, use `CURSOR_MEMORY_UI_PROMPT.md`.
 
-A platform addendum then defined Jarvis Core as the shared intelligence layer, with Digital Me / Discord as one client. Contracts for JARVIS-001/002 now exist in `src/jarvis/`. They are **not** wired into `BotService` or `ResponseGenerator`. Live `/voice` still selects both persona and voice. Queue: `JARVIS_PLATFORM_TASKS.md`. Prompt: `CURSOR_JARVIS_PLATFORM_PROMPT.md`.
+A Jarvis-first addendum now takes priority: finish standalone Jarvis Core v1 before more Discord work (`JARVIS_FIRST_DIRECTIVE.md`, `JARVIS_FIRST_TASKS.md`). Contracts for JARVIS-001/002/003 exist in `src/jarvis/`. JARVIS-004/005 Discord adapters exist in the working tree and are kept, but further Discord integration is deferred. Standalone text path: `npm run jarvis:ask`. Isolated lab UI: `/jarvis-lab` (JF-006/JF-007 + UI-R1–R8 command center + JF-008 mic/STT + JF-008B latency/STT hardening + JF-009 optional Edge-TTS speech + JF-010 actions + JF-011 runtime/service status + JF-012 reminders/scheduler + JF-013 read-only public web research + JF-013.5 natural intent resolution + JF-014 read-only local workspace intelligence + JF-014.5 privilege leases + fail-closed PRIVATE_BROWSER/Whonix policy + JF-014.6 operations event bus; does not replace the Digital Me dashboard). BitLocker/Device Encryption must not be enabled by Jarvis. Platform queue: `JARVIS_PLATFORM_TASKS.md`.
 
 `PROJECT_STATUS.md` and `HANDOFF.md` were last verified **2026-08-09**. They are still useful for the verified-versus-unverified boundary of the Discord/GPU loop, but they do not describe the current local model stack. Since then the default LLM moved to **Ollama + Qwen3.8 27B**, STT defaulted to **Qwen3-ASR-1.7B**, and a **read-only world-intel research layer** was added in working files that may still be uncommitted.
 
@@ -25,6 +25,7 @@ A platform addendum then defined Jarvis Core as the shared intelligence layer, w
 4. Voice cloning requires explicit per-server consent. Never relax `RECORD_RAW_AUDIO`, consent buttons, or capture-target rules without being asked.
 5. Secrets stay in local `.env`. Never commit `.env`, tokens, raw WAVs, RVC weights, or `data/brain/`.
 6. Do not commit unless the user asks.
+7. Cursor Cloud Agents should start from a dedicated `cloud/jarvis-checkpoint-*` branch when provided. Do not assume Windows paths, VirtualBox, Whonix, Discord tokens, or a private `.env`. Hardware integrations must stay mockable or fail-closed. Never put secrets in `.cursor/environment.json`.
 
 ---
 
@@ -65,7 +66,7 @@ Comments in `.env.example` are tuned for an **RTX 5090 Laptop 24 GB + 64 GB RAM*
 | Thai source TTS | JaiTTS-F5TTS preset `realtime`, Edge-TTS fallback for short reactions | `http://127.0.0.1:8768` |
 | Research | `world-intel-mcp` pinned commit `9254192d83f88bd7e5312b074c11f09398b84ca9` | stdio MCP from `.runtime/world-intel-venv` |
 
-Launcher GPU policy: `start:local` caps LLM offload at `LLM_VOICE_GPU_LAYERS` (default 48) so ASR, JaiTTS, and RVC can stay resident on the same GPU. Idle LLM VRAM is released with `LLM_KEEP_ALIVE=10m`.
+Launcher GPU policy: `start:local` uses the `voice` profile and caps LLM offload at `LLM_VOICE_GPU_LAYERS` (default 48) so ASR, JaiTTS, and RVC can stay resident on the same GPU. Idle LLM VRAM is released with `LLM_KEEP_ALIVE=10m`. `JARVIS_STANDALONE=1` applies the `interactive` profile instead: keep-alive `30m`, default context 4096, no JaiTTS/RVC reservation, and it does **not** raise or cap `LLM_GPU_LAYERS`. Do not use the interactive profile from `start:local`.
 
 Voice replies are capped: `VOICE_REPLY_MAX_WORDS=22`, `VOICE_REPLY_MAX_CHARS=240`.
 
@@ -124,15 +125,15 @@ src/bot/SafeOpusDecoder.ts        Crash-contained Opus decode
 src/bot/timeline/                 Session transcript events
 src/bot/brain/                    SocialBrain, question detector, group state
 src/bot/personality/              ResponseGenerator, persona, behavior retrieval
-src/jarvis/                       Jarvis Core contracts + presentation engine (Discord adapter wraps ResponseGenerator)
-src/bot/memory/                   FriendMemoryManager + SocialMemoryBrain
+src/jarvis/                       Jarvis Core + memory abstraction + isolated `/jarvis-lab` command center + JF-008 mic/STT + JF-008B timings/streaming + JF-009 VoiceOutputRouter + JF-010/011 actions + JF-012 reminders (`src/jarvis/automation`) + JF-013 research (`src/jarvis/research`) + JF-014 workspace (`src/jarvis/workspace`); Discord adapters exist (live `/voice` still coupled; live Core unavailable fallback)
+src/agent/                        Night Autonomous Coding Worker (separate from Core). Tonight: Grok-only Cursor CLI worker; Qwen fallback off; isolated worktree + preflight required. Do not give Core file/shell tools.
+src/bot/memory/                   FriendMemoryManager + SocialMemoryBrain + canonical SQLite (`data/jarvis/jarvis.db`)
 src/bot/stt/                      Local + mock STT
 src/bot/tts/                      Local / Colab / Gemini / ElevenLabs TTS + VoiceOutputManager
 src/bot/llm/LocalLlmProvider.ts   Ollama/OpenAI-compatible + tool-calling loop
 src/bot/embeddings/               Optional HTTP embeddings + CPU fallback
 src/bot/voice/                    Consent, capture target, dataset, learning sessions, RVC client
 src/bot/research/                 ResearchAssistant + MCP allowlist gateway  (WIP / may be uncommitted)
-src/jarvis/                       Jarvis Core + PresentationProfile contracts (not live-wired)
 src/bot/simulate*.ts              Phase 2–4 offline simulators
 python/local_stt_service.py       Qwen3-ASR HTTP server
 python/jaitts_service.py          JaiTTS HTTP server
@@ -153,7 +154,7 @@ Runtime installs that must never be committed:
 
 - `.venv-rvc/`, `.venv-stt/`, `.venv-jaitts/`
 - `.runtime/` (RVC upstream, Qwen GGUF, world-intel clone/venv, model tools)
-- `data/voice_samples/`, `data/local_voice/`, `data/brain/`, `data/memory/`, `data/personas.json`, `data/voice_consents.json`, `data/learning_sessions/`, `.env`
+- `data/voice_samples/`, `data/local_voice/`, `data/brain/`, `data/memory/`, `data/jarvis/`, `data/personas.json`, `data/voice_consents.json`, `data/learning_sessions/`, `.env`
 
 ---
 
@@ -172,7 +173,7 @@ Per-user Opus packets are decoded to PCM. A `SustainedVoiceDetector` ignores sho
 - `VOICE_BARGE_IN_MIN_RMS_DBFS` default -42
 - `VOICE_MIN_UTTERANCE_MS` default 250
 
-Final transcripts from consented users are written into `SocialMemoryBrain`. Response generation waits for the **final** transcript, not a partial. Low-confidence / hallucinated STT is excluded from learned facts. `AudioReceiver` now calls `ResponseGeneratorPresentationEngine.presentLegacyTurn` with no independent profile, so `ResponseGenerator` still receives the same coupled persona as `/voice`. `ResponseGenerator` then:
+Final transcripts from consented users are written into `SocialMemoryBrain`. Response generation waits for the **final** transcript, not a partial. Low-confidence / hallucinated STT is excluded from learned facts. `AudioReceiver` calls SocialBrain, then `DiscordJarvisAdapter` (live `UnavailableJarvisCore` fallback), then `ResponseGeneratorPresentationEngine.presentLegacyTurn` with the guild `PresentationProfile`. TTS uses the voice axis (`selectedVoiceForGuild`); SocialBrain addressing uses the persona axis. `ResponseGenerator` then:
 
 1. retrieve a close owner/persona example
 2. answer common daily questions with a deterministic line
@@ -445,9 +446,10 @@ Required for those tests: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_I
 - Physical confirmation that deleting a voice after a **live** Discord session removes every expected local file
 - Recovering `project.tar.gz` (corrupted; Git is authoritative)
 - Treating PHASE status checkboxes or old benchmark millisecond tables as current measurements
-- Wiring Jarvis Core reasoning into the live Discord voice loop (JARVIS-005) or changing `/voice` so it no longer also selects persona (JARVIS-004)
-- MEMORY-002 SQLite dual-write
-- Dashboard redesign / `/jarvis-lab`
+- Live Discord Core still uses `UnavailableJarvisCore` + `ResponseGenerator` fallback. Standalone text+mic Core (`LocalLlmJarvisCore`) is live-verified on `/jarvis-lab`; JF-009 native Edge-TTS is live-verified as an API audio payload (browser speaker start not measured; clone live speech not verified)
+- Further Discord JARVIS-006+ (deferred by Jarvis-first addendum)
+- Digital Me dashboard rewrite (isolated `/jarvis-lab` command center exists; CSS/SVG core, not WebGL)
+- Qdrant live index / MEMORY-003
 
 ---
 
@@ -504,7 +506,7 @@ npm run verify
 
 `verify` is the heavy gate: lint, TS+Python tests, Python compile of voice/JaiTTS/STT/cloud, production build, `simulate:p2/p3/p4`, and `stress`.
 
-TypeScript tests live mainly in `tests/core.test.ts`, `tests/research.test.ts`, `tests/jarvis_memory.test.ts`, and `tests/jarvis_platform.test.ts`. They cover social fixtures, persona isolation, memory supersession, STT honesty, consent/dataset/learning, RVC client payloads, pronunciation, Opus safety, barge-in, research allowlist honesty, MEMORY-001 schema/projection, and JARVIS-001/002 presentation isolation.
+TypeScript tests live mainly in `tests/core.test.ts`, `tests/research.test.ts`, `tests/jarvis_memory.test.ts`, `tests/jarvis_sqlite_memory.test.ts`, `tests/jarvis_core_memory.test.ts`, `tests/jarvis_first.test.ts`, `tests/jarvis_capabilities.test.ts`, and `tests/jarvis_platform.test.ts`. They cover social fixtures, persona isolation, canonical SQLite + Core memory integration, STT honesty, consent/dataset/learning, RVC client payloads, pronunciation, Opus safety, barge-in, research allowlist honesty, MEMORY-001 schema/projection, and JARVIS presentation isolation.
 
 ---
 
@@ -521,7 +523,7 @@ TypeScript tests live mainly in `tests/core.test.ts`, `tests/research.test.ts`, 
 7. `WHAT_I_NEED_FROM_OWNER.md` — live Discord requirements
 8. `PROJECT_STATUS.md` — 2026-08-09 verified/unverified Discord-GPU boundary (LLM names there are stale)
 
-Treat `ROADMAP.md`, `FUTURE_ARCHITECTURE.md`, `NIGHT_AGENT_FUTURE.md`, `RESOURCE_PROFILES.md`, `JARVIS_MEMORY_ARCHITECTURE.md`, `JARVIS_UI_UX_VISION.md`, and `JARVIS_PLATFORM_ARCHITECTURE.md` as direction, not as completed live behavior. `src/jarvis/` contracts are implemented and unit-tested; the Discord loop still uses `ResponseGenerator` + `activeVoiceSpeakers`.
+Treat `ROADMAP.md`, `FUTURE_ARCHITECTURE.md`, `NIGHT_AGENT_FUTURE.md`, `RESOURCE_PROFILES.md`, `JARVIS_MEMORY_ARCHITECTURE.md`, `JARVIS_UI_UX_VISION.md`, and `JARVIS_PLATFORM_ARCHITECTURE.md` as direction, not as completed live behavior. `src/jarvis/` contracts, `PresentationSessionStore`, and `DiscordJarvisAdapter` are implemented and unit-tested. Standalone Core can attach `JarvisMemoryService`; `/jarvis-lab` is an isolated CSS/SVG command center (UI-R1–R8) with JF-008 mic/STT, JF-008B interactive-profile timings/streaming, and JF-009 optional speech after Presentation. Live `/voice` still sets both axes. Live Discord Core is unavailable and falls back to `ResponseGenerator`.
 
 **Historical / do not quote as current facts**
 
@@ -551,13 +553,13 @@ Hackathon packaging: `submission/HACKATHON_SUBMISSION.md`.
 
 In likely dependency order:
 
-1. JARVIS-004 only after review: independent live `/voice` vs persona commands
-2. Confirm `git status`, then commit remaining unrelated dirty voice/STT work only when asked
-3. Run `npm run start:local` and `npm run benchmark` on this machine; record which services are actually UP
-4. Live Discord smoke: `/join` → talk → barge-in → `/leave` without cloning
-5. Consented `/train` until 120 clean seconds → `/stop-train` → `/voice` → `/speak` → human listen
-6. `research:setup` + `/research` against a current-events question; check that citations are real URLs
-7. Only then consider: JARVIS-004 live voice/persona split, MEMORY-002, spoken research in VC, or `/jarvis-lab`
+1. Owner installs Cursor CLI (`agent` on PATH), logs in, and pastes the exact Grok 4.6 model id. Then `npm run agent:night:prepare -- --create-worktree --name night-2026-08-19 --acknowledge-head-only` and one Grok-only dry-run. Do not start Qwen.
+2. Owner product sign-off of JF-010 desktop actions, JF-011 runtime/service pack, JF-012 reminders, and JF-013 public research (agent live already passed; no Discord)
+3. Later individual action capabilities **only if the owner asks** (no generic shell, process API, or scheduled CapabilityHost execution)
+4. NIGHT-BUILD-010 Windows scheduler **only if the owner asks**
+5. Consented standalone clone live verify only if owner sets `STANDALONE_CLONE_CONSENT` + speaker mapping
+6. Confirm `git status`, then commit remaining unrelated dirty voice/STT work only when asked
+7. Discord live smoke remains deferred
 
 ---
 

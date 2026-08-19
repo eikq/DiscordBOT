@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, execFileSync, spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -11,6 +11,19 @@ export interface LocalVoiceProcess {
 
 const managedChildren = new Set<ChildProcess>();
 let shutdownHandlersAttached = false;
+
+function detectedGpuMemoryMiB(): number {
+  try {
+    const output = execFileSync('nvidia-smi', [
+      '--query-gpu=memory.total',
+      '--format=csv,noheader,nounits',
+    ], { encoding: 'utf8', timeout: 3_000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const value = Number(output.trim().split(/\r?\n/u)[0]);
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
 
 function loadOrCreateLocalToken(projectRoot: string): string {
   const configured = process.env.VOICE_API_TOKEN?.trim();
@@ -41,7 +54,10 @@ function configureEnvironment(): { python: string; serviceUrl: string } {
   process.env.RVC_ROOT ||= path.join(projectRoot, '.runtime', 'Retrieval-based-Voice-Conversion-WebUI');
   process.env.VOICE_DATA_ROOT ||= path.join(projectRoot, 'data', 'local_voice');
   process.env.VOICE_WORK_ROOT ||= path.join(projectRoot, '.runtime', 'voice-work');
-  process.env.RVC_BATCH_SIZE ||= '2';
+  const gpuMemoryMiB = detectedGpuMemoryMiB();
+  process.env.RVC_BATCH_SIZE ||= gpuMemoryMiB >= 20_000 ? '8' : gpuMemoryMiB >= 10_000 ? '4' : '2';
+  process.env.RVC_WORKERS ||= gpuMemoryMiB >= 20_000 ? '4' : '2';
+  process.env.RVC_CPU_THREADS ||= gpuMemoryMiB >= 20_000 ? '8' : '4';
 
   return { python, serviceUrl };
 }

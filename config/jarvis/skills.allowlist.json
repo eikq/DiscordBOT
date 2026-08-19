@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "maxActiveSkillsPerTurn": 2,
+  "maxCatalogSkills": 16,
+  "maxSkillChars": 12000,
+  "maxReferenceChars": 8000,
+  "skills": [
+    {
+      "id": "jarvis-memory-safety",
+      "source": "project",
+      "location": "config/jarvis/runtime-skills/jarvis-memory-safety",
+      "trust": "TRUSTED",
+      "enabled": true,
+      "version": "1.0.0",
+      "permissions": [
+        "instructions"
+      ],
+      "scriptsAllowed": false,
+      "references": [],
+      "activationTerms": [
+        "sqlite memory",
+        "memory provenance",
+        "memory supersession",
+        "canonical memory"
+      ]
+    },
+    {
+      "id": "jarvis-runtime-qa",
+      "source": "project",
+      "location": "config/jarvis/runtime-skills/jarvis-runtime-qa",
+      "trust": "TRUSTED",
+      "enabled": true,
+      "version": "1.0.0",
+      "permissions": [
+        "instructions",
+        "references"
+      ],
+      "scriptsAllowed": false,
+      "references": [
+        "references/standalone-checks.md"
+      ],
+      "activationTerms": [
+        "verify jarvis",
+        "jarvis runtime",
+        "standalone qa",
+        "diagnose jarvis"
+      ]
+    }
+  ]
+}

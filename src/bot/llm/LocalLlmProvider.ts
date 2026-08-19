@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { ollamaMetricsFromChat, type LlmTurnMetrics } from './ollamaMetrics';
 
 dotenv.config({ quiet: true });
 
@@ -10,12 +11,18 @@ export interface StructuredGenerationRequest {
   maxTokens?: number;
 }
 
-export interface TextGenerationRequest {
+export type TextGenerationResult = {
+  text: string | null;
+  metrics?: LlmTurnMetrics;
+};
+
+export type TextGenerationRequest = {
   systemPrompt?: string;
   userPrompt: string;
   temperature?: number;
   maxTokens?: number;
-}
+  onDraft?: (delta: string, accumulated: string) => void;
+};
 
 export type LlmToolDefinition = {
   type: 'function';
@@ -58,6 +65,8 @@ export type LocalLlmRuntimeStatus = {
   modelAvailable?: boolean;
   version?: string;
   installedModels?: string[];
+  loaded?: boolean;
+  sizeVramBytes?: number;
   error?: string;
 };
 
@@ -125,16 +134,25 @@ export class LocalLlmProvider {
   }
 
   public async generateText(request: TextGenerationRequest): Promise<string | null> {
-    if (!this.canAttempt()) return null;
+    return (await this.generateTextDetailed(request)).text;
+  }
+
+  public async generateTextDetailed(request: TextGenerationRequest): Promise<TextGenerationResult> {
+    if (!this.canAttempt()) return { text: null };
     const startedAt = Date.now();
     const messages = [];
     if (request.systemPrompt) {
       messages.push({ role: 'system', content: request.systemPrompt });
     }
     messages.push({ role: 'user', content: request.userPrompt });
+    const promptChars = messages.reduce((sum, item) => sum + item.content.length, 0);
+    const ollamaUrl = this.ollamaNativeUrl();
 
     try {
-      const ollamaUrl = this.ollamaNativeUrl();
+      if (ollamaUrl && request.onDraft) {
+        return await this.streamOllamaChat(ollamaUrl, messages, request, startedAt, promptChars);
+      }
+
       const response = await fetch(ollamaUrl ? `${ollamaUrl}/api/chat` : `${this.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -151,27 +169,30 @@ export class LocalLlmProvider {
           temperature: request.temperature ?? 0.7,
           max_tokens: request.maxTokens ?? 60,
           presence_penalty: 1.1,
-          reasoning_effort: 'none'
+          reasoning_effort: 'none',
         }),
-        signal: AbortSignal.timeout(this.timeoutMs)
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
 
       if (response.ok) {
-        const json = await response.json();
-        const text = (ollamaUrl ? json.message?.content : json.choices?.[0]?.message?.content)?.trim();
+        const json = await response.json() as Record<string, any>;
+        const text = (ollamaUrl ? json.message?.content : json.choices?.[0]?.message?.content)?.trim() || null;
         if (text) {
           console.log(`[LocalLLM] Spoken response in ${Date.now() - startedAt}ms.`);
-          return text;
+          const metrics = ollamaUrl
+            ? ollamaMetricsFromChat(json, { promptChars, ttftMs: Date.now() - startedAt })
+            : { promptChars };
+          return { text, metrics };
         }
-      } else {
-        this.markOffline();
+        return { text: null };
       }
+      this.markOffline();
     } catch (err: any) {
       console.warn(`[LocalLLM] Spoken request failed after ${Date.now() - startedAt}ms: ${err instanceof Error ? err.message : String(err)}`);
       this.markOffline();
     }
 
-    return null;
+    return { text: null };
   }
 
   public async generateWithTools(request: ToolGenerationRequest): Promise<ToolGenerationResult> {
@@ -263,9 +284,10 @@ export class LocalLlmProvider {
     };
     try {
       if (ollamaUrl) {
-        const [versionResponse, tagsResponse] = await Promise.all([
+        const [versionResponse, tagsResponse, psResponse] = await Promise.all([
           fetch(`${ollamaUrl}/api/version`, { signal: AbortSignal.timeout(3_000) }),
           fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3_000) }),
+          fetch(`${ollamaUrl}/api/ps`, { signal: AbortSignal.timeout(3_000) }).catch(() => undefined),
         ]);
         if (!versionResponse.ok || !tagsResponse.ok) throw new Error('Ollama health endpoints failed.');
         const version = await versionResponse.json();
@@ -273,12 +295,16 @@ export class LocalLlmProvider {
         const installedModels = Array.isArray(tags.models)
           ? tags.models.map((model: any) => String(model.name || model.model || '')).filter(Boolean)
           : [];
+        const loadedInfo = psResponse?.ok ? await psResponse.json() as { models?: Array<{ name?: string; model?: string; size_vram?: number }> } : undefined;
+        const loadedEntry = (loadedInfo?.models || []).find(item => item.name === this.modelName || item.model === this.modelName);
         return {
           ...base,
           reachable: true,
           version: typeof version.version === 'string' ? version.version : undefined,
           installedModels,
           modelAvailable: this.hasConfiguredModel(installedModels),
+          loaded: Boolean(loadedEntry),
+          ...(typeof loadedEntry?.size_vram === 'number' ? { sizeVramBytes: loadedEntry.size_vram } : {}),
         };
       }
 
@@ -300,18 +326,90 @@ export class LocalLlmProvider {
   }
 
   public async *streamText(request: TextGenerationRequest): AsyncIterable<string> {
-    const text = await this.generateText(request);
-    if (text) {
-      // Yield words / chunks
-      const words = text.split(' ');
-      for (const w of words) {
-        yield w + ' ';
+    let accumulated = '';
+    const result = await this.generateTextDetailed({
+      ...request,
+      onDraft: (delta, next) => {
+        accumulated = next;
+        void delta;
+      },
+    });
+    if (result.text) {
+      if (accumulated) {
+        yield result.text;
+        return;
       }
+      yield result.text;
     }
   }
 
   public async cancel(requestId: string): Promise<void> {
     console.log(`[LocalLlmProvider] Cancelled generation request: ${requestId}`);
+  }
+
+  private async streamOllamaChat(
+    ollamaUrl: string,
+    messages: Array<{ role: string; content: string }>,
+    request: TextGenerationRequest,
+    startedAt: number,
+    promptChars: number,
+  ): Promise<TextGenerationResult> {
+    const response = await fetch(`${ollamaUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages,
+        stream: true,
+        think: false,
+        keep_alive: this.ollamaKeepAlive(),
+        options: this.ollamaOptions(request.temperature ?? 0.7, request.maxTokens ?? 60),
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!response.ok || !response.body) {
+      this.markOffline();
+      return { text: null };
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accumulated = '';
+    let ttftMs: number | undefined;
+    let metricsPayload: Record<string, unknown> | undefined;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        let payload: Record<string, any>;
+        try {
+          payload = JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+        const delta = typeof payload.message?.content === 'string' ? payload.message.content : '';
+        if (delta) {
+          if (ttftMs === undefined) ttftMs = Date.now() - startedAt;
+          accumulated += delta;
+          request.onDraft?.(delta, accumulated);
+        }
+        if (payload.done) metricsPayload = payload;
+      }
+    }
+    const text = accumulated.trim() || null;
+    if (text) {
+      console.log(`[LocalLLM] Spoken response in ${Date.now() - startedAt}ms.`);
+      return {
+        text,
+        metrics: ollamaMetricsFromChat(metricsPayload || {}, { promptChars, ttftMs }),
+      };
+    }
+    return { text: null };
   }
 
   private canAttempt(): boolean {

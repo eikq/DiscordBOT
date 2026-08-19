@@ -30,6 +30,14 @@ import {
   type LearningSessionRecord,
 } from './voice/LearningSessionController';
 import { ResearchAssistant } from './research/ResearchAssistant';
+import {
+  JARVIS_PERSONA_ID,
+  JARVIS_VOICE_ID,
+  PresentationSessionStore,
+  defaultJarvisPresentation,
+  legacyVoiceCommandProfile,
+} from '../jarvis';
+import type { PresentationProfile } from '../jarvis';
 
 interface PendingTrainConsent {
   guildId: string;
@@ -41,7 +49,7 @@ interface PendingTrainConsent {
 }
 
 export interface DashboardCommandRequest {
-  command: 'join' | 'leave' | 'status' | 'debug' | 'transcript' | 'vc-auto-response' | 'voice-consent' | 'voice-target' | 'voice-train' | 'voice-model' | 'train' | 'learning-session' | 'persona' | 'voice' | 'speak' | 'voices';
+  command: 'join' | 'leave' | 'status' | 'debug' | 'transcript' | 'vc-auto-response' | 'voice-consent' | 'voice-target' | 'voice-train' | 'voice-model' | 'train' | 'learning-session' | 'persona' | 'voice' | 'voice-only' | 'persona-only' | 'speak' | 'voices';
   guildId?: string;
   voiceChannelId?: string;
   textChannelId?: string;
@@ -74,6 +82,7 @@ export class BotService {
   private researchAssistant: ResearchAssistant;
   private learningSessions: LearningSessionController;
   private activeReceivers: Map<string, AudioReceiver> = new Map();
+  private presentationSessions = new PresentationSessionStore();
   private activeVoiceSpeakers: Map<string, string> = new Map();
   private pendingTrainConsents = new Map<string, PendingTrainConsent>();
   private learningMonitor?: NodeJS.Timeout;
@@ -443,7 +452,7 @@ export class BotService {
         } else if (action === 'revoke') {
           await interaction.deferReply({ ephemeral: true });
           this.voiceConsentManager.revoke(guildId, userId);
-          if (this.activeVoiceSpeakers.get(guildId) === userId) this.activeVoiceSpeakers.delete(guildId);
+          this.clearPresentationForRevokedUser(guildId, userId);
           const stopped = this.voiceCaptureTargets.get(guildId) === userId
             ? await this.finishLearningSession(guildId, 'consent_revoked', false)
             : 'No active learning session was using this voice.';
@@ -665,7 +674,7 @@ export class BotService {
         const description = interaction.options.getString('description') || '';
         const profile = this.personaProfiles.save(selectedUser.id, name, aliases, description);
         this.socialMemory.registerAliases(profile.userId, profile.displayName, profile.aliases);
-        this.activeVoiceSpeakers.set(guildId, selectedUser.id);
+        this.applyLegacyVoiceAndPersonaSelection(guildId, selectedUser.id);
         await interaction.reply(
           `Selected **${selectedUser.displayName}** as the active cloned voice and identity. `
           + `I now know myself as **${profile.displayName}** and respond to: ${profile.aliases.map(alias => `\`${alias}\``).join(', ')}.`
@@ -684,7 +693,7 @@ export class BotService {
         }
         const profile = this.personaProfiles.ensure(selectedUser.id, selectedUser.displayName);
         this.socialMemory.registerAliases(profile.userId, profile.displayName, profile.aliases);
-        this.activeVoiceSpeakers.set(guildId, selectedUser.id);
+        this.applyLegacyVoiceAndPersonaSelection(guildId, selectedUser.id);
         await interaction.reply(
           `TTS voice and identity set to **${profile.displayName}** (${selectedUser.id}). `
           + `Self aliases: ${profile.aliases.map(alias => `\`${alias}\``).join(', ')}.`
@@ -700,7 +709,7 @@ export class BotService {
           return;
         }
         const selectedSpeakerId = requestedUser?.id
-          || this.activeVoiceSpeakers.get(guild.id)
+          || this.selectedVoiceForGuild(guild.id)
           || process.env.DEFAULT_SPEAKER_ID
           || process.env.OWNER_DISCORD_USER_ID;
         if (!selectedSpeakerId && this.voiceServiceClient.isConfigured()) {
@@ -917,7 +926,7 @@ export class BotService {
       this.voiceManager,
       this.voiceConsentManager,
       this.voiceServiceClient,
-      selectedGuildId => this.activeVoiceSpeakers.get(selectedGuildId),
+      selectedGuildId => this.selectedVoiceForGuild(selectedGuildId),
       selectedGuildId => this.voiceCaptureTargets.get(selectedGuildId),
       selectedGuildId => this.personaForGuild(selectedGuildId),
       this.socialMemory,
@@ -930,6 +939,7 @@ export class BotService {
         this.socialMemory.recordVoiceStyle(record);
       },
       selectedGuildId => this.isVcAutoResponseEnabled(selectedGuildId),
+      selectedGuildId => this.presentationForGuild(selectedGuildId),
     );
     receiver.startListening();
     this.activeReceivers.set(guildId, receiver);
@@ -1016,7 +1026,10 @@ export class BotService {
       }
       const connected = this.voiceManager.getConnection(guild.id);
       const vcAutoResponseEnabled = this.isVcAutoResponseEnabled(guild.id);
-      const selectedVoiceId = this.activeVoiceSpeakers.get(guild.id) || process.env.DEFAULT_SPEAKER_ID?.trim() || null;
+      const presentation = this.presentationForGuild(guild.id);
+      const selectedVoiceId = this.presentationSessions.playbackSpeakerId(presentation)
+        || (!this.presentationSessions.hasSession(guild.id) ? process.env.DEFAULT_SPEAKER_ID?.trim() || null : null);
+      const selectedPersonaId = this.presentationSessions.behaviorPersonaId(presentation) || null;
       return {
         id: guild.id,
         name: guild.name,
@@ -1034,7 +1047,14 @@ export class BotService {
             ?? this.learningSessions.listRecent(30).find(session => session.guildId === guild.id),
         ),
         selectedVoiceId,
-        persona: selectedVoiceId ? this.personaForGuild(guild.id) : null,
+        selectedPersonaId,
+        presentationProfile: {
+          brainProfileId: presentation.brainProfileId,
+          personaProfileId: presentation.personaProfileId,
+          voiceProfileId: presentation.voiceProfileId,
+          personaMode: presentation.personaMode,
+        },
+        persona: this.personaForGuild(guild.id),
         members: [...members.values()].filter(member => !member.bot).sort((a, b) => a.name.localeCompare(b.name)),
         consentedUsers: guildConsents.map(record => ({
           ...record,
@@ -1127,7 +1147,7 @@ export class BotService {
       }
       if (action === 'revoke') {
         this.voiceConsentManager.revoke(guildId, userId);
-        if (this.activeVoiceSpeakers.get(guildId) === userId) this.activeVoiceSpeakers.delete(guildId);
+        this.clearPresentationForRevokedUser(guildId, userId);
         const stopped = this.voiceCaptureTargets.get(guildId) === userId
           ? await this.finishLearningSession(guildId, 'dashboard_consent_revoked', false)
           : 'No active learning session was using this voice.';
@@ -1219,7 +1239,7 @@ export class BotService {
       if (!consent?.active) throw new Error('That user has not granted active voice consent.');
       const profile = this.personaProfiles.ensure(userId, consent.displayName);
       this.socialMemory.registerAliases(profile.userId, profile.displayName, profile.aliases);
-      this.activeVoiceSpeakers.set(guildId, userId);
+      this.applyLegacyVoiceAndPersonaSelection(guildId, userId);
       return { message: `Voice and identity selected: ${profile.displayName}.`, data: profile };
     }
 
@@ -1228,14 +1248,60 @@ export class BotService {
       if (!this.voiceConsentManager.hasActiveConsent(guildId, userId)) throw new Error('That user has not granted active voice consent.');
       const profile = this.personaProfiles.save(userId, request.name || '', request.aliases || [], request.description || '');
       this.socialMemory.registerAliases(profile.userId, profile.displayName, profile.aliases);
-      this.activeVoiceSpeakers.set(guildId, userId);
+      this.applyLegacyVoiceAndPersonaSelection(guildId, userId);
       return { message: `Voice and persona selected as ${profile.displayName}.`, data: profile };
+    }
+
+    if (request.command === 'voice-only') {
+      const rawId = request.userId?.trim() || '';
+      if (this.isJarvisProfileId(rawId)) {
+        this.presentationSessions.selectVoice(guildId, JARVIS_VOICE_ID);
+        this.syncVoiceSpeakerCache(guildId);
+        return {
+          message: 'Playback voice set to Jarvis (persona unchanged; no cloned RVC).',
+          data: this.presentationSessions.getProfile(guildId),
+        };
+      }
+      const userId = this.requireDashboardUser(rawId);
+      const consent = this.voiceConsentManager.get(guildId, userId);
+      if (!consent?.active) throw new Error('That user has not granted active voice consent.');
+      this.presentationSessions.selectVoice(guildId, userId);
+      this.syncVoiceSpeakerCache(guildId);
+      return {
+        message: `Playback voice selected (persona unchanged): ${consent.displayName}.`,
+        data: this.presentationSessions.getProfile(guildId),
+      };
+    }
+
+    if (request.command === 'persona-only') {
+      const rawId = request.userId?.trim() || '';
+      if (this.isJarvisProfileId(rawId)) {
+        this.presentationSessions.selectPersona(guildId, JARVIS_PERSONA_ID, 'NONE');
+        this.syncVoiceSpeakerCache(guildId);
+        return {
+          message: 'Persona set to Jarvis (playback voice unchanged).',
+          data: this.presentationSessions.getProfile(guildId),
+        };
+      }
+      const userId = this.requireDashboardUser(rawId);
+      if (!this.voiceConsentManager.hasActiveConsent(guildId, userId)) throw new Error('That user has not granted active voice consent.');
+      const consent = this.voiceConsentManager.get(guildId, userId);
+      const profile = request.name
+        ? this.personaProfiles.save(userId, request.name, request.aliases || [], request.description || '')
+        : this.personaProfiles.ensure(userId, consent?.displayName || userId);
+      this.socialMemory.registerAliases(profile.userId, profile.displayName, profile.aliases);
+      this.presentationSessions.selectPersona(guildId, userId);
+      this.syncVoiceSpeakerCache(guildId);
+      return {
+        message: `Persona selected (playback voice unchanged): ${profile.displayName}.`,
+        data: { profile, presentation: this.presentationSessions.getProfile(guildId) },
+      };
     }
 
     if (request.command === 'speak') {
       const text = request.text?.trim();
       if (!text) throw new Error('Enter text for the bot to speak.');
-      const userId = request.userId || this.activeVoiceSpeakers.get(guildId) || process.env.DEFAULT_SPEAKER_ID?.trim();
+      const userId = request.userId || this.selectedVoiceForGuild(guildId) || process.env.DEFAULT_SPEAKER_ID?.trim();
       if (!userId || !this.voiceConsentManager.hasActiveConsent(guildId, userId)) throw new Error('Choose an actively consented cloned voice.');
       if (!this.voiceManager.getConnection(guildId)) {
         const channel = guild.channels.cache.get(request.voiceChannelId || '');
@@ -1586,8 +1652,44 @@ export class BotService {
     return Boolean(ownerId && ownerId === userId);
   }
 
+  private isJarvisProfileId(value: string): boolean {
+    return value.trim().toLowerCase() === JARVIS_VOICE_ID;
+  }
+
+  private applyLegacyVoiceAndPersonaSelection(guildId: string, discordUserId: string): PresentationProfile {
+    const profile = this.presentationSessions.applyLegacyVoiceAndPersona(guildId, discordUserId);
+    this.syncVoiceSpeakerCache(guildId);
+    return profile;
+  }
+
+  private syncVoiceSpeakerCache(guildId: string): void {
+    if (!this.presentationSessions.hasSession(guildId)) return;
+    const speaker = this.presentationSessions.playbackSpeakerId(this.presentationSessions.getProfile(guildId));
+    if (speaker) this.activeVoiceSpeakers.set(guildId, speaker);
+    else this.activeVoiceSpeakers.delete(guildId);
+  }
+
+  private clearPresentationForRevokedUser(guildId: string, userId: string): void {
+    this.presentationSessions.clearMatchingUser(guildId, userId);
+    this.syncVoiceSpeakerCache(guildId);
+    if (this.activeVoiceSpeakers.get(guildId) === userId) this.activeVoiceSpeakers.delete(guildId);
+  }
+
+  private presentationForGuild(guildId: string): PresentationProfile {
+    if (this.presentationSessions.hasSession(guildId)) {
+      return this.presentationSessions.getProfile(guildId);
+    }
+    const fallback = process.env.DEFAULT_SPEAKER_ID?.trim();
+    if (fallback) return legacyVoiceCommandProfile(fallback);
+    return defaultJarvisPresentation();
+  }
+
+  private selectedVoiceForGuild(guildId: string): string | undefined {
+    return this.presentationSessions.playbackSpeakerId(this.presentationForGuild(guildId));
+  }
+
   private personaForGuild(guildId: string): PersonaProfile | null {
-    const userId = this.activeVoiceSpeakers.get(guildId) || process.env.DEFAULT_SPEAKER_ID?.trim();
+    const userId = this.presentationSessions.behaviorPersonaId(this.presentationForGuild(guildId));
     if (!userId || !this.voiceConsentManager.hasActiveConsent(guildId, userId)) return null;
     const consent = this.voiceConsentManager.get(guildId, userId);
     const guildDisplayName = this.client.guilds.cache.get(guildId)?.members.cache.get(userId)?.displayName;

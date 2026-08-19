@@ -1,5 +1,7 @@
 export type {
   ActionResult,
+  ActionResultStatus,
+  CapabilityCall,
   Claim,
   JarvisClientContext,
   JarvisClientSource,
@@ -9,10 +11,105 @@ export type {
   JarvisResponse,
   MemoryRef,
   ReasoningResult,
+  SkillRef,
   ToolResultRef,
   VerifiedFact,
 } from './core/types';
 export { PassThroughJarvisCore, UnavailableJarvisCore } from './core/JarvisCore';
+export { createJarvisRequest } from './core/request';
+export { JarvisMemoryRetrieval } from './memory';
+export type {
+  CompactMemoryItem,
+  JarvisMemoryService,
+  MemoryRetrievalQuery,
+  MemoryTurnContext,
+  MemoryTurnQuery,
+  RetrievedMemory,
+} from './memory';
+export type { CreateJarvisRequestInput } from './core/request';
+export {
+  JarvisSkillRuntime,
+  UnavailableJarvisSkillRuntime,
+  createJarvisSkillRuntime,
+  loadDefaultJarvisSkillRuntime,
+} from './skills';
+export type {
+  ActivatedJarvisSkill,
+  JarvisSkillActivationRequest,
+  JarvisSkillActivationResult,
+  JarvisSkillAllowlistConfig,
+  JarvisSkillAllowlistEntry,
+  JarvisSkillCatalog,
+  JarvisSkillHost,
+  JarvisSkillMetadata,
+  JarvisSkillTrust,
+} from './skills';
+export { LocalLlmJarvisCore } from './standalone/LocalLlmJarvisCore';
+export type { LocalLlmJarvisCoreOptions, StandaloneLlm, TimedCoreResult } from './standalone/LocalLlmJarvisCore';
+export { applyJarvisInteractiveProfile, describeJarvisRuntimeProfile } from './standalone/runtimeProfile';
+export { compactTurnTimings } from './standalone/turnTimings';
+export type { TurnTimings, LlmTurnMetrics } from './standalone/turnTimings';
+export {
+  CapabilityRegistry,
+  WORLD_INTEL_CAPABILITY_PREFIX,
+  WORLD_INTEL_OUTPUT_SCHEMA,
+  WORLD_INTEL_SERVICE,
+  LAB_PING_CAPABILITY_ID,
+  capabilityResultToToolRef,
+  createLabPingHandler,
+  createStandaloneCapabilityHost,
+  createWorldIntelCapabilityHandler,
+  ensureUntrustedWrapper,
+  isWorldIntelReadOnlyTool,
+  registerWorldIntelCapabilities,
+  worldIntelCapabilityId,
+  ActionAuditLog,
+  ConfirmationStore,
+  PermissionPolicy,
+  WindowsDesktopActionAdapter,
+  blockedActionResult,
+  capabilityResultToActionResult,
+  createActionGate,
+  inferActionIntent,
+  isActionHost,
+  isActionFastPathId,
+  isExplicitActionConfirmation,
+  isGatedCapabilityId,
+  loadDesktopAllowlists,
+  validateActionInput,
+  DESKTOP_OPEN_APPLICATION,
+  DESKTOP_OPEN_PROJECT,
+  DESKTOP_OPEN_SETTINGS,
+  DESKTOP_OPEN_TRUSTED_URL,
+  SYSTEM_STATUS,
+  JARVIS_RUNTIME_STATUS,
+  JARVIS_START_SERVICE,
+  REMINDERS_CREATE,
+  REMINDERS_LIST,
+} from './capabilities';
+export type {
+  CapabilityAvailability,
+  CapabilityAvailabilityState,
+  CapabilityDescriptor,
+  CapabilityHandler,
+  CapabilityHost,
+  CapabilityInvokeRequest,
+  CapabilityInvokeStatus,
+  CapabilityProviderKind,
+  CapabilityResult,
+  CapabilitySideEffect,
+  JsonSchema,
+  WorldIntelCapabilityPort,
+  WorldIntelExecuteResult,
+  StandaloneCapabilityHostOptions,
+  ActionHost,
+  ActionRisk,
+  DesktopAllowlists,
+  PendingConfirmation,
+  PermissionDecision,
+} from './capabilities';
+export { runStandaloneTextTurn, standalonePresentation } from './standalone/textHarness';
+export type { StandaloneTextTurnInput, StandaloneTextTurnOutput } from './standalone/textHarness';
 export type {
   BehaviorExample,
   InvocationResolution,
@@ -35,9 +132,37 @@ export {
   JARVIS_BRAIN_ID,
   JARVIS_PERSONA_ID,
   JARVIS_VOICE_ID,
+  GAM_PERSONA_ID,
+  GAM_VOICE_ID,
+  ELEMISU_VOICE_ID,
 } from './presentation/types';
 export type { PresentationEngine } from './presentation/PresentationEngine';
 export { FactPreservingPresentationEngine } from './presentation/PresentationEngine';
+export { FileBehaviorPersonaProvider } from './presentation/filePersonaProvider';
+export { StandalonePresentationSessions } from './presentation/standaloneSession';
+export { ProbeVoiceProfileResolver, probeSpeechRuntime } from './presentation/voiceAvailability';
+export {
+  StandaloneVoiceRouter,
+  StandaloneVoiceResourcePolicy,
+  RouterVoiceResolver,
+  MemoryCloneConsent,
+  resolveVoiceRoute,
+  shouldUseJaitts,
+  TurnGate,
+} from './speech';
+export type {
+  VoiceOutputRouter,
+  VoiceOutputResult,
+  VoiceProfile,
+  VoiceTurnContext,
+} from './speech';
+export {
+  SpeechTurnController,
+  createSpeechJarvisRequest,
+  describeBusyPolicy,
+  transcribeStandaloneUtterance,
+} from './audio';
+export type { AudioInput, SpeechTurn, StandaloneTranscriptResult } from './audio';
 export {
   LEGACY_DISCORD_COUPLING,
   applyPresentationOverride,
@@ -56,3 +181,67 @@ export {
 export { ensureImmutableFacts, immutableFacts, presentationContradictsFacts, styleSuggestedContent } from './presentation/facts';
 export { ResponseGeneratorPresentationEngine } from './clients/discord/ResponseGeneratorPresentationEngine';
 export type { LegacyTurnInput } from './clients/discord/ResponseGeneratorPresentationEngine';
+export { PresentationSessionStore } from './clients/discord/PresentationSessionStore';
+export { DiscordJarvisAdapter } from './clients/discord/DiscordJarvisAdapter';
+export type { DiscordJarvisTurnInput, DiscordJarvisTurnResult } from './clients/discord/DiscordJarvisAdapter';
+export {
+  FakeClock,
+  ReminderStore,
+  createReminderRuntime,
+  inferReminderIntent,
+  parseScheduleText,
+  reminderTextAsData,
+} from './automation';
+export type { ReminderRecord, ReminderRuntime, TimeTrigger } from './automation';
+export {
+  RESEARCH_CURRENT,
+  RESEARCH_PRIVATE_BROWSE,
+  RESEARCH_SEARCH,
+  classifyResearchUrl,
+  createResearchRuntime,
+  inferResearchIntent,
+  isResearchCapabilityId,
+  webpageTextAsData,
+  PrivateResearchGateway,
+  assertDedicatedChromium,
+  interpretWebContent,
+  planResearchDepth,
+  webContentMayInvokeCapability,
+  webContentMayReadHostFilesystem,
+  webContentMayRequestPrivilege,
+} from './research';
+export {
+  PrivilegeLeaseStore,
+  JarvisEventBus,
+  sharedJarvisEventBus,
+  probeHostSecurity,
+  capabilityRequiresLease,
+  isForbiddenGenericShell,
+  redactSecrets,
+} from './security';
+export {
+  ExperienceStore,
+  reflectOnExperience,
+  SkillVersionRegistry,
+  createCandidateSandbox,
+  rejectProductionWrite,
+  resolveMemoryContradiction,
+} from './evolution';
+export {
+  classifyActionability,
+  compactCapabilityCatalog,
+  resolveUserIntent,
+  validateIntentResolution,
+  InteractionContextStore,
+} from './intent';
+export type { IntentResolution, InteractionContext, CompactCapability } from './intent';
+export type { ResearchResult, ResearchRuntime, ResearchSnapshot, SourceRecord } from './research';
+export {
+  WORKSPACE_CURRENT,
+  WORKSPACE_SEARCH,
+  createWorkspaceRuntime,
+  inferWorkspaceIntent,
+  isWorkspaceCapabilityId,
+  loadWorkspaceRegistry,
+} from './workspace';
+export type { WorkspaceResult, WorkspaceRuntime, WorkspaceSnapshot } from './workspace';

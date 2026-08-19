@@ -30,3 +30,30 @@ data/jarvis/
 *.pptx.inspect.ndjson
 !public-demo/build/
 !public-demo/build/sites-vite-plugin.ts
+.agent/
+night-agent.config.json
+
+# VM / appliance artifacts (never source-control)
+*.ova
+*.ova.asc
+*.vmdk
+*.vdi
+*.vhd
+*.vhdx
+*.vbox
+*.vbox-prev
+
+# Browser / local auth leftovers
+cookies.txt
+*cookies.json
+.playwright-auth/
+**/storageState.json
+
+# Local MCP registration may later contain tokens
+.cursor/mcp.json
+
+# Accidental root dumps (handoff packs / screenshots)
+/*.png
+/*.zip
+/*.pdf
+*.blend1

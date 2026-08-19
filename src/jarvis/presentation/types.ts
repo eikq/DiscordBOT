@@ -1,6 +1,9 @@
 export const JARVIS_BRAIN_ID = 'jarvis';
 export const JARVIS_PERSONA_ID = 'jarvis';
 export const JARVIS_VOICE_ID = 'jarvis';
+export const GAM_PERSONA_ID = 'gam';
+export const GAM_VOICE_ID = 'gam';
+export const ELEMISU_VOICE_ID = 'elemisu';
 
 export type PersonaMode = 'NONE' | 'STYLE' | 'SOCIAL';
 export type PresentationLanguage = 'th' | 'en' | 'auto';
@@ -46,7 +49,9 @@ export interface PresentedResponse {
 
 export interface VoiceProfileAvailability {
   profileId: string;
+  selected: boolean;
   available: boolean;
+  speechActive: boolean;
   consented?: boolean;
   modelSelection?: 'best' | 'latest';
   reason?: string;

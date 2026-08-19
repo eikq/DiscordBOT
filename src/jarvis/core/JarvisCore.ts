@@ -1,6 +1,6 @@
 import type { JarvisCore, JarvisCoreResult, JarvisRequest } from './types';
 
-/** Honest stub: Core is not wired into the live Discord path yet. */
+/** Honest stub: Core is attached but does not perform live reasoning. */
 export class UnavailableJarvisCore implements JarvisCore {
   public async handle(request: JarvisRequest): Promise<JarvisCoreResult> {
     return {
@@ -11,7 +11,7 @@ export class UnavailableJarvisCore implements JarvisCore {
       toolResults: [],
       memoryRefs: [],
       actionResults: [],
-      uncertainty: ['Jarvis Core is not wired into the live Discord path yet.'],
+      uncertainty: ['Jarvis Core is unavailable; the caller should use its existing fallback.'],
       suggestedContent: '',
     };
   }

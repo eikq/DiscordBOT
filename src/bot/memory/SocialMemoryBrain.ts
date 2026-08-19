@@ -3,6 +3,8 @@ import path from 'node:path';
 import { TranscriptFinalEvent } from '../types/events';
 import type { VoiceUtteranceRecord } from '../voice/VoiceDatasetWriter';
 import { transcriptHallucinationReason } from '../stt/TranscriptQuality';
+import { mirrorSocialSnapshot } from './jarvis/dualWrite';
+import type { JarvisMemoryStore } from './jarvis/store';
 
 interface TopicStat {
   count: number;
@@ -113,19 +115,25 @@ const ACTIVITY_ALIASES: Record<string, string[]> = {
   music: ['ฟังเพลง', 'ร้องเพลง'],
 };
 
+export type SocialMemoryBrainOptions = {
+  canonicalStore?: JarvisMemoryStore;
+};
+
 export class SocialMemoryBrain {
   private readonly root: string;
   private readonly statePath: string;
   private readonly evidencePath: string;
   private readonly vaultRoot: string;
+  private readonly canonicalStore?: JarvisMemoryStore;
   private state: SocialBrainState;
   private vaultTimer?: NodeJS.Timeout;
 
-  constructor(root = path.join(process.cwd(), 'data', 'brain')) {
+  constructor(root = path.join(process.cwd(), 'data', 'brain'), options: SocialMemoryBrainOptions = {}) {
     this.root = path.resolve(root);
     this.statePath = path.join(this.root, 'brain_state.json');
     this.evidencePath = path.join(this.root, 'observations.jsonl');
     this.vaultRoot = path.join(this.root, 'vault');
+    this.canonicalStore = options.canonicalStore;
     fs.mkdirSync(this.root, { recursive: true });
     this.state = this.load();
   }
@@ -193,6 +201,7 @@ export class SocialMemoryBrain {
     fs.appendFileSync(this.evidencePath, `${JSON.stringify(observation)}\n`, 'utf8');
     this.save();
     this.scheduleVaultWrite();
+    this.mirrorCanonical();
     return observation;
   }
 
@@ -203,6 +212,7 @@ export class SocialMemoryBrain {
     this.state.updatedAt = Date.now();
     this.save();
     this.scheduleVaultWrite();
+    this.mirrorCanonical();
   }
 
   public recordVoiceStyle(record: VoiceUtteranceRecord): void {
@@ -587,6 +597,16 @@ export class SocialMemoryBrain {
     if (!person) return 'Unknown';
     const name = (person.displayNames[0] || 'User').replace(/[<>:"/\\|?*#^[\]]/gu, '').trim().slice(0, 60) || 'User';
     return `${name}-${person.userId.slice(-6)}`;
+  }
+
+  private mirrorCanonical(): void {
+    if (!this.canonicalStore) return;
+    try {
+      mirrorSocialSnapshot(this.canonicalStore, this.getSnapshot());
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.warn(`[SocialMemory] Canonical dual-write skipped: ${detail}`);
+    }
   }
 
   private save(): void {
