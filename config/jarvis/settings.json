@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "settings": [
+    { "id": "bluetooth", "displayName": "Bluetooth", "uri": "ms-settings:bluetooth" },
+    { "id": "display", "displayName": "Display", "uri": "ms-settings:display" },
+    { "id": "sound", "displayName": "Sound", "uri": "ms-settings:sound" },
+    { "id": "network", "displayName": "Network", "uri": "ms-settings:network" },
+    { "id": "windows-update", "displayName": "Windows Update", "uri": "ms-settings:windowsupdate" }
+  ]
+}

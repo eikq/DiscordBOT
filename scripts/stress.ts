@@ -7,6 +7,9 @@ import assert from 'node:assert/strict';
 export async function runStressSimulation() {
   console.log('=== DIGITAL ME PHASE 6 STRESS & BARGE-IN SIMULATION ===\n');
 
+  // Keep this verification deterministic even when a developer has a live
+  // local model running. Live-model classification is covered separately.
+  process.env.LLM_ENABLED = 'false';
   const brain = new SocialBrain('Spin');
   const generator = new ResponseGenerator();
   const turns = [

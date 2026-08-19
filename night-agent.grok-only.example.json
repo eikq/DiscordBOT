@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "profile": "DEV_NIGHT",
+  "controllerRoot": "C:/Users/piriy/Documents/DiscordBOT",
+  "workspaceRoot": "C:/Users/piriy/Documents/DiscordBOT-night-2026-08-19",
+  "workspaceMode": "isolated-worktree",
+  "localQwenFallback": false,
+  "codexFallback": false,
+  "stopOnProviderFailure": true,
+  "cursorModel": "cursor-grok-4.6-xhigh-fast",
+  "allowCreateWorktree": false,
+  "allowDirtyWorkspace": false,
+  "allowNetwork": false,
+  "allowDependencyInstall": false,
+  "allowGitCommit": false,
+  "ownerApprovedGitCommit": false,
+  "allowGitPush": false,
+  "allowDestructiveGit": false,
+  "maxRuntimeHours": 6,
+  "maxTasks": 5,
+  "maxAttemptsPerTask": 3,
+  "defaultTaskMaxMinutes": 30,
+  "agentSlots": 1,
+  "cloudEscalation": { "enabled": false },
+  "workerProviders": [
+    {
+      "id": "cursor-grok",
+      "kind": "cursor-cli",
+      "enabled": true,
+      "priority": 100,
+      "model": "cursor-grok-4.6-xhigh-fast",
+      "outputFormat": "stream-json",
+      "freshSessionPerTask": true
+    }
+  ],
+  "fallbackOn": [],
+  "qwen": {
+    "model": "unused-tonight",
+    "baseUrl": "http://127.0.0.1:11434",
+    "contextTokens": 32768
+  }
+}

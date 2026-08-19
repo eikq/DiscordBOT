@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "workspaces": [
+    {
+      "id": "jarvis-project",
+      "displayName": "Jarvis Project",
+      "mode": "read_only",
+      "root": ".",
+      "include": [
+        "src/**",
+        "tests/**",
+        "docs/**",
+        "config/jarvis/*.json",
+        "config/jarvis/runtime-skills/**/*.md",
+        "*.md"
+      ],
+      "exclude": [
+        ".env",
+        ".env.*",
+        ".git/**",
+        "node_modules/**",
+        "dist/**",
+        ".runtime/**",
+        "data/**",
+        "coverage/**",
+        ".venv*/**",
+        "**/*.log",
+        "**/*.pem",
+        "**/*.key",
+        "**/*.pfx",
+        "**/*.p12"
+      ]
+    }
+  ]
+}

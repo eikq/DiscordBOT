@@ -1,0 +1,19 @@
+---
+description: Apply when implementing features, fixing bugs, refactoring shared modules, or changing integration behavior.
+alwaysApply: false
+---
+# Testing Rule
+
+For every meaningful change:
+
+1. identify relevant existing tests
+2. add regression coverage for bug fixes when practical
+3. run targeted tests
+4. run lint/type/build checks if affected
+5. inspect the final diff
+6. use `npm run verify` as a heavy gate when broad validation is warranted
+
+Use evidence labels:
+IMPLEMENTED, UNIT_VERIFIED, OFFLINE_VERIFIED, LIVE_VERIFIED, HUMAN_QUALITY_VERIFIED.
+
+Do not call mocks or simulations "live verified."

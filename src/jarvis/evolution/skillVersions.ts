@@ -1,0 +1,65 @@
+import type { ProceduralSkillVersion } from './types';
+
+export class SkillVersionRegistry {
+  private readonly versions = new Map<string, ProceduralSkillVersion[]>();
+  private readonly knownGood = new Map<string, number>();
+
+  public propose(skill: Omit<ProceduralSkillVersion, 'version' | 'knownGood'>): ProceduralSkillVersion {
+    const existing = this.versions.get(skill.skillId) ?? [];
+    const next: ProceduralSkillVersion = {
+      ...skill,
+      version: (existing.at(-1)?.version ?? 0) + 1,
+      knownGood: false,
+    };
+    this.versions.set(skill.skillId, [...existing, next]);
+    return { ...next };
+  }
+
+  public markTested(skillId: string, version: number, passed: boolean): ProceduralSkillVersion {
+    const skill = this.require(skillId, version);
+    if (!passed) return { ...skill };
+    return { ...skill };
+  }
+
+  public promote(skillId: string, version: number, betterThanKnownGood: boolean): ProceduralSkillVersion {
+    const skill = this.require(skillId, version);
+    if (!betterThanKnownGood) {
+      throw Object.assign(new Error('Candidate was not better than the known-good skill.'), { reasonCode: 'CANDIDATE_REJECTED' });
+    }
+    const currentGood = this.knownGood.get(skillId);
+    if (currentGood === version) return { ...skill, knownGood: true };
+    skill.knownGood = true;
+    if (currentGood !== undefined) {
+      const previous = this.require(skillId, currentGood);
+      previous.knownGood = true;
+    }
+    this.knownGood.set(skillId, version);
+    return { ...skill };
+  }
+
+  public rollback(skillId: string): ProceduralSkillVersion {
+    const versions = this.versions.get(skillId) ?? [];
+    const known = this.knownGood.get(skillId);
+    const target = versions.find(item => item.version === known) ?? versions.find(item => item.knownGood);
+    if (!target) {
+      throw Object.assign(new Error('No known-good skill version exists to roll back to.'), { reasonCode: 'NO_KNOWN_GOOD' });
+    }
+    return { ...target };
+  }
+
+  public get(skillId: string, version: number): ProceduralSkillVersion | undefined {
+    const found = this.versions.get(skillId)?.find(item => item.version === version);
+    return found ? { ...found } : undefined;
+  }
+
+  public knownGoodVersion(skillId: string): ProceduralSkillVersion | undefined {
+    const version = this.knownGood.get(skillId);
+    return version === undefined ? undefined : this.get(skillId, version);
+  }
+
+  private require(skillId: string, version: number): ProceduralSkillVersion {
+    const found = this.versions.get(skillId)?.find(item => item.version === version);
+    if (!found) throw Object.assign(new Error('Unknown skill version.'), { reasonCode: 'UNKNOWN_SKILL_VERSION' });
+    return found;
+  }
+}

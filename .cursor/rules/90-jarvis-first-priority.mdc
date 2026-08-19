@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+---
+# Jarvis-First Priority Rule
+
+Current project priority is standalone Jarvis first.
+
+- Do not prioritize new Discord features or live Discord verification.
+- Keep existing Discord/Digital Me code compiling and preserve compatibility.
+- Jarvis Core must be transport/client agnostic.
+- Prefer standalone text/UI/voice test paths that require no Discord.
+- Prioritize core, memory, tools, standalone UI, standalone voice, permissions, and runtime architecture.
+- Defer Discord runtime persona/voice decoupling and DiscordJarvisAdapter migration until Jarvis Core v1 reaches its definition-of-done gate.
+- Preserve all existing Discord consent/privacy rules even while Discord work is deferred.
+- Do not delete existing Discord code as "unused".

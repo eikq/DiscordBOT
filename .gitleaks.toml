@@ -1,0 +1,16 @@
+title = "digital-me-discord-bot"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local runtime, models, VMs, and dependency trees are never source-controlled"
+paths = [
+  '''(?i)(^|[/\\])\.runtime([/\\]|$)''',
+  '''(?i)(^|[/\\])node_modules([/\\]|$)''',
+  '''(?i)(^|[/\\])\.venv''',
+  '''(?i)(^|[/\\])\.git([/\\]|$)''',
+  '''(?i)(^|[/\\])\.env$''',
+  '''(?i)(^|[/\\])data[/\\](brain|memory|jarvis|voice|local_voice|voice_samples|sessions|fine_tuning|learning_sessions)''',
+  '''(?i)\.(ova|vmdk|vdi|vhd|vhdx|vbox)$''',
+]

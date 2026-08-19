@@ -1,0 +1,12 @@
+---
+description: Keep the local dashboard honest about service state and private data
+globs: src/App.tsx,src/index.css,server.ts
+alwaysApply: false
+---
+# Dashboard / Server Rule
+
+- Keep the local dashboard operator-focused and honest about service state.
+- Distinguish `UP`, `OFFLINE`, `NOT_CONFIGURED`, and `FAILED` where practical.
+- A fallback response must not make the UI imply the primary local model is running.
+- Keep localhost binding/private defaults unless an explicit networking task changes it.
+- Avoid placing secrets or raw private training data in API responses or browser logs.

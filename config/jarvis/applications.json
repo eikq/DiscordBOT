@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "applications": [
+    {
+      "id": "notepad",
+      "displayName": "Notepad",
+      "candidates": [
+        "%SystemRoot%\\System32\\notepad.exe",
+        "%SystemRoot%\\notepad.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "calculator",
+      "displayName": "Calculator",
+      "candidates": [
+        "%SystemRoot%\\System32\\calc.exe",
+        "%LocalAppData%\\Microsoft\\WindowsApps\\calc.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "explorer",
+      "displayName": "File Explorer",
+      "candidates": [
+        "%SystemRoot%\\explorer.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "spotify",
+      "displayName": "Spotify",
+      "candidates": [
+        "%AppData%\\Spotify\\Spotify.exe",
+        "%LocalAppData%\\Microsoft\\WindowsApps\\Spotify.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "msedge",
+      "displayName": "Microsoft Edge",
+      "candidates": [
+        "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe",
+        "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "chrome",
+      "displayName": "Google Chrome",
+      "candidates": [
+        "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
+        "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "browser",
+      "displayName": "Browser",
+      "candidates": [
+        "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe",
+        "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe",
+        "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
+        "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+      ],
+      "allowedArgs": []
+    }
+  ]
+}

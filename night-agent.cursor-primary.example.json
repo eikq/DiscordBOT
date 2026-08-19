@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "profile": "DEV_NIGHT",
+  "workerProviders": [
+    {
+      "id": "cursor-grok",
+      "kind": "cursor-cli",
+      "enabled": true,
+      "priority": 100,
+      "model": "RESOLVE_WITH_AGENT_LIST_MODELS",
+      "outputFormat": "stream-json",
+      "freshSessionPerTask": true
+    },
+    {
+      "id": "local-qwen",
+      "kind": "local-qwen",
+      "enabled": true,
+      "priority": 50,
+      "freshSessionPerTask": true
+    }
+  ],
+  "fallbackOn": ["quota_exhausted", "model_unavailable", "auth_error", "provider_error"],
+  "maxRuntimeHours": 6,
+  "maxTasks": 8,
+  "agentSlots": 1,
+  "allowGitPush": false,
+  "allowDependencyInstall": false,
+  "allowDestructiveGit": false,
+  "cloudEscalation": { "enabled": false },
+  "qwen": {
+    "model": "digital-me-qwen38:27b-ad-q4km",
+    "contextTokens": 16384,
+    "keepAlive": "30m"
+  }
+}

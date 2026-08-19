@@ -1,0 +1,19 @@
+---
+description: Apply when implementing or modifying the overnight autonomous coding worker, its queue, coding tools, reports, scheduler, or cloud escalation.
+alwaysApply: false
+---
+# Night Autonomous Coding Rule
+
+- The local LLM is a bounded worker, not the orchestrator.
+- Only explicit NIGHT_SAFE tasks may run unattended.
+- Tool calls must be policy-validated.
+- Never execute arbitrary model-emitted shell commands.
+- No Git push or destructive Git.
+- No secret/private-data access.
+- No Discord sends, voice capture/training, CCTV configuration, or public deployment.
+- Refuse unsafe/dirty workspace by default.
+- Use bounded attempts/time/diff scope.
+- Acceptance tests, not model confidence, determine PASS.
+- Reset model context after each task and persist state to files.
+- Cloud escalation is optional; quota failure must not stop independent local tasks.
+- Windows scheduling is opt-in and must never be installed automatically.

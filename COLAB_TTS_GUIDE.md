@@ -1,5 +1,7 @@
 # Google Colab RVC Voice Service
 
+> Legacy compatibility only. Colab-managed runtimes can terminate long-running tunneled web services. The supported setup for this project is now [LOCAL_VOICE_GUIDE.md](LOCAL_VOICE_GUIDE.md), using the local NVIDIA GPU without a public tunnel.
+
 The supported setup is [colab/DigitalMe_RVC_Colab.ipynb](colab/DigitalMe_RVC_Colab.ipynb). Old generated Edge-TTS snippets were removed because they stored files but never trained or ran a voice-clone model.
 
 ## What is real-time
@@ -26,12 +28,12 @@ OWNER_DISCORD_USER_ID="your-numeric-discord-user-id"
 RECORD_RAW_AUDIO=true
 ```
 
-6. Restart the bot, join VC with `/join`, and have each willing participant run `/voice-consent grant` themselves.
+6. Restart the bot, join VC, run `/train target:@name`, and have the tagged participant click **Allow recording and training**.
 
 ## Training thresholds
 
 - `/voice-train start`: at least `MIN_TRAIN_SECONDS` (default 120 seconds).
-- First automatic job: `AUTO_TRAIN_MIN_SECONDS` (default 600 seconds).
+- First automatic job: `AUTO_TRAIN_MIN_SECONDS` (default 120 seconds locally).
 - Automatic retrain: at least `RETRAIN_NEW_SECONDS` (default 180 new seconds after the published model).
 
 Override these as Colab environment variables before starting `voice_service.py`. Lower thresholds are useful for plumbing tests but usually reduce voice quality.

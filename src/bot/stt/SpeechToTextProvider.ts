@@ -7,13 +7,37 @@ export interface STTStreamOptions {
     displayName: string;
     sessionId: string;
     codeSwitchLanguages?: string[];
+    /** Discord debug dumps stay opt-out. Standalone mic capture must pass false. */
+    persistRejectedAudio?: boolean;
+    /** When true, provider failures emit `error` instead of failing silently. */
+    reportFailures?: boolean;
 }
 
 export interface SpeechStreamEvents {
     'partial': (text: string, confidence: number) => void;
-    'final': (text: string, confidence: number, latencyMs: number) => void;
+    'final': (text: string, confidence: number, latencyMs: number, metadata?: STTResultMetadata) => void;
+    'nonSpeech': (metadata: STTNonSpeechMetadata) => void;
     'error': (error: Error) => void;
     'end': () => void;
+}
+
+export interface STTResultMetadata {
+    detectedLanguage?: string;
+    model?: string;
+    languageFallbackApplied?: boolean;
+    verified?: boolean;
+    verificationMethod?: string;
+    speechConfidence?: number;
+}
+
+export interface STTNonSpeechMetadata {
+    subtype: 'NOISE' | 'SILENCE';
+    displayText: string;
+    durationMs: number;
+    rmsDbfs?: number;
+    reason?: string;
+    rejectedText?: string;
+    debugAudioPath?: string;
 }
 
 export declare interface SpeechStream {
@@ -24,6 +48,10 @@ export declare interface SpeechStream {
 export class SpeechStream extends EventEmitter {
     public write(pcmBuffer: Buffer) {
         // Implement in subclass
+    }
+    public discard(): void {
+        // Drop callbacks for an utterance that must not reach STT or memory.
+        this.removeAllListeners();
     }
     public async endStream(): Promise<void> {
         // Implement in subclass
