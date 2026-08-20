@@ -142,6 +142,29 @@ test('secrets are redacted from presentation text', () => {
   assert.doesNotMatch(JSON.stringify(planned), /sk-live/u);
 });
 
+test('stale research snapshot does not override a diagnostic or greeting turn', () => {
+  const leftover = {
+    query: 'old research',
+    synthesis: 'Old sources.',
+    sources: [
+      { sourceId: 'src-old', title: 'Old', url: 'https://old.example' },
+      { sourceId: 'src-old-2', title: 'Older', url: 'https://older.example' },
+    ],
+  };
+  assert.equal(planPresentation({
+    text: 'สถานะระบบ',
+    route: 'CAPABILITY',
+    capabilityId: 'system.status',
+    replyText: 'CPU 17% · RAM 46%',
+    research: leftover,
+  }).reason, 'system_diagnostics');
+  assert.equal(planPresentation({
+    text: 'hello',
+    route: 'CONVERSATION',
+    research: leftover,
+  }).density, 'plain');
+});
+
 test('desktop and diagnostic turns become rich; greetings stay plain', () => {
   assert.equal(planPresentation({ text: 'hello Jarvis' }).density, 'plain');
   const desktop = planPresentation({

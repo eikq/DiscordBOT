@@ -15,10 +15,9 @@ LA-023 → LA-024 → LA-025.
 
 ## LA-001 Ollama / Qwen real task path
 
-- Status: **LIVE_VERIFIED** 2026-08-20 21:50 ICT on
-  `local/jarvis-acceptance-2026-08-20` with **Simulation OFF**. Owner screenshots
-  from earlier the same day were taken while Simulation was ON and are historical
-  only. Agent close-pass evidence below is the close record. Not OWNER_VERIFIED.
+- Status: **PARTIAL** (owner 2026-08-20). Do **not** mark LIVE_VERIFIED.
+  Agent-browser evidence below remains valid history under Simulation OFF, but
+  remaining requirements are not closed. Not OWNER_VERIFIED.
 - Purpose: Prove a normal `/api/jarvis/ask` turn uses local Qwen for conversation
   and informational routes, and that agentic routes still invoke CapabilityHost.
 - Preconditions: Ollama reachable; `digital-me-qwen38:27b-ad-q4km` (or current
@@ -68,13 +67,14 @@ LA-023 → LA-024 → LA-025.
   and `modelProfileId`).
 - Earlier same-day turns (session `la001-acceptance`) remain historical evidence
   of the `research.search` `depth` schema fix; they are not this close pack.
+- Remaining for LIVE_VERIFIED: owner-accepted remaining product checks, including
+  `llm.model` on the ask payload if that is still required.
 
 ## LA-002 Command Center browser / SSE visual QA
 
-- Status: **LIVE_VERIFIED** 2026-08-20 21:50 ICT agent-browser QA on
-  `http://127.0.0.1:3010/jarvis-lab` with **Simulation OFF**. Not OWNER_VERIFIED
-  (owner visual sign-off remains LA-013). Owner screenshots from earlier the
-  same day with Simulation ON are historical only.
+- Status: **PARTIAL** (owner 2026-08-20). Do **not** mark LIVE_VERIFIED.
+  Agent-browser SSE/DAG/permission evidence below remains valid history under
+  Simulation OFF. Not OWNER_VERIFIED (owner visual sign-off remains LA-013).
 - Purpose: Owner visual acceptance of `/jarvis-lab` as the observability surface.
 - Preconditions: local dashboard; browser; reduced-motion check; EventSource
   supported.
@@ -357,7 +357,13 @@ LA-023 → LA-024 → LA-025.
 
 ## LA-026 Presenter Mode briefing on `/jarvis-lab`
 
-- Status: **IMPLEMENTED_NEEDS_LIVE_VERIFY**
+- Status: **PARTIAL** 2026-08-20 local live pass. Not LIVE_VERIFIED.
+  Rich/plain selection, real Edge-TTS spoken summary, research untrusted
+  sources, and client follow-ups were observed. Speech↔segment motion sync
+  is not proven. Diagnostic briefings lack per-metric sections, so “focus
+  GPU while GPU is spoken” cannot be demonstrated. `repeat` / `back` are
+  no-ops. First live pack was contaminated by leftover research until the
+  isolation fix.
 - Purpose: Prove rich results render as a Presenter briefing with spoken
   summary, focus cues, follow-ups, and reduced-motion behavior. Do not start
   LA-003+ (Whonix / private browser) for this item.
@@ -377,11 +383,29 @@ LA-023 → LA-024 → LA-025.
   or traces. Presentation never invokes tools.
 - Failure evidence: `/api/jarvis/ask` JSON `briefing`, screenshots, Speak
   payload text.
+- 2026-08-20 live notes (Simulation OFF, lab `http://127.0.0.1:3010`):
+  - After research isolation: `สถานะระบบ` is `rich`/`report` titled
+    **System status** from real `system.status` telemetry (RTX 5090 Laptop).
+    Browser Presenter `requestId=jarvis-1787236162758`. `hello` stays plain.
+  - Research briefing (first pack, still valid as research):
+    `requestId=jarvis-1787235774621`, untrusted public URLs, comparison mode
+    because ≥2 sources. Comparison-without-the-word-`research` stays
+    CONVERSATION.
+  - Real TTS: Edge-TTS (`sourceEngine=edge`). Speak uses `spokenSummary`
+    only. Earlier timed speak: `sourceTtsMs=3006`, `totalMs=3009`. Section
+    segments are not spoken sequentially. `scaleNarrationToSpeech` is unused.
+  - Follow-ups: Explain / Expand / Shorten mutate the React model and do
+    not start WorkAgent. Repeat / Go back are no-ops.
+  - Reduced motion: `prefers-reduced-motion: reduce` →
+    `jcc-presenter is-reduced`; executive summary still readable with static
+    focus.
 
 ## LA-027 Desktop presence and Jarvis-window move
 
-- Status: **IMPLEMENTED_NEEDS_LIVE_VERIFY** / **BLOCKED_LOCAL_ACCEPTANCE**
-  for native window move on the browser host.
+- Status: **PARTIAL — NATIVE_SHELL_REQUIRED** 2026-08-20. Display
+  enumeration is real after raising capability timeouts. Browser host
+  cannot own/move the Chrome/Edge HWND. Window movement is **not**
+  LIVE_VERIFIED. Classification: `BROWSER_HOST_LIMITATION`.
 - Purpose: Honest multi-monitor awareness and Jarvis-window-only movement.
 - Preconditions: Windows host; `/jarvis-lab` open; optional
   `config/jarvis/displays.json` copied from `displays.example.json` for
@@ -406,6 +430,24 @@ LA-023 → LA-024 → LA-025.
   `windowTitle` rejected. Confirm tokens never persist to work.db/ops.db.
 - Failure evidence: capability JSON `reasonCode`, presence status
   `canMoveWindow`, confirmation prompt.
+- 2026-08-20 live notes:
+  - `config/jarvis/displays.json` does **not** exist. Do not invent
+    “notebook”. Example file IDs (`DISPLAY1`/`DISPLAY2`) do **not** match
+    this machine (`DISPLAY1` + primary `DISPLAY5`).
+  - Standalone `Screen.AllScreens`: `\\.\DISPLAY1` 1920×1200 at x=-3840
+    (not primary); `\\.\DISPLAY5` 1920×1080 at 0,0 (primary). Scale factor
+    not exposed by this API.
+  - After raising list/get timeouts to 18s / write to 20s:
+    `มีกี่จอ` presented **“2 displays visible.”** (~5.9s);
+    `ตอนนี้นายอยู่จอไหน` presented **“Jarvis lab is on DISPLAY5
+    (client-report).”** Presence bounds were `x=-1920,y=-3,1920×1152`.
+    The window left edge sits on a gap; `displayContaining` falls back to
+    **primary**, so DISPLAY5 can be a false match.
+  - Presence: `hostKind=browser`, `canMoveWindow=false`. UI:
+    “browser host cannot move this tab.”
+  - Move/focus are ActionGate `CONFIRM_REQUIRED` and Jarvis-window-only.
+    Grant-after-move `task_8e8dee98a123` FAILED (fail-closed; earlier empty
+    enum). Focus wait `task_3fab64116c52` cancelled. No other-app HWND hunt.
 
 ---
 

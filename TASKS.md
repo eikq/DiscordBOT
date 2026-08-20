@@ -323,7 +323,7 @@ Safe completed pieces:
 - `JARVIS-003` wrap `ResponseGenerator` behind PresentationEngine — DONE
 - `JARVIS-004` independent `selectVoice` / `selectPersona`; live `/voice` and `/persona` still set both — DONE (unit-tested)
 - `JARVIS-005` `DiscordJarvisAdapter` after SocialBrain, Unavailable Core falls back to `generate()` — DONE (unit-tested)
-- Presentation briefing + desktop presence layer (2026-08-20) — implemented on `/jarvis-lab` Presenter Mode. Browser host cannot move Chrome/Edge. Live verify LA-026/LA-027.
+- Presentation briefing + desktop presence layer (2026-08-20) — implemented on `/jarvis-lab` Presenter Mode. Live pass: LA-026 PARTIAL, LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. Cloud handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`. Do not install a desktop shell until owner review.
 
 Do not start without review:
 

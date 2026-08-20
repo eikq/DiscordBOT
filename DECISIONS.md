@@ -879,5 +879,48 @@ Ollama GPU, Whonix, mic, or CCTV.
 - Host live-QA remains required for SSE-in-browser, Ollama multi-step,
   Whonix, mic, screen capture, and CCTV.
 
+## ADR-023 — Jarvis desktop presence uses a native-owned window, not Chrome HWND theft
+
+Date: 2026-08-20
+Status: **Proposed** (owner review required). Not installed.
+
+### Context
+
+Presenter Mode and desktop capabilities landed on the Express + React
+`/jarvis-lab` host. Live Windows evidence: display enumeration via
+`Screen.AllScreens` is real (DISPLAY1 + primary DISPLAY5). The lab tab
+can report `screenX/Y` bounds. The backend cannot uniquely own or move
+the Chrome/Edge window that contains Jarvis. Hunting another process
+HWND would violate the Jarvis-window-only rule.
+
+Target UX: “อยู่จอไหน”, “ย้ายไปจอโน้ตบุ๊ก”, “Presenter เต็มจอที่จอหลัก”
+plus a later CONTROL + PRESENTER pair on one runtime/session.
+
+### Decision (pending owner)
+
+1. Do **not** move arbitrary Chrome/Edge windows.
+2. Prefer a **minimal Windows-native helper** that owns Jarvis HWNDs and
+   implements `NativeJarvisWindowAdapter`. Absent helper →
+   `UNSUPPORTED_HOST`.
+3. Tauri is the optional later packaged shell (lower RAM than Electron).
+4. Do **not** add Electron unless the owner wants a second Chromium.
+5. Do not install Tauri/Rust/Electron in this pass.
+6. Owner display names come only from `config/jarvis/displays.json`.
+   Example IDs must be remapped to this machine (DISPLAY5 is primary).
+
+### Alternatives considered
+
+- Steal the current browser HWND — rejected (BROWSER_HOST_LIMITATION).
+- Electron now — rejected (cost + second Chromium; not in package.json).
+- Cloud-only mocks forever — insufficient for the Thai move/fullscreen UX.
+
+### Consequences
+
+- LA-027 stays **PARTIAL — NATIVE_SHELL_REQUIRED** until a helper exists
+  and is live-verified.
+- Cloud may scaffold types/mocks only after owner approval.
+- ActionGate + Jarvis-window-only schema stay frozen.
+
+---
 
 

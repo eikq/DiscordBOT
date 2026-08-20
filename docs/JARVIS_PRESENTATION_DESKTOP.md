@@ -62,8 +62,17 @@ can report `screenX/Y` + `outerWidth/Height` via `POST /api/jarvis/presence`.
 Windows can enumerate `Screen.AllScreens` for list/get. Moving Chrome/Edge
 is `UNSUPPORTED_HOST` unless a `NativeJarvisWindowAdapter` is injected.
 
+Capability timeouts must cover cold PowerShell `Add-Type` (observed 6–9s
+on the owner laptop): list/get 18s, write 20s, spawn 15s.
+
 Owner-named displays: copy `config/jarvis/displays.example.json` to
-`config/jarvis/displays.json`. “Notebook” requires an owner name.
-“External” works only when exactly one non-primary display is present.
+`config/jarvis/displays.json` **only after remapping real device ids**.
+On the 2026-08-20 machine primary is `DISPLAY5`, not `DISPLAY2`.
+“Notebook” requires an owner name. “External” works only when exactly
+one non-primary display is present.
 
 Display enumeration is not run on `/api/jarvis/status` polling.
+
+Native-shell decision: ADR-023 Proposed. Prefer a Windows helper that
+owns Jarvis HWNDs. Do not steal the browser window. See
+`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.

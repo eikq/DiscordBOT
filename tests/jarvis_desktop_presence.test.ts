@@ -7,6 +7,7 @@ import {
   createStandaloneCapabilityHost,
   validateActionInput,
 } from '../src/jarvis';
+import { inferCapabilityFromObjective } from '../src/jarvis/agent/capabilityResolve';
 import { CapabilityRegistry } from '../src/jarvis/capabilities/CapabilityRegistry';
 import {
   DESKTOP_FOCUS_JARVIS_WINDOW,
@@ -137,6 +138,15 @@ test('intents map monitor phrases to Jarvis-window capabilities only', () => {
   assert.equal(inferDesktopPresenceIntent('ย้ายไปเปิด Chrome').kind, 'none');
 });
 
+test('WorkAgent objective inference binds desktop presence capabilities', () => {
+  const host = {
+    lookup: (id: string) => ({ id } as never),
+  };
+  assert.equal(inferCapabilityFromObjective('move yourself to monitor 2', host), DESKTOP_MOVE_JARVIS_WINDOW);
+  assert.equal(inferCapabilityFromObjective('มีกี่จอ', host), DESKTOP_LIST_DISPLAYS);
+  assert.equal(inferCapabilityFromObjective('ตอนนี้นายอยู่จอไหน', host), DESKTOP_GET_JARVIS_WINDOW);
+});
+
 test('browser host can list/report displays but fails closed on move', async () => {
   const { gate } = hostWith();
   const listed = await gate.invoke({ id: DESKTOP_LIST_DISPLAYS, input: {} });
@@ -258,6 +268,10 @@ test('standalone host registers presence capabilities', () => {
   assert.ok(ids.includes(DESKTOP_SET_JARVIS_WINDOW_BOUNDS));
   assert.ok(ids.includes(DESKTOP_FOCUS_JARVIS_WINDOW));
   assert.ok(ids.includes(DESKTOP_SET_JARVIS_LAYOUT));
+  const listTimeout = host.list().find(item => item.id === DESKTOP_LIST_DISPLAYS)?.timeoutMs ?? 0;
+  const moveTimeout = host.list().find(item => item.id === DESKTOP_MOVE_JARVIS_WINDOW)?.timeoutMs ?? 0;
+  assert.ok(listTimeout >= 15_000, `listDisplays timeout ${listTimeout} must cover Windows AllScreens`);
+  assert.ok(moveTimeout >= 15_000, `moveJarvisWindow timeout ${moveTimeout} must cover display enumeration`);
 });
 
 test('client presence reports reject other-window fields', () => {

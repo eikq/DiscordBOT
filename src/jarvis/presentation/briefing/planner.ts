@@ -29,7 +29,7 @@ export function planPresentation(input: PresentationInput): PresentationPlan {
     return { density: 'plain', mode: 'summary', reason: 'short_conversation' };
   }
 
-  if (route === 'RESEARCH' || hasResearchBody(input)) {
+  if (isResearchTurn(input)) {
     if (COMPARE.test(text) || (input.research?.sources?.length ?? 0) >= 2) {
       return { density: 'briefing', mode: 'comparison', reason: 'research_comparison' };
     }
@@ -80,6 +80,14 @@ export function planPresentation(input: PresentationInput): PresentationPlan {
 
 export function shouldBuildRichPresentation(plan: PresentationPlan): boolean {
   return plan.density === 'rich' || plan.density === 'briefing';
+}
+
+function isResearchTurn(input: PresentationInput): boolean {
+  const route = String(input.route || '').toUpperCase();
+  if (input.capabilityId === 'research.search' || route === 'RESEARCH') return true;
+  if (input.capabilityId && input.capabilityId !== 'research.search') return false;
+  if (route === 'CAPABILITY' || route === 'CONVERSATION') return false;
+  return hasResearchBody(input);
 }
 
 function hasResearchBody(input: PresentationInput): boolean {

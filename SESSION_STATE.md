@@ -3,24 +3,33 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Presentation Mode + desktop presence
+## This turn — Presenter + desktop live acceptance
 
-Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed
-(LA-026/LA-027). No merge. Not pushed.
+Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
+LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
+No merge. Not pushed. No Tauri/Electron/Rust install.
 
-Branch: `local/jarvis-acceptance-2026-08-20`.
-Presentation briefing pipeline + Presenter Mode on existing `/jarvis-lab`.
-Desktop presence capabilities are Jarvis-window-only and fail closed on the
-Express + React browser host (`UNSUPPORTED_HOST` unless a native helper is
-injected). Typed Speak stays default off. Presentation never invokes tools.
+Branch: `local/jarvis-acceptance-2026-08-20` from presenter commit `b2db545`.
+Simulation OFF. Lab `JARVIS_STANDALONE=1` `http://127.0.0.1:3010`.
+Real Edge-TTS. Real 2-display enum after timeout fix. Browser host cannot
+move Chrome/Edge. Native-helper architecture is **Proposed** (ADR-023).
 
-Verification: targeted briefing+desktop **19/19**; `npx tsc --noEmit` PASS;
-`npm run test:cloud` **496/496** (was 477). No Discord / Whonix / CCTV.
+Cloud handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+
+Fixes this pass (minimal): research briefing isolation; WorkAgent desktop
+intent wiring; list/get timeout 18s / write 20s; spawn enum timeout 15s.
+
+Verification: targeted **21/21**; `npx tsc --noEmit` PASS;
+`npm run test:cloud` **498/498**. No Discord / Whonix / CCTV.
+
+## Previous — Presentation Mode + desktop presence (implement)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. Live QA was this turn.
 
 ## Previous — LA-001 / LA-002 close pass
 
-Labels: **LIVE_VERIFIED** for LA-001 and LA-002 agent-browser QA.
-LA-002 is **not OWNER_VERIFIED** (LA-013). No merge. Not pushed.
+Owner later directed **PARTIAL** for both. Agent-browser evidence remains
+historical. LA-002 is **not OWNER_VERIFIED** (LA-013). No merge. Not pushed.
 Discord / Whonix / STT / RVC / uncensored / MoneyPrinterTurbo were not started.
 
 Branch: `local/jarvis-acceptance-2026-08-20` from `4724cbf`.

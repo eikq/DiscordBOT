@@ -345,11 +345,12 @@ export class CommandCenterRuntime {
     requestId?: string;
     turnId?: string;
     route?: RouteDecision;
+    capabilityId?: string;
   } = {}): Promise<WorkTask> {
     const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
     if (simulated) this.control.patch({ simulationMode: true }, 'owner');
     const started = Date.now();
-    const capabilityId = inferCapabilityFromObjective(objective, this.host);
+    const capabilityId = options.capabilityId?.trim() || inferCapabilityFromObjective(objective, this.host);
     const routed = options.route ?? routeJarvisRequest({ text: objective });
     const route = capabilityId && routed.route === 'CONVERSATION'
       ? { ...routed, route: 'CAPABILITY' as const, agentic: true, reason: 'bound_capability' }

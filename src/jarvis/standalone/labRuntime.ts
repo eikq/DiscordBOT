@@ -592,7 +592,7 @@ export class JarvisLabRuntime {
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
-      return this.askViaWorkAgent(input, prepared.sessionId, route);
+      return this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution.capabilityId);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
@@ -638,7 +638,7 @@ export class JarvisLabRuntime {
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
-      const output = await this.askViaWorkAgent(input, prepared.sessionId, route);
+      const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution.capabilityId);
       emit({ type: 'final', payload: output });
       if (output.speech) emit({ type: 'speech', payload: output.speech });
       return output;
@@ -770,6 +770,7 @@ export class JarvisLabRuntime {
     input: JarvisLabAskInput,
     sessionId: string,
     route: RouteDecision,
+    capabilityId?: string,
   ): Promise<StandaloneTextTurnOutput & {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
@@ -796,6 +797,7 @@ export class JarvisLabRuntime {
       requestId: request.requestId,
       turnId: request.requestId,
       route,
+      capabilityId,
     });
     return this.finishWorkTask(input, sessionId, route, task, request);
   }
@@ -916,13 +918,14 @@ export class JarvisLabRuntime {
   }): PlannedPresentation {
     const research = this.researchSnapshot();
     const presence = this.presenceStatus();
+    const researchTurn = input.route?.route === 'RESEARCH' || input.capabilityId === 'research.search';
     return runPresentationPipeline({
       text: input.text,
       replyText: input.replyText,
       route: input.route?.route,
       capabilityId: input.capabilityId,
       workOutcome: input.workOutcome,
-      research: research.last ? {
+      research: researchTurn && research.last ? {
         query: research.last.query,
         synthesis: research.last.synthesis,
         sources: research.last.sources.map(item => ({

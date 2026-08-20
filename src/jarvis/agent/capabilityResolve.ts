@@ -1,5 +1,6 @@
 import { DESKTOP_OPEN_TRUSTED_URL, SYSTEM_STATUS } from '../capabilities/actions/constants';
 import type { CapabilityHost } from '../capabilities/types';
+import { inferDesktopPresenceIntent } from '../desktop/intent';
 import { RESEARCH_SEARCH } from '../research/constants';
 import { WORKSPACE_SEARCH } from '../workspace/constants';
 import type { PlanStep, PlanStepKind, WorkTask } from './types';
@@ -13,7 +14,9 @@ export function isBlockedCapabilityId(id: string): boolean {
   return BLOCKED_CAPABILITY.test(id);
 }
 
-export function inferCapabilityFromObjective(objective: string, host?: CapabilityHost): string | undefined {
+type CapabilityLookup = Pick<CapabilityHost, 'lookup'>;
+
+export function inferCapabilityFromObjective(objective: string, host?: CapabilityLookup): string | undefined {
   const text = objective.trim();
   if (!text) return undefined;
   const has = (id: string) => Boolean(host?.lookup(id));
@@ -30,13 +33,17 @@ export function inferCapabilityFromObjective(objective: string, host?: Capabilit
   if ((/workspace|หาไฟล์|find symbol|local file|search (the )?repo|inspect these files|fix the issue/iu.test(text)) && has(WORKSPACE_SEARCH)) {
     return WORKSPACE_SEARCH;
   }
+  const desktop = inferDesktopPresenceIntent(text);
+  if (desktop.kind === 'action' && has(desktop.capabilityId)) {
+    return desktop.capabilityId;
+  }
   return undefined;
 }
 
 export function resolveStepCapability(
   task: WorkTask,
   step: PlanStep,
-  host?: CapabilityHost,
+  host?: CapabilityLookup,
 ): { id: string; input: Record<string, unknown> } | undefined {
   const fromStep = typeof step.capability === 'string' ? step.capability.trim() : '';
   const fromInput = typeof step.input?.capability === 'string' ? String(step.input.capability).trim() : '';
@@ -45,7 +52,7 @@ export function resolveStepCapability(
   return { id: inferred, input: defaultInputFor(inferred, task, step) };
 }
 
-function inferFromKind(kind: PlanStepKind, host?: CapabilityHost): string | undefined {
+function inferFromKind(kind: PlanStepKind, host?: CapabilityLookup): string | undefined {
   if (kind === 'research' && host?.lookup(RESEARCH_SEARCH)) return RESEARCH_SEARCH;
   if ((kind === 'search' || kind === 'retrieve') && host?.lookup(WORKSPACE_SEARCH)) return WORKSPACE_SEARCH;
   return undefined;
@@ -60,6 +67,10 @@ function defaultInputFor(id: string, task: WorkTask, step: PlanStep): Record<str
   if (id === DESKTOP_OPEN_TRUSTED_URL) {
     const url = String(extra.url || firstHttpsUrl(task.objective) || '').slice(0, 500);
     return url ? { ...extra, url } : extra;
+  }
+  if (id.startsWith('desktop.')) {
+    const intent = inferDesktopPresenceIntent(task.objective);
+    if (intent.kind === 'action') return { ...intent.arguments, ...extra };
   }
   return extra;
 }

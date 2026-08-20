@@ -277,7 +277,7 @@ export function enumerateWindowsDisplays(): Promise<DisplayInfo[]> {
     const timer = setTimeout(() => {
       child.kill();
       resolve([]);
-    }, 2500);
+    }, 15_000);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => { out += chunk; });
     child.on('error', () => {
