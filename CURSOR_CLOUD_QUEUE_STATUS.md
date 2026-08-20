@@ -341,7 +341,7 @@ Handoff: ADR-032, `tests/jarvis_security_hardening.test.ts`.
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 No new architecture. Integrates Queues 01–10.
 
-Queue 11 HEAD: _pending pin after docs commit_
+Queue 11 HEAD: `47a1f6ca15e734c53c2f1d395e59868c97b64e1d`
 
 Implementation: `3768a1d25f0dd4b75e618bdeedc805ba99dcba50`
 TurnId test fix: `0d2bdd835182ed8346bdb52e8fb2626169d999f7`

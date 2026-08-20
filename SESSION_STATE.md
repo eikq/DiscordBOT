@@ -10,7 +10,7 @@ Do not claim live Tor, native helper, camera, mic, STT, TTS, or GPU.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
-HEAD: _pending pin after docs commit_
+HEAD: `47a1f6ca15e734c53c2f1d395e59868c97b64e1d`
 Implementation: `3768a1d25f0dd4b75e618bdeedc805ba99dcba50`
 TurnId test fix: `0d2bdd835182ed8346bdb52e8fb2626169d999f7`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
