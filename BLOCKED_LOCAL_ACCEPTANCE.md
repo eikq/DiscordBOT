@@ -358,9 +358,10 @@ LA-023 → LA-024 → LA-025.
 ## LA-026 Presenter Mode briefing on `/jarvis-lab`
 
 - Status: **PARTIAL** 2026-08-20 local live pass. Not LIVE_VERIFIED.
-  Cloud 2026-08-20 pass implemented structured diagnostic cards, sequential
-  narration, TTS-driven `spokenAtMs`, and Repeat/Back as presenter-local
-  seeks (CLOUD_VERIFIED unit). Live speech↔segment motion remains
+  Cloud Queue 01 on `cursor/jarvis-cloud-evolution-2026-08-20` implemented
+  structured diagnostic cards, sequential narration, TTS-driven
+  `spokenAtMs`, and Repeat/Back as presenter-local seeks (CLOUD_VERIFIED
+  unit). Live speech↔segment motion remains
   NEEDS_LOCAL_VERIFY. First live pack was contaminated by leftover research
   until the isolation fix at `8aba6b0` (preserved).
 - Purpose: Prove rich results render as a Presenter briefing with spoken
@@ -403,8 +404,8 @@ LA-023 → LA-024 → LA-025.
 
 - Status: **PARTIAL — NATIVE_SHELL_REQUIRED** 2026-08-20. Display
   enumeration is real after raising capability timeouts. Cloud 2026-08-20
-  pass implemented intersection matching (gap → `UNKNOWN_DISPLAY`) and
-  native-helper contracts/mocks (CLOUD_VERIFIED unit). Browser host cannot
+  Queue 01 implemented intersection matching (gap → `UNKNOWN_DISPLAY`)
+  and native-helper contracts/mocks (CLOUD_VERIFIED unit). Browser host cannot
   own/move the Chrome/Edge HWND. Helper is not installed. Window movement
   is **not** LIVE_VERIFIED. Classification: `BROWSER_HOST_LIMITATION`.
 - Purpose: Honest multi-monitor awareness and Jarvis-window-only movement.

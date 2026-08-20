@@ -30,8 +30,8 @@ remain **BLOCKED_LOCAL_ACCEPTANCE**. **LA-001** and **LA-002** stay **PARTIAL**
 (owner 2026-08-20). Do not mark them LIVE_VERIFIED. Cloud unit tests are not
 live QA.
 
-Presenter/Desktop cloud pass on
-`cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838` (base `8aba6b0`):
+Presenter/Desktop Queue 01 on
+`cursor/jarvis-cloud-evolution-2026-08-20` (base `8aba6b0`):
 structured briefing facts, TTS-driven narration timeline, repeat/back,
 intersection display matching, native-helper contracts/mocks, comparison
 routing. Evidence: `npx tsc --noEmit` PASS; targeted 48/48; `npm run test:cloud`

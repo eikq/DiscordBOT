@@ -523,7 +523,7 @@ Not a prerequisite for Jarvis Core v1 unless owner chooses.
 
 ## JF-019 — Presentation Mode + desktop presence
 Depends on JF-009 / JF-010 / UI-R9
-Status: IMPLEMENTED + CLOUD_VERIFIED (unit). Live: LA-026 PARTIAL; LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. ADR-023 Phase 1 contracts scaffolded; helper not installed. Cloud: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+Status: IMPLEMENTED + CLOUD_VERIFIED (unit). Live: LA-026 PARTIAL; LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. ADR-023 Phase 1 contracts scaffolded; helper not installed. Queue 01 complete on `cursor/jarvis-cloud-evolution-2026-08-20`. Cloud: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
 
 Goal:
 Present rich results in the existing `/jarvis-lab` command center and report honest desktop/window presence. Jarvis may only move its own window.

@@ -3,15 +3,16 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Presenter + Desktop cloud implementation
+## This turn — Queue 01 Presenter + Desktop (evolution branch)
 
 Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
 LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
 No merge. Native helper **not installed**.
 
-Branch: `cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
 Base: `8aba6b019c436b1e636f32274607015a4dc23e38`
 (`origin/local/jarvis-acceptance-2026-08-20`)
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 
 Cloud-safe work: structured presentation facts, TTS-driven narration
 timeline, repeat/back, intersection display matching, native-helper

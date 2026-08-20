@@ -23,15 +23,23 @@ Commit: `fix(jarvis): isolate Presenter research bleed and raise display enum ti
 
 ## B. Cloud branch
 
+Canonical continuation branch (Queue 01+):
+
+`cursor/jarvis-cloud-evolution-2026-08-20`
+
+Historical implementation branch (same commits, do not continue here):
+
 `cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`
 
 Do not merge. Do not push `main` or rewrite the local acceptance branch.
 
 ## C. Final cloud HEAD
 
-`e6504734ee81a16f14be298033f4073c57a2092d` plus this documentation pin on
-`cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`. Confirm with
-`git rev-parse HEAD`.
+Queue 01 software HEAD before this queue-status pin:
+
+`36a6b98f83df4b7652d126b28e231faa14566a14`
+
+Confirm after push with `git rev-parse origin/cursor/jarvis-cloud-evolution-2026-08-20`.
 
 ## D. Commits (this pass only)
 
@@ -43,6 +51,7 @@ Do not merge. Do not push `main` or rewrite the local acceptance branch.
 | `9ca981a` | test(jarvis): add Presenter and Desktop cloud regression coverage |
 | `6a7bac4` | docs: record Presenter/Desktop cloud implementation handoff |
 | `e650473` | docs: pin Presenter/Desktop cloud HEAD and commit list |
+| `36a6b98` | docs: record exact cloud branch HEAD in the Windows handoff |
 
 ## E. Files / features changed
 
@@ -187,7 +196,7 @@ On the Windows machine, from this cloud branch or cherry-pick onto
 
 ```powershell
 git fetch origin
-git checkout cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838
+git checkout cursor/jarvis-cloud-evolution-2026-08-20
 # or cherry-pick 98a55be..HEAD onto the local acceptance branch
 $env:JARVIS_STANDALONE='1'
 # Simulation OFF. Do not start Discord.
@@ -229,7 +238,9 @@ owner map. Example ids are fictional (`DISPLAY-EXAMPLE-SECOND`).
 
 ## T. Push status
 
-Pushed: `origin/cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`
+Pushed: `origin/cursor/jarvis-cloud-evolution-2026-08-20`
 
-Not pushed: `main`, `local/jarvis-acceptance-2026-08-20`, other cloud
-branches. No merge. No force push.
+Queue 01 complete. Later Cloud queues continue from this branch HEAD.
+
+Not pushed: `main`, `local/jarvis-acceptance-2026-08-20`. No merge. No
+force push.
