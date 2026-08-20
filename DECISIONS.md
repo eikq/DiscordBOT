@@ -1232,6 +1232,63 @@ split, or Command Center perception state.
   8/8; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
 - Live capture/CCTV/sensors: BLOCKED_LOCAL_ACCEPTANCE.
 
+## ADR-030 — Proactive runtime coordinates; it is not a fourth scheduler
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live timers, GPU sensors, and unattended Night coding remain
+BLOCKED_LOCAL_ACCEPTANCE / host-only.
+
+### Context
+
+Queue 08 needed unified proactive work around reminders, monitoring, and
+Night Agent, with five-level resource priority, cooldowns, and a bounded
+Night pipeline. The repository already had three schedulers:
+ReminderScheduler, NightCycle (manual/budgeted), and ProactiveMonitor
+(ingest/filter, not cron). A competing generic job runner would violate
+the existing scheduler audit.
+
+### Decision
+
+- Do not add a fourth scheduler. `ProactiveRuntime` coordinates the three
+  existing ones. It does not arm timers or cron.
+  `auditSchedulers().competingSchedulerAdded === false`.
+  `proactiveRuntimeIsScheduler() === false`.
+- Resource priority, highest first: `realtime_voice`, `owner_task`,
+  `scheduled_action`, `monitoring`, `background_evolution`. Background
+  work yields when a strictly higher priority appears. No OS niceness.
+- Jarvis may notice and suggest (for example, GPU load remaining high).
+  It must not auto-act, kill processes, or take physical action.
+- Monitor keeps quiet hours, cooldown, and dedup, and adds importance,
+  notification suppression, and owner acknowledgement.
+- Night V2 is a mapped owner-facing pipeline over existing `NIGHT_STAGES`:
+  maintenance, trace analysis, benchmark, memory review, skill review,
+  RuntimeSpec candidate, report. Skills stay DRAFT. `autoPromoted: false`.
+  No automatic privileged actions. No auto-promote.
+- Higher-priority pressure sets Night status to `yielded` and resume
+  continues from `nextStageIndex`. Budget exhaustion stays `paused`.
+- Interrupted mutating WorkAgent `apply` with risk above LOW fails closed
+  and is not blindly retried.
+- Command Center shows job states scheduled / running / paused / yielded /
+  waiting / completed. No hidden chain-of-thought.
+
+### Alternatives considered
+
+- Adding a generic cron/job runner as a fourth scheduler — rejected.
+- Mapping Night yield back to `paused` only — rejected; yielded is a
+  distinct observable state.
+- Auto-killing processes on high GPU load — rejected.
+- Auto-promoting RuntimeSpec or skill candidates from Night — rejected.
+- Changing OS process priority — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_proactive_runtime.test.ts`
+  9/9; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
+- Live reminder timers, GPU sensors, and unattended Night coding: host-only /
+  BLOCKED_LOCAL_ACCEPTANCE. NIGHT-BUILD-010 scheduler is still not installed.
+
+
 
 
 

@@ -3,7 +3,29 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 07 Perception, Screen, CCTV and Device Architecture
+## This turn — Queue 08 Proactive Runtime + Scheduler + Night Agent V2
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+No live GPU / timer / unattended Night coding claims.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `c6c22ef0de4c51368d2759e73eea59d5a8268d32`
+Feat: `95a60584071a735fba016702ce3e4c5f2be384c1`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-030.
+Evidence: `npx tsc --noEmit` PASS;
+`tests/jarvis_proactive_runtime.test.ts` **9/9**. Full
+`npm run test:cloud` deferred while later Cloud follow-ups are queued.
+
+Three existing schedulers only (reminders, NightCycle, ProactiveMonitor).
+ProactiveRuntime is a coordinator, not a fourth scheduler. Background
+Night yields to higher resource priority. Notices cannot auto-act.
+`autoPromoted: false`. Mutating apply is not blindly retried.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 07 Perception, Screen, CCTV and Device Architecture
 
 Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
 No live camera or device claims.

@@ -224,6 +224,45 @@ deferred while later Cloud follow-ups are queued.
 
 Handoff: ADR-029, `tests/jarvis_perception.test.ts`.
 
+## Queue 08 — Proactive Runtime + Scheduler + Night Agent V2
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+No live GPU sensors, reminder-timer quality, or unattended Night coding
+claims.
+
+Implementation: `c6c22ef0de4c51368d2759e73eea59d5a8268d32`
+(feat `95a60584071a735fba016702ce3e4c5f2be384c1` + budget-pause test fix)
+Queue 08 HEAD: pending pin after this docs commit
+
+Unified proactive work around the three existing schedulers. Did **not**
+add a fourth scheduler.
+
+Shipped:
+
+- Five-level resource priority: realtime_voice > owner_task >
+  scheduled_action > monitoring > background_evolution. Background
+  yields; no OS process priority hacks
+- `ProactiveRuntime` coordinator (`isScheduler: false`) over
+  reminders, ProactiveMonitor, and NightCycle
+- Notice/suggest policy: GPU-high-load style alerts notify; they do
+  not auto-act or kill processes
+- Monitor: existing quiet hours / cooldown / dedup plus importance,
+  suppression, and owner acknowledgement
+- Night V2 pipeline is a mapping over existing stages: maintenance,
+  trace analysis, benchmark, memory review, skill review, RuntimeSpec
+  candidate, report. `autoPromoted: false`. Yielded vs budget paused
+- Interrupted mutating apply is not blindly retried
+- Command Center job board: scheduled, running, paused, yielded,
+  waiting, completed. No hidden reasoning. Labeled SIMULATION
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_proactive_runtime.test.ts` **9/9** plus evolution /
+realtime / research-addendum / command-center / cloud-finalization /
+work-agent / perception tests green (86/86 in that set). Full
+`npm run test:cloud` deferred while later Cloud follow-ups are queued.
+
+Handoff: ADR-030, `tests/jarvis_proactive_runtime.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution
