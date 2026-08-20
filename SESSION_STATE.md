@@ -3,7 +3,42 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Jarvis research addendum (cloud delta before local acceptance)
+## This turn — first physical-machine acceptance (LA-001 + LA-002 slice)
+
+Labels: **LIVE_VERIFIED** for LA-001 `/api/jarvis/ask` on local Ollama.
+LA-002 agent-browser QA ran; **not OWNER_VERIFIED**. No merge to main. Not pushed.
+Discord / Whonix / STT / RVC / uncensored / MoneyPrinterTurbo were not started.
+
+Starting cloud HEAD: `cursor/jarvis-research-addendum-4838` @ `4724cbf`.
+Local continuation: `local/jarvis-acceptance-2026-08-20` (no upstream).
+
+Baseline on this machine: `npx tsc --noEmit` PASS; `npm run test:cloud` **468/468**.
+
+Ollama `0.32.14` at `127.0.0.1:11434`. Only installed model:
+`digital-me-qwen38:27b-ad-q4km` (17 GB, loaded). Lab:
+`JARVIS_STANDALONE=1` `http://127.0.0.1:3010` (Discord client not started).
+
+LA-001 live `/api/jarvis/ask` (session `la001-acceptance`):
+- `hello` → CONVERSATION, no WorkAgent, `jarvis-1787226985067`
+- `explain recursion` → INFORMATION, no WorkAgent, `jarvis-1787227003970`
+- research first failed `INVALID_ARGUMENT` (`task_f8ffa0146aa6`) because
+  WorkAgent forwarded owner `researchDepth` into `research.search` while
+  ActionGate allowed `depth` only on `research.current`. Fix: allow `depth`
+  on `research.search`. After restart: SUCCESS `task_b74988aeabe5`, 6 real
+  public sources, no invented citations.
+- `สถานะระบบ` → CAPABILITY `system.status`, `jarvis-1787227114017`
+
+ops.db traces `tr_ba10607df519` / `tr_dd8a20d15f1f` / `tr_183fc4becc46` /
+`tr_2c64ea49cbfa` / `tr_b84bed3e1b18`. Forbidden CoT keys absent.
+Analyzer `INSUFFICIENT_DATA`.
+
+LA-002: `/jarvis-lab` loaded with real model id. Dock conversation route is
+honest. Demos labeled SIMULATION. SSE reconnect + HTTP replay observed.
+Still blocked: completed-task DAG vanishes; ops `lastRequest` stale after
+conversation; ops panel covers Ask; no permission-wait exercise; owner
+sign-off not claimed.
+
+## Previous — Jarvis research addendum (cloud delta before local acceptance)
 
 Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware/Ollama/IME/video remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed. OpenClaude/MoneyPrinterTurbo/Qwen weights were not installed.
 

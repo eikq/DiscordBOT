@@ -15,6 +15,8 @@ LA-023 → LA-024 → LA-025.
 
 ## LA-001 Ollama / Qwen real task path
 
+- Status: **LIVE_VERIFIED** 2026-08-20 ~19:02 ICT on `local/jarvis-acceptance-2026-08-20`
+  after a schema fix so WorkAgent `researchDepth` is a legal `research.search` argument.
 - Purpose: Prove a normal `/api/jarvis/ask` turn uses local Qwen for conversation
   and informational routes, and that agentic routes still invoke CapabilityHost.
 - Preconditions: Ollama reachable; `digital-me-qwen38:27b-ad-q4km` (or current
@@ -28,9 +30,34 @@ LA-023 → LA-024 → LA-025.
   no fabricated citations.
 - Failure evidence: Ollama probe, `/api/jarvis` status, requestId, route JSON,
   work.db task row if any.
+- Live evidence (standalone lab `http://127.0.0.1:3010`, `JARVIS_STANDALONE=1`,
+  session `la001-acceptance`, model `digital-me-qwen38:27b-ad-q4km`, Ollama 0.32.14):
+  1. `hello` → route `CONVERSATION` / SPEAK / `agentic:false`.
+     `requestId=jarvis-1787226985067`. No `taskId`. Trace `tr_ba10607df519`.
+     Reply: “Hello! How can I help you today?” ~9612ms, 10 tokens.
+  2. `explain recursion` → route `INFORMATION`. `requestId=jarvis-1787227003970`.
+     No `taskId`. Trace `tr_dd8a20d15f1f`. Real recursion explanation. ~4572ms, 137 tokens.
+     Note: `intent.kind` stayed `CONVERSATION` while the ask router used `INFORMATION`.
+  3. First research attempt failed: `INVALID_ARGUMENT` because ActionGate allowed
+     `depth` on `research.current` but not `research.search` while WorkAgent injected
+     owner `researchDepth=standard`. Task `task_f8ffa0146aa6` FAILED. After allowing
+     `depth` on `research.search` and restarting the lab: `requestId=jarvis-1787227331469`,
+     `taskId=task_b74988aeabe5`, WorkAgent → CapabilityHost `research.search` ok,
+     6 real public URLs (github.com/QwenLM, arxiv.org, qwen.ai, qwen.readthedocs.io).
+     Citations were not invented. Trace `tr_b84bed3e1b18` `verification=success`.
+     work.db: COMPLETED, `simulated=0`, plan understand/research.search/verify/reflect.
+  4. `สถานะระบบ` → route `CAPABILITY`, bound `system.status`, ActionGate completed.
+     `requestId=jarvis-1787227114017`. No WorkAgent. Trace `tr_2c64ea49cbfa`.
+     Host metrics included NVIDIA GeForce RTX 5090 Laptop GPU. ~226–268ms.
+- Traces: 5 rows in `data/jarvis/runtime/ops.db`. No CoT / scratchpad / secrets /
+  confirmation-token keys. Analyzer: `INSUFFICIENT_DATA` (need ≥3 samples per route).
+  Research traces omit `requestId` (task traces do not copy it). Capability traces
+  currently store an empty `capabilities` array.
 
 ## LA-002 Command Center browser / SSE visual QA
 
+- Status: still **BLOCKED_LOCAL_ACCEPTANCE** for owner sign-off and live DAG
+  visibility. Agent browser QA ran 2026-08-20; **not OWNER_VERIFIED**.
 - Purpose: Owner visual acceptance of `/jarvis-lab` as the observability surface.
 - Preconditions: local dashboard; browser; reduced-motion check; EventSource
   supported.
@@ -40,6 +67,31 @@ LA-023 → LA-024 → LA-025.
 - Expected: UI matches real records. Demos stay labeled SIMULATION.
 - Failure evidence: screenshots, EventSource console, `/api/jarvis/events`
   after= cursor, `present()` JSON.
+- Agent browser evidence (`http://127.0.0.1:3010/jarvis-lab`, Cursor browser, not
+  owner Chrome profile):
+  - Ribbon: LOCAL host, QWEN `digital-me-qwen38:27b-ad-q4km`, MEMORY v2, TOOLS 54.
+  - Dock `hello` reply “Hello! How can I help you today?” with
+    `Route CONVERSATION · SPEAK`. No work-task DAG for that turn.
+  - Research demo shows `SIMULATION — not live hardware` and device rows
+    `SIMULATION · VIEW only`. Simulation mode was then set back to false.
+  - Intelligence: traces count, `spec_baseline_v1`, analyzer
+    `INSUFFICIENT_DATA`, RESTRICTED uncensored has no security authority,
+    certification still fixture-only, auto-promote denied.
+  - Memory rail after hello: “No canonical memory attached to this turn.”
+    Graph 4 nodes / 1 edge. No hidden reasoning text.
+  - SSE: browser EventSource `/api/jarvis/events?stream=1` connected then
+    reconnected (performance entries 8ms then 6713ms). HTTP replay
+    `?stream=1&after=0` returned seq 1–20. Client `seq <= lastSeq` drop path
+    exists in `JarvisLabPage.tsx`.
+- Remaining before LIVE_VERIFIED:
+  1. Live operations DAG is only rendered while `snapshot.task` is active.
+     Completed WorkAgent tasks disappear immediately (“No multi-step work task”).
+     80ms polling during a cached research ask never observed `task.steps`.
+  2. Command Center `lastRequest` is only set on WorkAgent runs, so after a
+     dock `hello` the ops panel can still say `Route RESEARCH · agentic`.
+  3. Open operations panel intercepts the dock Ask button.
+  4. Permission-wait UI was not exercised.
+  5. Owner visual sign-off (LA-013) is separate.
 
 ## LA-003 Whonix Gateway health
 

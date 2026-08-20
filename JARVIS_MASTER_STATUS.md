@@ -24,7 +24,8 @@ Center intelligence surfaces. It did not restart the project or rewrite Discord.
 
 See `JARVIS_SECURITY_STATUS.md` for SEC/JF-014.5+ labels.
 
-Command-center SSE browser QA, Ollama multi-step, Whonix/PRIVATE_BROWSER,
+Command-center SSE owner visual QA, Whonix/PRIVATE_BROWSER,
 mic, CCTV, Discord voice, live model certification, and real media pipelines
-remain **BLOCKED_LOCAL_ACCEPTANCE** (LA-001–LA-025). Do not treat unit tests
-as live verified.
+remain **BLOCKED_LOCAL_ACCEPTANCE** (LA-002–LA-025). LA-001 local Ollama `/ask`
+(conversation, information, research via WorkAgent, bound capability) is
+**LIVE_VERIFIED** on 2026-08-20. Do not treat unit tests as live verified.

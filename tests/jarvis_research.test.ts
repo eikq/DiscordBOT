@@ -217,6 +217,17 @@ test('schema rejects POST, headers, cookies, and raw capability keys', () => {
   assert.equal(validateActionInput(RESEARCH_SEARCH, { query: 'x', authorization: 'Bearer x' }, lists()).ok, false);
 });
 
+test('research.search accepts owner researchDepth used by WorkAgent', () => {
+  const standard = validateActionInput(RESEARCH_SEARCH, { query: 'latest Qwen documentation', depth: 'standard' }, lists());
+  assert.equal(standard.ok, true);
+  if (standard.ok) {
+    assert.equal(standard.value.query, 'latest Qwen documentation');
+    assert.equal(standard.value.depth, 'standard');
+  }
+  const deep = validateActionInput(RESEARCH_SEARCH, { query: 'qwen', depth: 'deep' }, lists());
+  assert.equal(deep.ok, true);
+});
+
 test('official NVIDIA pages rank above community discussion', () => {
   assert.equal(classifySource('https://nvidianews.nvidia.com/news/rtx'), 'OFFICIAL');
   assert.equal(classifySource('https://www.reddit.com/r/nvidia/'), 'COMMUNITY');

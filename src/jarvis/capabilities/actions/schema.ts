@@ -308,7 +308,7 @@ function validateReminderInput(capabilityId: string, input: Record<string, unkno
 
 function validateResearchInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {
   const allowed = capabilityId === RESEARCH_SEARCH
-    ? ['query', 'maxResults', 'freshness']
+    ? ['query', 'maxResults', 'freshness', 'depth']
     : capabilityId === RESEARCH_FETCH
       ? ['sourceId', 'url', 'freshness']
       : capabilityId === RESEARCH_GET
