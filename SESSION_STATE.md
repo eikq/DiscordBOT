@@ -10,6 +10,7 @@ No live `/jarvis-lab` visual sign-off. Native helper is not installed.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `85a87694a0478a13f90b3a686ddbd7b850898c22`
 Implementation: `3c6f5ce19e92cbfa129404ca45d6b6b5a691670e`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 ADR: ADR-031.

@@ -269,7 +269,7 @@ Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 No live `/jarvis-lab` visual sign-off. Native helper is not installed.
 
 Implementation: `3c6f5ce19e92cbfa129404ca45d6b6b5a691670e`
-Queue 09 HEAD: pending pin after this docs commit
+Queue 09 HEAD: `85a87694a0478a13f90b3a686ddbd7b850898c22`
 
 Presentation-only mode shell over existing Command Center snapshots.
 Did **not** rebuild CommandCenterRuntime, Core, or schedulers.
