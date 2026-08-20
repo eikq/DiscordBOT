@@ -255,6 +255,9 @@ export {
   PracticeEngine,
   BenchmarkBank,
   NightCycle,
+  NIGHT_STAGES,
+  NIGHT_V2_PIPELINE,
+  mapNightStageToV2,
   AffectEngine,
   CandidateManager,
   RuntimeSpecOptimizer,
@@ -265,14 +268,14 @@ export {
   applyTaskOutcome,
   runExperiencePipeline,
 } from './evolution';
-export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
-export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, efficiencyForModel, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse, recoverInterruptedTask } from './agent';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, efficiencyForModel, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution, yieldsTo, shouldYieldBackground, evaluatePreemption, RESOURCE_PRIORITY_ORDER, RESOURCE_PRIORITY_RANK, proactiveRuntimeIsScheduler, EXISTING_SCHEDULERS, PROACTIVE_COORDINATOR } from './ops';
 export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, neverAutoSelectRestricted, realModelCertificationBlocked, cloudCertificationLabel, certificationIsLiveVerified, normalizeWorkload, workloadFromRoute, MODEL_WORKLOADS, CERT_CATEGORIES } from './models';
 export { ArtifactWorkflow } from './artifacts';
 export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';
 export { THAI_COMBINING_FIXTURE } from './i18n/thaiIntegrity';
 export { OwnerControl } from './control';
-export { ProactiveMonitor } from './monitor';
+export { ProactiveMonitor, monitorDedupKey, inQuietHours } from './monitor';
 export { SimulatedDeviceProvider } from './devices';
 export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
 export {
@@ -310,6 +313,22 @@ export type {
   VisionInterpretation,
   PerceptualMemoryCandidate,
 } from './perception';
+export {
+  ProactiveRuntime,
+  combineResourcePriority,
+  PROACTIVE_NOTICE_POLICY,
+  evaluateProactiveNotice,
+  gpuHighLoadNotice,
+  PROACTIVE_JOB_STATES,
+  workTaskJobState,
+  nightJobState,
+} from './proactive';
+export type {
+  ProactiveRuntimeSnapshot,
+  ProactiveNotice,
+  ProactiveJobSnapshot,
+  ProactiveJobState,
+} from './proactive';
 export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
 export type { CommandCenterSnapshot } from './standalone/commandCenter';
 export {

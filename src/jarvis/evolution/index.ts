@@ -15,7 +15,7 @@ export { GrowthPlanner } from './growthPlanner';
 export { PracticeEngine } from './practiceEngine';
 export { BenchmarkBank } from './benchmarks';
 export { runCloudBenchmarkBank } from './benchmarkFixtures';
-export { NightCycle, NIGHT_STAGES } from './nightCycle';
+export { NightCycle, NIGHT_STAGES, NIGHT_V2_PIPELINE, mapNightStageToV2 } from './nightCycle';
 export { AffectEngine, affectCannotAuthorize } from './affect';
 export { shouldRecordSocialEvolution } from './socialFilter';
 export { CORE_IDENTITY, overlayIdentity, coreIdentityMutable } from './identity';
@@ -41,7 +41,7 @@ export type {
   StructuredReflection,
 } from './types';
 export type { DurableClaim } from './claims';
-export type { NightCycleReport } from './nightCycle';
+export type { NightCycleReport, NightV2Stage, NightCycleStatus, NightPauseReason } from './nightCycle';
 export type { JarvisJournal } from './journal';
 export type { ImprovementCandidate } from './candidateManager';
 export type { RuntimeSpecCandidate } from './runtimeSpecOptimizer';

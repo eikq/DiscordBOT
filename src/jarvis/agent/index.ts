@@ -1,5 +1,6 @@
 export { WorkAgent, defaultPlanFor, planForObjective } from './engine';
 export { WorkTaskStore, newStepId, newTaskId } from './store';
+export { recoverInterruptedTask } from './recoveryState';
 export { defaultWorkDbPath } from './sqliteStore';
 export { createCapabilityWorkInvoker } from './capabilityInvoker';
 export { inferCapabilityFromObjective, isBlockedCapabilityId, resolveStepCapability } from './capabilityResolve';

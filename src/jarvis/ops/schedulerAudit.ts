@@ -23,7 +23,7 @@ export const EXISTING_SCHEDULERS = [
     module: 'src/jarvis/evolution/nightCycle.ts',
     store: 'evolution.db',
     jobIsPermission: false as const,
-    notes: 'Owner/manual or budgeted. Pauses for realtime_voice / owner_task.',
+    notes: 'Owner/manual or budgeted. Yields for any higher resource priority. Not cron.',
   },
   {
     id: 'proactive_monitor',
@@ -34,17 +34,34 @@ export const EXISTING_SCHEDULERS = [
   },
 ] as const;
 
+/**
+ * ProactiveRuntime coordinates the three existing schedulers.
+ * It does not arm timers, cron, or a competing job runner.
+ */
+export const PROACTIVE_COORDINATOR = {
+  id: 'proactive_runtime',
+  module: 'src/jarvis/proactive',
+  isScheduler: false as const,
+  notes: 'Coordinates reminders, monitor, and NightCycle. Does not arm timers.',
+} as const;
+
 export type SchedulerAuditSnapshot = {
   competingSchedulerAdded: false;
   schedulers: typeof EXISTING_SCHEDULERS;
   jobIsPermanentPermission: false;
+  coordinatorIsScheduler: false;
 };
+
+export function proactiveRuntimeIsScheduler(): false {
+  return PROACTIVE_COORDINATOR.isScheduler;
+}
 
 export function auditSchedulers(): SchedulerAuditSnapshot {
   return {
     competingSchedulerAdded: false,
     schedulers: EXISTING_SCHEDULERS,
     jobIsPermanentPermission: false,
+    coordinatorIsScheduler: false,
   };
 }
 

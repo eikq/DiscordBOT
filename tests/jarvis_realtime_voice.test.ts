@@ -393,6 +393,7 @@ test('Command Center night pauses for realtime voice and still completes when id
   busy.voice.listen();
   assert.equal(busy.voice.resourcePriority(), 'realtime_voice');
   const paused = busy.runNight();
-  assert.equal(paused.status, 'paused');
+  assert.equal(paused.status, 'yielded');
   assert.equal(paused.pausedFor, 'realtime_voice');
+  assert.equal(paused.pauseReason, 'yielded');
 });

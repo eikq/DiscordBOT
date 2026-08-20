@@ -198,8 +198,9 @@ test('night cycle pauses under realtime voice and can cancel', () => {
     simulated: true,
   });
   const paused = night.run();
-  assert.equal(paused.status, 'paused');
+  assert.equal(paused.status, 'yielded');
   assert.equal(paused.pausedFor, 'realtime_voice');
+  assert.equal(paused.pauseReason, 'yielded');
   priority = 'background_evolution';
   night.resume();
   const done = night.run();

@@ -1,13 +1,12 @@
 import type { ResourcePriority } from '../ops/types';
+import { higherResourcePriority } from '../ops/resourcePriority';
 import type { VoiceTurnState } from './types';
 
-const RANK: Record<ResourcePriority, number> = {
-  realtime_voice: 3,
-  owner_task: 2,
-  background_evolution: 1,
-};
+export { higherResourcePriority };
 
 /**
+ * Voice maps onto the five-level resource ladder without inventing
+ * scheduled_action or monitoring (those come from the coordinator).
  * Scheduler/resource signal only. Does not change OS process priority.
  */
 export function resourcePriorityForVoice(state: VoiceTurnState): ResourcePriority {
@@ -23,10 +22,6 @@ export function resourcePriorityForVoice(state: VoiceTurnState): ResourcePriorit
     return 'owner_task';
   }
   return 'background_evolution';
-}
-
-export function higherResourcePriority(a: ResourcePriority, b: ResourcePriority): ResourcePriority {
-  return RANK[a] >= RANK[b] ? a : b;
 }
 
 export class VoicePriorityBroker {

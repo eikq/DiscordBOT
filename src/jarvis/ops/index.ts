@@ -10,6 +10,15 @@ export type {
   OperationProgress,
   ResourcePriority,
 } from './types';
+export {
+  RESOURCE_PRIORITY_ORDER,
+  RESOURCE_PRIORITY_RANK,
+  resourcePriorityRank,
+  yieldsTo,
+  shouldYieldBackground,
+  higherResourcePriority,
+  evaluatePreemption,
+} from './resourcePriority';
 export { classifyFailure, isRetryableError, jarvisError } from './errors';
 export type { JarvisStructuredError } from './errors';
 export { budgetExceeded, mergeBudgets, remainingBudget } from './budgets';
@@ -21,5 +30,12 @@ export type { JarvisTraceRecord, TraceCapabilityRef } from './traceTypes';
 export { traceCapabilitiesFromTurn, traceCapabilitiesFromWork } from './traceCapabilities';
 export { TraceAnalyzer, ANALYZER_INSUFFICIENT } from './traceAnalyzer';
 export { efficiencyFromTraces, efficiencyForModel } from './efficiencyMetrics';
-export { auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './schedulerAudit';
+export {
+  auditSchedulers,
+  scheduledJobIsNotPermission,
+  authorizeAtExecution,
+  proactiveRuntimeIsScheduler,
+  EXISTING_SCHEDULERS,
+  PROACTIVE_COORDINATOR,
+} from './schedulerAudit';
 export { OpsPersistence, defaultOpsDbPath } from './opsPersistence';

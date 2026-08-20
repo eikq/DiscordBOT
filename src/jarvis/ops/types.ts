@@ -50,7 +50,12 @@ export type JarvisErrorCode =
   | 'DEPENDENCY_CYCLE'
   | 'SIMULATION_ONLY';
 
-export type ResourcePriority = 'realtime_voice' | 'owner_task' | 'background_evolution';
+export type ResourcePriority =
+  | 'realtime_voice'
+  | 'owner_task'
+  | 'scheduled_action'
+  | 'monitoring'
+  | 'background_evolution';
 
 export type JarvisBudgets = {
   taskSteps: number;

@@ -137,8 +137,9 @@ export default function CommandCenterPanels({
         </dl>
         <p className="jcc-hint">
           Night {snapshot?.evolution.night.status || 'idle'}
+          {snapshot?.evolution.night.v2Stage ? ` · ${snapshot.evolution.night.v2Stage}` : ''}
           {snapshot?.evolution.night.stage ? ` · ${snapshot.evolution.night.stage}` : ''}
-          {snapshot?.evolution.night.pausedFor ? ` · paused for ${snapshot.evolution.night.pausedFor}` : ''}
+          {snapshot?.evolution.night.pausedFor ? ` · ${snapshot.evolution.night.pauseReason === 'yielded' ? 'yielded' : 'paused'} for ${snapshot.evolution.night.pausedFor}` : ''}
           {snapshot?.evolution.night.experiencesProcessed
             ? ` · ${snapshot.evolution.night.experiencesProcessed} digested`
             : ''}
@@ -263,6 +264,15 @@ export default function CommandCenterPanels({
         <p className="jcc-hint">
           Schedulers: reminders, night cycle, monitor. Jobs are not permissions.
         </p>
+        {snapshot?.proactive ? (
+          <p className="jcc-hint">
+            Proactive {snapshot.proactive.currentPriority}
+            {snapshot.proactive.jobs.length > 0
+              ? ` · ${snapshot.proactive.jobs.map(job => `${job.kind}:${job.state}`).join(' · ')}`
+              : ''}
+            {' · notice only'}
+          </p>
+        ) : null}
       </section>
 
       <section className="jcc-block">

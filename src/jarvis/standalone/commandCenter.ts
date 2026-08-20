@@ -42,7 +42,7 @@ import {
 } from '../evolution';
 import { RuntimeSpecOptimizer, type RuntimeSpecCandidate } from '../evolution/runtimeSpecOptimizer';
 import { defaultRuntimeRoot } from '../storage/operationalDb';
-import { ProactiveMonitor, type MonitorSignal } from '../monitor';
+import { ProactiveMonitor } from '../monitor';
 import { efficiencyFromTraces, type EfficiencySnapshot } from '../ops/efficiencyMetrics';
 import { OpsPersistence } from '../ops/opsPersistence';
 import { auditSchedulers, type SchedulerAuditSnapshot } from '../ops/schedulerAudit';
@@ -51,7 +51,7 @@ import { TraceStore } from '../ops/traceStore';
 import { traceCapabilitiesFromWork } from '../ops/traceCapabilities';
 import type { JarvisTraceRecord } from '../ops/traceTypes';
 import { visualStateFromEvents } from '../ops/visualState';
-import type { JarvisVisualState } from '../ops/types';
+import type { JarvisVisualState, ResourcePriority } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
 import { redactDeep } from '../security/redaction';
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
@@ -62,6 +62,9 @@ import { RuntimeSpecRegistry, type JarvisRuntimeSpec } from './runtimeSpec';
 import { VoiceInteractionRuntime } from '../realtime';
 import { PerceptionRuntime } from '../perception';
 import type { PerceptionSnapshot } from '../perception';
+import { ProactiveRuntime, combineResourcePriority } from '../proactive';
+import type { ProactiveRuntimeSnapshot } from '../proactive';
+import { monitorDedupKey, type MonitorSignal } from '../monitor';
 
 export type CommandCenterSnapshot = {
   simulationMode: boolean;
@@ -103,6 +106,7 @@ export type CommandCenterSnapshot = {
   notifications: MonitorSignal[];
   intelligence: IntelligenceSnapshot;
   perception: PerceptionSnapshot;
+  proactive: ProactiveRuntimeSnapshot;
 };
 
 export type IntelligenceSnapshot = {
@@ -179,6 +183,7 @@ export class CommandCenterRuntime {
   public readonly artifacts: ArtifactWorkflow;
   public readonly voice: VoiceInteractionRuntime;
   public readonly perception: PerceptionRuntime;
+  public readonly proactive: ProactiveRuntime;
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
@@ -252,11 +257,22 @@ export class CommandCenterRuntime {
       events: this.events,
       now: options.now,
       simulated,
-      resource: () => this.voice.resourcePriority(),
+      resource: () => this.currentResourcePriority(),
       runBenchmarks: () => runCloudBenchmarkBank(this.benchmarks, now).length,
       traces: this.traces,
       analyzer: this.analyzer,
       specOptimizer: this.specOptimizer,
+    });
+    this.proactive = new ProactiveRuntime({
+      currentPriority: () => this.currentResourcePriority(),
+      night: () => this.night,
+      monitor: () => this.monitor,
+      ownerTask: () => {
+        const task = this.agent.store.active()[0];
+        if (!task) return null;
+        return { id: task.id, objective: task.objective, status: task.status };
+      },
+      simulated: true,
     });
   }
 
@@ -326,6 +342,7 @@ export class CommandCenterRuntime {
       notifications: [...this.notifications],
       intelligence: this.intelligenceSnapshot(),
       perception: this.perception.snapshot(),
+      proactive: this.proactive.snapshot(),
     };
   }
 
@@ -584,6 +601,18 @@ export class CommandCenterRuntime {
       this.selfModel.observe('practice', 'success');
     }
     return { goalId, isolated: result.isolated, destructive: result.destructive, passed: result.passed };
+  }
+
+  public currentResourcePriority(): ResourcePriority {
+    const voice = this.voice.resourcePriority();
+    const task = this.agent.store.active()[0];
+    return combineResourcePriority(voice, Boolean(task));
+  }
+
+  public acknowledgeAlert(signal: MonitorSignal): void {
+    this.monitor.acknowledge(signal);
+    const key = monitorDedupKey(signal);
+    this.notifications = this.notifications.filter(item => item.id !== signal.id && monitorDedupKey(item) !== key);
   }
 
   public notify(signal: MonitorSignal): ReturnType<ProactiveMonitor['ingest']> {
