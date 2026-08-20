@@ -1,4 +1,6 @@
 import type { JarvisCoreResult } from '../core/types';
+import type { AffectStyle } from '../evolution/affect';
+import { overlayIdentity } from '../evolution/identity';
 import { memoryScopePersonaId } from './compatibility';
 import { presentationContradictsFacts, styleSuggestedContent } from './facts';
 import { JARVIS_PERSONA_ID, JARVIS_VOICE_ID } from './types';
@@ -21,6 +23,7 @@ export interface PresentationEngine {
 export type FactPreservingPresentationEngineOptions = {
   persona?: PersonaProvider;
   voices?: VoiceProfileResolver;
+  affectStyle?: AffectStyle | (() => AffectStyle | undefined);
 };
 
 /**
@@ -37,7 +40,19 @@ export class FactPreservingPresentationEngine implements PresentationEngine {
   ): Promise<PresentedResponse> {
     const transformations: string[] = [];
     const usesPersona = profile.personaMode !== 'NONE' && profile.personaProfileId !== JARVIS_PERSONA_ID;
-    const slang = usesPersona ? 'แบบนี้ไง ' : '';
+    const affect = resolveAffect(this.options.affectStyle);
+    let slang = usesPersona ? 'แบบนี้ไง ' : '';
+    if (affect && affect.formality > 0.65) {
+      slang = '';
+      transformations.push('affect:formal');
+    }
+    if (affect) {
+      overlayIdentity({
+        personaId: profile.personaProfileId,
+        affectStyle: { warmth: affect.warmth, formality: affect.formality },
+      });
+      transformations.push(`affect:style:${affect.responseLength}:${affect.voiceEnergy}`);
+    }
     if (usesPersona) transformations.push(`persona:${profile.personaProfileId}:${profile.personaMode}`);
     if (profile.voiceProfileId) transformations.push(`voice:${profile.voiceProfileId}:selected-not-loaded`);
 
@@ -73,4 +88,8 @@ export class FactPreservingPresentationEngine implements PresentationEngine {
       behaviorPersonaId: memoryScopePersonaId(profile),
     };
   }
+}
+
+function resolveAffect(value?: AffectStyle | (() => AffectStyle | undefined)): AffectStyle | undefined {
+  return typeof value === 'function' ? value() : value;
 }

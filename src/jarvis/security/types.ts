@@ -88,12 +88,40 @@ export type JarvisOperationEventType =
   | 'COMPARE'
   | 'VERIFY'
   | 'MODEL'
-  | 'ERROR';
+  | 'ERROR'
+  | 'TASK_RECEIVED'
+  | 'TASK_STEP'
+  | 'TASK_RETRY'
+  | 'TASK_CANCELLED'
+  | 'TASK_BLOCKED'
+  | 'TASK_COMPLETED'
+  | 'TASK_FAILED'
+  | 'PERMISSION_WAITING'
+  | 'NIGHT_CYCLE'
+  | 'AFFECT'
+  | 'MONITOR'
+  | 'DEVICE'
+  | 'VISION'
+  | 'SIMULATION'
+  | 'CANCELLED'
+  | 'PROGRESS'
+  | 'SPEECH'
+  | 'LISTENING'
+  | 'MEMORY'
+  | 'WORKSPACE';
 
 export type JarvisOperationEvent = {
+  id: string;
+  seq: number;
   type: JarvisOperationEventType;
   at: string;
   level: 'info' | 'warn' | 'error';
   summary: string;
   payload: Record<string, unknown>;
+  taskId?: string;
+  turnId?: string;
+  visualState?: string;
+  progress?: { current: number; total: number; unit?: string };
+  simulated?: boolean;
+  errorCode?: string;
 };

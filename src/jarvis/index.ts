@@ -17,7 +17,7 @@ export type {
 } from './core/types';
 export { PassThroughJarvisCore, UnavailableJarvisCore } from './core/JarvisCore';
 export { createJarvisRequest } from './core/request';
-export { JarvisMemoryRetrieval } from './memory';
+export { JarvisMemoryRetrieval, fuseMemoryRetrieval } from './memory';
 export type {
   CompactMemoryItem,
   JarvisMemoryService,
@@ -47,6 +47,8 @@ export type {
 export { LocalLlmJarvisCore } from './standalone/LocalLlmJarvisCore';
 export type { LocalLlmJarvisCoreOptions, StandaloneLlm, TimedCoreResult } from './standalone/LocalLlmJarvisCore';
 export { applyJarvisInteractiveProfile, describeJarvisRuntimeProfile } from './standalone/runtimeProfile';
+export { defaultRuntimeSpec, RuntimeSpecRegistry, diffRuntimeSpec } from './standalone/runtimeSpec';
+export type { JarvisRuntimeSpec } from './standalone/runtimeSpec';
 export { compactTurnTimings } from './standalone/turnTimings';
 export type { TurnTimings, LlmTurnMetrics } from './standalone/turnTimings';
 export {
@@ -226,15 +228,58 @@ export {
   createCandidateSandbox,
   rejectProductionWrite,
   resolveMemoryContradiction,
+  ClaimStore,
+  reflectStructured,
+  FailureLedger,
+  CapabilitySelfModel,
+  GrowthPlanner,
+  PracticeEngine,
+  BenchmarkBank,
+  NightCycle,
+  AffectEngine,
+  CandidateManager,
+  RuntimeSpecOptimizer,
+  ModelAdaptationRegistry,
+  buildJournal,
+  buildEvolutionGraph,
+  affectCannotAuthorize,
+  applyTaskOutcome,
 } from './evolution';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, efficiencyFromTraces, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
+export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, realModelCertificationBlocked } from './models';
+export { ArtifactWorkflow } from './artifacts';
+export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';
+export { THAI_COMBINING_FIXTURE } from './i18n/thaiIntegrity';
+export { OwnerControl } from './control';
+export { ProactiveMonitor } from './monitor';
+export { SimulatedDeviceProvider } from './devices';
+export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
+export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
+export type { CommandCenterSnapshot } from './standalone/commandCenter';
+export type { DemoScenarioId } from './standalone/commandCenterHttp';
+export { presentCommandCenter } from './standalone/commandCenterView';
+export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
+export {
+  parseDemoScenario,
+  parseControlPatch,
+  applyOwnerControl,
+  parseTaskId,
+  parseObjective,
+  parseNightAction,
+  parsePermissionGrant,
+  DEMO_SCENARIOS,
+} from './standalone/commandCenterHttp';
 export {
   classifyActionability,
   compactCapabilityCatalog,
   resolveUserIntent,
   validateIntentResolution,
   InteractionContextStore,
+  routeJarvisRequest,
+  shouldUseWorkAgent,
 } from './intent';
-export type { IntentResolution, InteractionContext, CompactCapability } from './intent';
+export type { IntentResolution, InteractionContext, CompactCapability, RouteDecision, JarvisRequestRoute } from './intent';
 export type { ResearchResult, ResearchRuntime, ResearchSnapshot, SourceRecord } from './research';
 export {
   WORKSPACE_CURRENT,

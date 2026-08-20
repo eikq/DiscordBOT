@@ -55,7 +55,10 @@ export class CapabilityRegistry implements CapabilityHost {
     const descriptor = handler.descriptor();
     const timeoutMs = request.timeoutMs ?? descriptor.timeoutMs;
     try {
-      return await withTimeout(handler.invoke(request.input), timeoutMs, request.id);
+      const payload = request.confirmation
+        ? { ...request.input, confirmation: request.confirmation }
+        : request.input;
+      return await withTimeout(handler.invoke(payload), timeoutMs, request.id);
     } catch (error) {
       if (isTimeoutError(error)) {
         return timeoutResult(request.id, timeoutMs, descriptor.sideEffect, descriptor.untrustedOutput);

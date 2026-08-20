@@ -347,7 +347,7 @@ test('no automatic commit, push, reset, or clean', () => {
 test('isolatedWorktreePath is a sibling of the controller, not inside it', () => {
   const controller = 'C:\\Users\\piriy\\Documents\\DiscordBOT';
   const next = isolatedWorktreePath(controller, 'night-2026-08-19');
-  assert.equal(path.basename(next), 'DiscordBOT-night-2026-08-19');
+  assert.equal(path.win32.basename(next), 'DiscordBOT-night-2026-08-19');
   assert.ok(!next.startsWith(controller + path.sep) && !next.startsWith(controller + '/'));
 });
 

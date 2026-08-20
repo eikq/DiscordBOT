@@ -18,6 +18,9 @@ import { nightAgentSnapshot, systemHealthSnapshot } from "./src/jarvis/standalon
 import { assertLocalMutationRequest, enforceLoopbackBindHost } from "./src/jarvis/standalone/localMutationGuard";
 import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants";
 import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
+import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
+import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
+import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parsePermissionGrant, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
 dotenv.config({ quiet: true });
 if (process.env.JARVIS_STANDALONE === '1') {
@@ -767,6 +770,8 @@ async function startServer() {
     attachDefaultSpeech: true,
     probeStt: probeStandaloneStt,
   });
+  const labCapabilities = jarvisLab.capabilities();
+  if (labCapabilities) sharedCommandCenter().attachCapabilities(labCapabilities);
   app.get('/api/jarvis/status', async (_req, res) => {
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
       return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
@@ -994,17 +999,136 @@ async function startServer() {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
       });
-      const unsubscribe = sharedJarvisEventBus().subscribe(event => {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      const bus = sharedJarvisEventBus();
+      const after = sseCursorFrom(req.query.after, req.headers['last-event-id']);
+      writeSseReplay(after === undefined ? [] : bus.recentAfter(after), chunk => { res.write(chunk); });
+      const unsubscribe = bus.subscribe(event => {
+        res.write(formatSseEvent(event));
       });
-      req.on('close', unsubscribe);
+      const heartbeat = setInterval(() => {
+        res.write(formatSseComment(`hb ${Date.now()}`));
+      }, 15_000);
+      req.on('close', () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+      });
       return;
     }
     try {
       return res.json({ events: jarvisLab.recentOperations() });
     } catch (error) {
       return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get('/api/jarvis/command-center', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      return res.json(sharedCommandCenter().present());
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/demo', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const scenario = parseDemoScenario(req.body?.scenario);
+    if (!scenario) return res.status(400).json({ error: 'Unknown demo scenario.', reasonCode: 'PLAN_INVALID' });
+    try {
+      const center = sharedCommandCenter();
+      await center.runDemo(scenario);
+      return res.json(center.present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/control', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const parsed = parseControlPatch(req.body);
+    if (parsed.ok === false) return res.status(400).json({ error: parsed.error, reasonCode: 'PLAN_INVALID' });
+    try {
+      const center = sharedCommandCenter();
+      applyOwnerControl(center.control, parsed.patch);
+      return res.json(center.present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/cancel', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const taskId = parseTaskId(req.body?.taskId);
+    if (!taskId) return res.status(400).json({ error: 'taskId is required.', reasonCode: 'PLAN_INVALID' });
+    try {
+      sharedCommandCenter().agent.cancel(taskId);
+      return res.json(sharedCommandCenter().present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/task', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const objective = parseObjective(req.body?.objective);
+    if (!objective) return res.status(400).json({ error: 'objective is required.', reasonCode: 'PLAN_INVALID' });
+    try {
+      const center = sharedCommandCenter();
+      await center.runObjective(objective, { simulated: req.body?.simulated === true });
+      return res.json(center.present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/night', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const action = parseNightAction(req.body?.action) ?? 'run';
+    try {
+      const center = sharedCommandCenter();
+      if (action === 'pause') center.night.pause();
+      else if (action === 'cancel') center.night.cancel();
+      else if (action === 'resume') {
+        center.night.resume();
+        center.runNight();
+      } else center.runNight();
+      return res.json(center.present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/grant', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const grant = parsePermissionGrant(req.body);
+    const taskId = grant.taskId || parseTaskId(req.body?.taskId);
+    if (!taskId) return res.status(400).json({ error: 'taskId is required.', reasonCode: 'PLAN_INVALID' });
+    try {
+      await sharedCommandCenter().grantAndResume(taskId, {
+        actor: 'owner',
+        stepId: grant.stepId,
+        proposalId: grant.proposalId,
+        token: grant.token,
+        capability: grant.capability,
+      });
+      return res.json(sharedCommandCenter().present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
   app.get('/api/jarvis/security', async (_req, res) => {

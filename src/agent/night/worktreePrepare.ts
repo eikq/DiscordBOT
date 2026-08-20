@@ -17,9 +17,15 @@ function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).trim();
 }
 
+function pathApiFor(input: string): path.PlatformPath {
+  if (/^[A-Za-z]:[\\/]/.test(input) || input.startsWith('\\\\')) return path.win32;
+  return path;
+}
+
 export function isolatedWorktreePath(controllerRoot: string, name: string): string {
+  const api = pathApiFor(controllerRoot);
   const safe = name.replace(/[^a-zA-Z0-9._-]/g, '-');
-  return path.resolve(path.dirname(controllerRoot), path.basename(controllerRoot) + '-' + safe);
+  return api.resolve(api.dirname(controllerRoot), api.basename(controllerRoot) + '-' + safe);
 }
 
 export function prepareIsolatedWorktree(input: {
