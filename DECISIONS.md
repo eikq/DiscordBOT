@@ -1070,7 +1070,7 @@ uncontrolled self-modification or self-approved privilege expansion.
 
 ### Consequences
 
-- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit) after the Queue 04 suite.
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit). `npm run test:cloud` **553/553**.
 - Owner must still explicitly trust REVIEW_REQUIRED skills.
 - Live night/Ollama skill quality: BLOCKED_LOCAL_ACCEPTANCE.
 

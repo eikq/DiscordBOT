@@ -5,13 +5,16 @@ Agent/model: Cursor Grok 4.6
 
 ## This turn — Queue 04 Safe Evolution + Procedural Skills V2
 
-Labels: IMPLEMENTED (unit tests green). Full `test:cloud` running after push.
-Not LIVE_VERIFIED. SQLite remains canonical. Qdrant is not started.
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+SQLite remains canonical. Qdrant is not started.
 `autoPromote=false`. Jarvis cannot self-approve skill trust.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `866e843`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 ADR: ADR-026.
+Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_skills_v2.test.ts`
+green with related evolution tests; `npm run test:cloud` **553/553**.
 
 Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
 

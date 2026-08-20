@@ -91,7 +91,9 @@ Handoff: ADR-025, `tests/jarvis_memory_v2.test.ts`.
 
 ## Queue 04 — Safe Evolution + Procedural Skills V2
 
-Status: **IN PROGRESS** (cloud-safe software). Not LIVE_VERIFIED.
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+
+Implementation: `866e843`
 
 Preserve `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE`.
 Jarvis may never approve its own privilege expansion.
@@ -111,7 +113,10 @@ Shipped:
 - Isolated benchmark never sets TRUSTED
 - No uncontrolled recursive self-modification
 
-Cloud evidence: targeted skills/evolution tests green; full suite next.
+Cloud evidence: `npx tsc --noEmit` PASS; targeted skills/evolution tests
+green; `npm run test:cloud` **553/553**.
+
+Handoff: ADR-026, `tests/jarvis_skills_v2.test.ts`.
 
 ## Operating constraints still in force
 
