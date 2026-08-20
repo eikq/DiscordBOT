@@ -89,3 +89,14 @@ Real Three.js/R3F Jarvis Core on `/jarvis-lab`:
 - ops rails: real system health (`/api/jarvis/system`), model status, voice/STT, night agent (`/api/jarvis/night`)
 
 Evidence: `src/jarvis/ui/three/*`, `src/jarvis/ui/graph/*`, `src/jarvis/memory/graphAdapter.ts`, `src/jarvis/standalone/labSystem.ts`, tests `jarvis_lab_graph/jarvis_lab_scene`, QA shots `.runtime/qa-lab-final.png`. 203/203 TS tests, tsc + build green. ~144 fps at high on the RTX 5090 laptop.
+
+## Queue 09 — Command Center V2 modes (addendum, not a dashboard rewrite)
+
+Status: IMPLEMENTED + UNIT_VERIFIED (cloud). Not LIVE_VERIFIED.
+
+`/jarvis-lab` now switches one operational mode at a time:
+
+ASSISTANT · PRESENTER · OPERATIONS · MEMORY · INTELLIGENCE · DEVICES
+
+Camera Core/Graph remain visual stage controls. CommandCenterRuntime
+is unchanged. See ADR-031 and `src/jarvis/ui/commandCenterV2.ts`.

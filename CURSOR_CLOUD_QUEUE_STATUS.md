@@ -263,6 +263,44 @@ work-agent / perception tests green (86/86 in that set). Full
 
 Handoff: ADR-030, `tests/jarvis_proactive_runtime.test.ts`.
 
+## Queue 09 — Command Center V2 unified operational interface
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+No live `/jarvis-lab` visual sign-off. Native helper is not installed.
+
+Implementation: `3c6f5ce19e92cbfa129404ca45d6b6b5a691670e`
+Queue 09 HEAD: pending pin after this docs commit
+
+Presentation-only mode shell over existing Command Center snapshots.
+Did **not** rebuild CommandCenterRuntime, Core, or schedulers.
+
+Shipped:
+
+- Six modes: ASSISTANT, PRESENTER, OPERATIONS, MEMORY, INTELLIGENCE,
+  DEVICES. Default Assistant. One primary body at a time.
+- Assistant home: conversation, active task, model, voice, alert,
+  recommended next action
+- Operations: request, route, DAG, active step, capabilities,
+  permission wait, verification, bounded recent tasks
+- Presenter: existing briefing architecture + fullscreen-ready chrome
+- Memory: provenance, active/superseded, owner corrections via Ask
+- Intelligence: models, spec, traces, certifications, benchmarks,
+  candidates; `INSUFFICIENT_DATA` when evidence is absent
+- Devices: online/offline, VIEW only, SIMULATION vs LIVE, permission
+  boundary. SEE != CLICK. VIEW != CONTROL
+- Global presence chip: REAL / SIMULATION / DEGRADED / OFFLINE.
+  Simulation is never visually treated as live hardware
+- Meaningful motion only (request path, narration target, alert,
+  permission wait); reduced motion respected
+- Widescreen / notebook / Presenter layouts. No dedicated phone layout
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_command_center_v2.test.ts` plus lab-ui / briefing /
+command-center / lab-scene tests green. Full `npm run test:cloud`
+deferred while later Cloud follow-ups are queued.
+
+Handoff: ADR-031, `tests/jarvis_command_center_v2.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution

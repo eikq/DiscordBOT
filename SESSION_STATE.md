@@ -3,7 +3,30 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 08 Proactive Runtime + Scheduler + Night Agent V2
+## This turn — Queue 09 Command Center V2 unified operational interface
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+No live `/jarvis-lab` visual sign-off. Native helper is not installed.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `3c6f5ce19e92cbfa129404ca45d6b6b5a691670e`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-031.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_command_center_v2.test.ts` plus lab-ui / briefing /
+command-center / lab-scene tests green. Full `npm run test:cloud`
+deferred while later Cloud follow-ups are queued.
+
+Presentation-only mode shell (Assistant, Presenter, Operations, Memory,
+Intelligence, Devices). No CommandCenterRuntime rewrite. Global
+REAL/SIMULATION/DEGRADED/OFFLINE. Simulation is never live hardware.
+Owner corrections go through Ask. Intelligence uses INSUFFICIENT_DATA
+when evidence is absent.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 08 Proactive Runtime + Scheduler + Night Agent V2
 
 Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
 No live GPU / timer / unattended Night coding claims.

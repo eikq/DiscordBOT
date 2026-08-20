@@ -1288,6 +1288,73 @@ the existing scheduler audit.
 - Live reminder timers, GPU sensors, and unattended Night coding: host-only /
   BLOCKED_LOCAL_ACCEPTANCE. NIGHT-BUILD-010 scheduler is still not installed.
 
+## ADR-031 — Command Center V2 is a mode shell, not a backend rewrite
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live `/jarvis-lab` visual QA and native-shell layouts remain
+BLOCKED_LOCAL_ACCEPTANCE / host-only.
+
+### Context
+
+Queue 09 needed a unified operational interface for `/jarvis-lab` and a
+future native shell: Assistant, Presenter, Operations, Memory,
+Intelligence, and Devices. The lab already dumped memory, live ops,
+evolution, intelligence, devices, sources, workspace, and health at
+once. Camera `core` / `graph` / `presenter` is a visual stage, not this
+mode list. CommandCenterRuntime, Core, schedulers, and the Digital Me
+dashboard were not in scope.
+
+### Decision
+
+- Do not rebuild backend architecture. V2 is a presentation shell over
+  `presentCommandCenter`, lab status, Ask memory refs, and the existing
+  Presenter briefing pipeline.
+- Exactly six operational modes. Default is Assistant. Only one mode
+  body is primary at a time. Camera Core/Graph stay stage controls.
+- Global presence is `REAL` | `SIMULATION` | `DEGRADED` | `OFFLINE`.
+  `simulationMode` or a simulated task forces SIMULATION. Perception
+  being fixture-simulated does not by itself relabel the whole shell
+  REAL→SIMULATION; device rows still say SIMULATION / VIEW only.
+  REAL never claims live hardware (`hardwareClaim: 'none'`).
+- Operations shows request, route, DAG, active step, capabilities,
+  permission wait, verification, and bounded recent tasks (5).
+- Memory shows provenance and ACTIVE/SUPERSEDED/FORGOTTEN/EXPIRED.
+  Owner corrections reuse Ask phrases (`remember` / `forget` /
+  `change` / `that is not right`). No hidden reasoning. No new
+  mutating memory HTTP API.
+- Intelligence shows model selection, runtime spec, traces,
+  certifications, benchmarks, and candidates. Missing evidence is
+  `INSUFFICIENT_DATA`.
+- Devices stay honest: online/offline, VIEW not CONTROL, SIMULATION
+  vs LIVE, SEE != CLICK.
+- Presenter reuses `PresenterBriefing` with a fullscreen-ready layout.
+- Motion is limited to request path, narration target, new alert, and
+  permission wait, and is skipped when reduced motion is set.
+- Layouts cover desktop widescreen, notebook, and Presenter display.
+  A dedicated phone layout is not required.
+
+### Alternatives considered
+
+- A new CommandCenterRuntime or fourth scheduler — rejected.
+- Boolean `isOps` / `isMemory` soup on one mega-panel — rejected;
+  explicit mode variants.
+- Treating always-on perception fixtures as global SIMULATION, which
+  would make REAL unreachable in the lab — rejected for the chip;
+  device honesty stays on the device rows.
+- New owner-correction HTTP endpoint — rejected; Ask already parses
+  those phrases.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED
+  (`tests/jarvis_command_center_v2.test.ts`; `npx tsc --noEmit` PASS).
+  Not LIVE_VERIFIED.
+- Live visual QA of the mode shell, Presenter fullscreen on a real
+  display, and native-shell hosting: host-only / LA-026–027 remain
+  PARTIAL. Do not mark LIVE_VERIFIED from Cloud.
+
+
 
 
 
