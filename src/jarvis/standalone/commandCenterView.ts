@@ -85,6 +85,18 @@ export type CommandCenterClientSnapshot = {
   notifications: Array<{ id: string; summary: string; severity: string; simulated: boolean }>;
   control: CommandCenterSnapshot['control'] & { autonomyLabel: string; maxAutonomyLabel: string };
   vision: { title: string; simulated: boolean; elements: number } | null;
+  intelligence: {
+    traces: { count: number; lastRoute?: string; lastInput?: string };
+    analyzer: { status: string; reason?: string; samples: number };
+    runtimeSpec: { id: string; version: number };
+    specCandidates: Array<{ id: string; hypothesis: string; status: string }>;
+    models: Array<{ id: string; trustTier: string }>;
+    certifications: Array<{ modelProfileId: string; status: string; passed: number; total: number }>;
+    efficiency: { status: string; p50Ms?: number; p95Ms?: number; tokensPerSec?: number; reason?: string };
+    artifacts: Array<{ taskId: string; status: string; artifactClass: string; simulated: boolean }>;
+    scheduler: { competingSchedulerAdded: false; jobIsPermanentPermission: false };
+    productionPromotionAllowed: false;
+  };
 };
 
 export function presentCommandCenter(
@@ -223,5 +235,46 @@ export function presentCommandCenter(
           elements: snapshot.vision.elements.length,
         }
       : null,
+    intelligence: {
+      traces: {
+        count: snapshot.intelligence.traces.count,
+        lastRoute: snapshot.intelligence.traces.recent.at(-1)?.route,
+        lastInput: snapshot.intelligence.traces.recent.at(-1)?.inputText,
+      },
+      analyzer: {
+        status: snapshot.intelligence.analyzer.status,
+        reason: snapshot.intelligence.analyzer.reason,
+        samples: snapshot.intelligence.analyzer.sampleCount,
+      },
+      runtimeSpec: snapshot.intelligence.runtimeSpec,
+      specCandidates: snapshot.intelligence.specCandidates.map(item => ({
+        id: item.id,
+        hypothesis: item.hypothesis,
+        status: item.status,
+      })),
+      models: snapshot.intelligence.models.map(item => ({
+        id: item.id,
+        trustTier: item.trustTier,
+      })),
+      certifications: snapshot.intelligence.certifications.map(item => ({
+        modelProfileId: item.modelProfileId,
+        status: item.status,
+        passed: item.passed,
+        total: item.total,
+      })),
+      efficiency: {
+        status: snapshot.intelligence.efficiency.status,
+        p50Ms: snapshot.intelligence.efficiency.p50Ms,
+        p95Ms: snapshot.intelligence.efficiency.p95Ms,
+        tokensPerSec: snapshot.intelligence.efficiency.tokensPerSec,
+        reason: snapshot.intelligence.efficiency.reason,
+      },
+      artifacts: snapshot.intelligence.artifacts,
+      scheduler: {
+        competingSchedulerAdded: false,
+        jobIsPermanentPermission: false,
+      },
+      productionPromotionAllowed: false,
+    },
   };
 }

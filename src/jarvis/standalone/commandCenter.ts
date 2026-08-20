@@ -4,9 +4,12 @@ import { adaptPlanForFailures } from '../agent/adaptivePlan';
 import { createCapabilityWorkInvoker } from '../agent/capabilityInvoker';
 import { inferCapabilityFromObjective, planForObjective } from '../agent/capabilityResolve';
 import { synthesizeTaskResponse } from '../agent/synthesize';
+import { ArtifactWorkflow, type ArtifactTask } from '../artifacts';
 import { routeJarvisRequest, type RouteDecision } from '../intent/requestRouter';
 import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
 import { writeExperienceEpisode } from '../memory/experienceBridge';
+import { CapabilityCertificationBank, ModelProfileRegistry } from '../models';
+import type { CertificationRun, ModelProfile } from '../models/types';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
 import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
@@ -35,8 +38,15 @@ import {
   type JarvisJournal,
   type NightCycleReport,
 } from '../evolution';
+import { RuntimeSpecOptimizer, type RuntimeSpecCandidate } from '../evolution/runtimeSpecOptimizer';
 import { defaultRuntimeRoot } from '../storage/operationalDb';
 import { ProactiveMonitor, type MonitorSignal } from '../monitor';
+import { efficiencyFromTraces, type EfficiencySnapshot } from '../ops/efficiencyMetrics';
+import { OpsPersistence } from '../ops/opsPersistence';
+import { auditSchedulers, type SchedulerAuditSnapshot } from '../ops/schedulerAudit';
+import { TraceAnalyzer } from '../ops/traceAnalyzer';
+import { TraceStore } from '../ops/traceStore';
+import type { JarvisTraceRecord } from '../ops/traceTypes';
 import { visualStateFromEvents } from '../ops/visualState';
 import type { JarvisVisualState } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
@@ -44,6 +54,7 @@ import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } f
 import type { JarvisOperationEvent } from '../security/types';
 import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
+import { RuntimeSpecRegistry, type JarvisRuntimeSpec } from './runtimeSpec';
 
 export type CommandCenterSnapshot = {
   simulationMode: boolean;
@@ -80,6 +91,32 @@ export type CommandCenterSnapshot = {
   vision: VisualContext | null;
   control: OwnerControlState;
   notifications: MonitorSignal[];
+  intelligence: IntelligenceSnapshot;
+};
+
+export type IntelligenceSnapshot = {
+  traces: {
+    count: number;
+    recent: Array<{
+      id: string;
+      at: string;
+      route?: string;
+      requestId?: string;
+      taskId?: string;
+      inputText?: string;
+      simulated?: boolean;
+      success?: boolean;
+    }>;
+  };
+  analyzer: ReturnType<TraceAnalyzer['summarize']>;
+  runtimeSpec: { id: string; version: number };
+  specCandidates: Array<{ id: string; hypothesis: string; status: string; simulated?: boolean }>;
+  models: Array<{ id: string; trustTier: string; family: string; securityAuthority: false }>;
+  certifications: Array<{ id: string; modelProfileId: string; status: string; passed: number; total: number }>;
+  efficiency: EfficiencySnapshot;
+  artifacts: Array<{ taskId: string; status: string; artifactClass: string; simulated: boolean }>;
+  scheduler: SchedulerAuditSnapshot;
+  productionPromotionAllowed: false;
 };
 
 export type CommandCenterOptions = {
@@ -91,6 +128,7 @@ export type CommandCenterOptions = {
   persistRoot?: string;
   workDbPath?: string;
   evolutionDbPath?: string;
+  opsDbPath?: string;
   memoryStore?: JarvisMemoryStore;
 };
 
@@ -116,6 +154,14 @@ export class CommandCenterRuntime {
   public readonly night: NightCycle;
   public readonly reflectionLedger: ReflectionLedger;
   public readonly persistence?: EvolutionPersistence;
+  public readonly ops?: OpsPersistence;
+  public readonly traces: TraceStore;
+  public readonly analyzer = new TraceAnalyzer();
+  public readonly runtimeSpecs: RuntimeSpecRegistry;
+  public readonly specOptimizer: RuntimeSpecOptimizer;
+  public readonly models: ModelProfileRegistry;
+  public readonly certifications: CapabilityCertificationBank;
+  public readonly artifacts: ArtifactWorkflow;
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
@@ -138,7 +184,9 @@ export class CommandCenterRuntime {
     const persistRoot = options.persistRoot;
     const evolutionDb = options.evolutionDbPath ?? (persistRoot ? path.join(persistRoot, 'evolution.db') : undefined);
     const workDb = options.workDbPath ?? (persistRoot ? path.join(persistRoot, 'work.db') : undefined);
+    const opsDb = options.opsDbPath ?? (persistRoot ? path.join(persistRoot, 'ops.db') : undefined);
     this.persistence = evolutionDb ? new EvolutionPersistence(evolutionDb) : undefined;
+    this.ops = opsDb ? new OpsPersistence(opsDb) : undefined;
     const now = options.now ?? (() => Date.now());
     this.experiences = new ExperienceStore(now, this.persistence?.experiences);
     this.claims = new ClaimStore(now, this.persistence?.claims);
@@ -149,6 +197,15 @@ export class CommandCenterRuntime {
     this.candidates = new CandidateManager(this.persistence?.candidates);
     this.reflectionLedger = new ReflectionLedger(this.persistence?.reflections);
     this.benchmarks = new BenchmarkBank(now, this.persistence?.benchmarks);
+    this.traces = new TraceStore({ db: this.ops?.db, now });
+    this.runtimeSpecs = new RuntimeSpecRegistry(now, this.ops?.collection<JarvisRuntimeSpec>('runtime_specs', item => item.id));
+    this.specOptimizer = new RuntimeSpecOptimizer(
+      this.runtimeSpecs,
+      this.ops?.collection<RuntimeSpecCandidate>('spec_candidates', item => item.id),
+    );
+    this.models = new ModelProfileRegistry(this.ops?.collection<ModelProfile>('model_profiles', item => item.id));
+    this.certifications = new CapabilityCertificationBank(now, this.ops?.collection<CertificationRun>('certifications', item => item.id));
+    this.artifacts = new ArtifactWorkflow(now, this.ops?.collection<ArtifactTask>('artifact_tasks', item => item.taskId));
     this.memoryStore = options.memoryStore;
     this.agent = new WorkAgent({
       store: new WorkTaskStore({ now: options.now, dbPath: workDb }),
@@ -173,6 +230,9 @@ export class CommandCenterRuntime {
       now: options.now,
       simulated,
       runBenchmarks: () => runCloudBenchmarkBank(this.benchmarks, now).length,
+      traces: this.traces,
+      analyzer: this.analyzer,
+      specOptimizer: this.specOptimizer,
     });
   }
 
@@ -238,6 +298,7 @@ export class CommandCenterRuntime {
       vision: this.vision,
       control: this.control.snapshot(),
       notifications: [...this.notifications],
+      intelligence: this.intelligenceSnapshot(),
     };
   }
 
@@ -273,6 +334,7 @@ export class CommandCenterRuntime {
   public async runObjective(objective: string, options: { simulated?: boolean; sessionId?: string } = {}): Promise<WorkTask> {
     const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
     if (simulated) this.control.patch({ simulationMode: true }, 'owner');
+    const started = Date.now();
     const capabilityId = inferCapabilityFromObjective(objective, this.host);
     const routed = routeJarvisRequest({ text: objective });
     const route = capabilityId && routed.route === 'CONVERSATION'
@@ -286,7 +348,95 @@ export class CommandCenterRuntime {
     );
     const task = this.agent.receive(objective, plan, { simulated });
     this.lastRequest = { route, objective, taskId: task.id };
-    return this.agent.run(task.id);
+    const ran = await this.agent.run(task.id);
+    this.recordTaskTrace(ran, {
+      sessionId: options.sessionId,
+      route: route.route,
+      started,
+    });
+    return ran;
+  }
+
+  public recordTurnTrace(input: Omit<JarvisTraceRecord, 'id' | 'at'>): JarvisTraceRecord {
+    return this.traces.record(input);
+  }
+
+  private recordTaskTrace(task: WorkTask, meta: { sessionId?: string; route: string; started: number }): void {
+    const retries = task.plan.reduce((acc, step) => acc + (step.retryPolicy?.attempted ?? 0), 0);
+    this.traces.record({
+      sessionId: meta.sessionId,
+      taskId: task.id,
+      route: meta.route,
+      inputText: task.objective,
+      capabilities: task.plan.map(step => step.capability).filter((id): id is string => Boolean(id)),
+      skillRefs: this.skills.retrieveTrusted(task.objective).map(item => item.skillId),
+      toolResults: task.toolResults.map(item => ({
+        toolName: item.capability,
+        status: item.status,
+        summary: item.summary,
+      })),
+      totalLatencyMs: Date.now() - meta.started,
+      retryCount: retries,
+      errors: task.errors.map(item => ({ code: item.code, message: item.message })),
+      verification: task.outcome,
+      experienceId: `exp_task_${task.id}`,
+      simulated: task.simulated,
+      success: task.status === 'COMPLETED',
+      modelProfileId: this.runtimeSpecs.current().layers.intelligence.modelProfileId,
+      engine: this.runtimeSpecs.current().layers.engine.interactiveProfile,
+    });
+  }
+
+  private intelligenceSnapshot(): IntelligenceSnapshot {
+    const traces = this.traces.list(12);
+    return {
+      traces: {
+        count: this.traces.count(),
+        recent: traces.map(item => ({
+          id: item.id,
+          at: item.at,
+          route: item.route,
+          requestId: item.requestId,
+          taskId: item.taskId,
+          inputText: item.inputText,
+          simulated: item.simulated,
+          success: item.success,
+        })),
+      },
+      analyzer: this.analyzer.summarize(this.traces.list(80), 'route'),
+      runtimeSpec: {
+        id: this.runtimeSpecs.current().id,
+        version: this.runtimeSpecs.current().version,
+      },
+      specCandidates: this.specOptimizer.list().slice(-6).map(item => ({
+        id: item.id,
+        hypothesis: item.hypothesis,
+        status: item.status,
+        simulated: item.simulated,
+      })),
+      models: this.models.list().map(item => ({
+        id: item.id,
+        trustTier: item.trustTier,
+        family: item.family,
+        securityAuthority: false as const,
+      })),
+      certifications: this.certifications.history().slice(-6).map(item => ({
+        id: item.id,
+        modelProfileId: item.modelProfileId,
+        status: item.status,
+        passed: item.results.filter(row => row.passed).length,
+        total: item.results.length,
+      })),
+      efficiency: efficiencyFromTraces(this.traces.list(80)),
+      artifacts: this.artifacts.list().slice(-6).map(item => ({
+        taskId: item.taskId,
+        status: item.status,
+        artifactClass: item.artifactClass,
+        simulated: item.simulated,
+      })),
+      scheduler: auditSchedulers(),
+      productionPromotionAllowed: false,
+    };
   }
 
   public runNight(): NightCycleReport {

@@ -561,6 +561,24 @@ export class JarvisLabRuntime {
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak);
+    const center = this.commandCenter;
+    if (center) {
+      const spec = center.runtimeSpecs.current();
+      center.recordTurnTrace({
+        requestId: adjusted.request.requestId,
+        sessionId: prepared.sessionId,
+        route: route.route,
+        inputText: String(input.text || ''),
+        totalLatencyMs: adjusted.timings.totalMs,
+        tokens: adjusted.llm?.outputTokens,
+        tokensPerSec: adjusted.llm?.tokensPerSec,
+        memoryRefs: adjusted.result.memoryRefs?.map(item => item.canonicalId),
+        capabilities: input.capabilities,
+        modelProfileId: spec.layers.intelligence.modelProfileId,
+        engine: spec.layers.engine.interactiveProfile,
+        success: true,
+      });
+    }
     return {
       ...adjusted,
       coreState: 'complete',

@@ -7,7 +7,9 @@ Labels: **BLOCKED_LOCAL_ACCEPTANCE**. Do not mark these LIVE_VERIFIED until the 
 runs them on the physical Windows machine.
 
 Recommended order: LA-001 → LA-002 → LA-008 → LA-003 → LA-004 → LA-005 →
-LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013.
+LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013 → LA-014 →
+LA-015 → LA-017 → LA-018 → LA-019 → LA-020 → LA-021 → LA-022 → LA-016 →
+LA-023 → LA-024 → LA-025.
 
 ---
 
@@ -141,6 +143,121 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013.
   wait, evolution graph (no decorative edges), SIMULATION vs REAL labels.
 - Expected: owner accepts or files specific UI defects. Not claimed by cloud.
 - Failure evidence: owner notes, screenshots, rejected states.
+
+## LA-014 local model discovery
+
+- Purpose: Discover installed Ollama/Qwen models without claiming unverified abilities.
+- Preconditions: local Ollama; no Discord required.
+- Exact verification: list model ids, size, quantization; map to ModelProfileRegistry
+  (`local-env-llm`, `qwen38-27b-aligned`, optional `qwen38-27b-uncensored`).
+- Expected: unlisted models stay `unverified`. RESTRICTED uncensored never gains
+  `securityAuthority`.
+- Failure evidence: `ollama list`, profile JSON, trust tier.
+
+## LA-015 aligned Qwen3.8 27B benchmark
+
+- Purpose: Live chat/tool quality for the aligned local Qwen3.8 27B profile.
+- Preconditions: LA-014; `digital-me-qwen38:27b-ad-q4km` (or current `.env` model).
+- Exact verification: run CapabilityCertificationBank categories against the real
+  model (not cloud fixtures).
+- Expected: `lastLocallyVerified` set only after owner review. Cloud remains
+  FIXTURE_ONLY.
+- Failure evidence: cert run JSON, Ollama logs, tokens/sec.
+
+## LA-016 optional RESTRICTED uncensored Qwen benchmark
+
+- Purpose: Optional specialist benchmark for an abliterated/uncensored Qwen.
+- Preconditions: Owner opts in; model pulled locally.
+- Exact verification: profile stays RESTRICTED; cannot authorize, grant leases,
+  or change trust policy. Router must not auto-select it.
+- Expected: specialist-only. No security authority.
+- Failure evidence: route decision JSON, permission audit.
+
+## LA-017 model capability certification (live)
+
+- Purpose: Certify chat, Thai, structured output, tool calling, multi-step tools,
+  coding, research, context retention, vision, recovery on real hardware.
+- Preconditions: LA-015. Vision/hardware categories may stay unavailable.
+- Exact verification: each category records pass/fail with fixtures + live calls.
+  Unavailable hardware → skip, not invented pass.
+- Expected: CERTIFIED only for measured categories.
+- Failure evidence: certification run, skipped reasons.
+
+## LA-018 context retention benchmark
+
+- Purpose: Measure whether the local model keeps prior-turn facts inside the
+  configured context window.
+- Preconditions: LA-015; known contextTokens.
+- Exact verification: two-turn fixture with a unique Thai+English token.
+- Expected: retained or explicit miss. Do not claim retention from cloud fixtures.
+- Failure evidence: prompts (redacted), window size, reply.
+
+## LA-019 Thai / Windows IME benchmark
+
+- Purpose: Real Windows IME + combining marks through dashboard, lab, and CLI.
+- Preconditions: Windows host; Thai keyboard.
+- Exact verification: type `น้ํา` / tone marks into `/jarvis-lab`, `/api/jarvis/ask`,
+  `npm run jarvis:ask`. Compare code points to the cloud fixture
+  `THAI_COMBINING_FIXTURE`.
+- Expected: no NFC folding that hides combining-mark bugs unless the owner
+  accepts NFC. Cloud tests are not a substitute.
+- Failure evidence: code-point dumps, screenshots.
+
+## LA-020 tokens/sec and latency p50/p95
+
+- Purpose: Record measured generation speed and latency percentiles.
+- Preconditions: LA-015; several real turns (n≥5 for p50/p95).
+- Exact verification: TraceAnalyzer + efficiency snapshot from live traces.
+  INSUFFICIENT_DATA if n is too small.
+- Expected: no fabricated tok/s. Hardware RAM/VRAM only if probed.
+- Failure evidence: ops.db traces, efficiency JSON.
+
+## LA-021 RAM / VRAM / CPU / GPU probes
+
+- Purpose: Attach measured resource fields to efficiency traces.
+- Preconditions: local GPU tooling the owner already uses.
+- Exact verification: probe before/after a Qwen turn; write only measured numbers.
+- Expected: omitted fields stay omitted. Cloud must not invent them.
+- Failure evidence: probe output, ops.db.
+
+## LA-022 hardware-aware model routing
+
+- Purpose: Casual vs deep vs coding vs voice vs idle night routing using
+  certified evidence.
+- Preconditions: LA-014–017; optional second local model.
+- Exact verification: voice load does not select the stronger night model;
+  idle=true required for night_background stronger routing; RESTRICTED never
+  auto-selected.
+- Expected: deterministic policy, no speculative scores.
+- Failure evidence: route decisions, hardware.idle, cert status.
+
+## LA-023 optional MoneyPrinterTurbo provider review
+
+- Purpose: Evaluate MoneyPrinterTurbo as a **local optional** media provider.
+- Preconditions: Owner installs nothing until this review. Do not vendor it.
+- Exact verification: contract fit vs SimulatedMediaProvider stages; license;
+  network; no auto-publish.
+- Expected: keep `installed: false` until an explicit local install task.
+- Failure evidence: review notes. Cloud simulator stays the default.
+
+## LA-024 real artifact video pipeline
+
+- Purpose: Produce a real video artifact and validate it.
+- Preconditions: local provider (native or reviewed MoneyPrinterTurbo).
+- Exact verification: TOPIC→…→DELIVER; artifact path exists; mime/size;
+  ARTIFACT READY ↛ publish without owner + ActionGate.
+- Expected: simulated cloud artifacts stay labeled SIMULATION.
+- Failure evidence: output manifest, validation, ActionGate audit.
+
+## LA-025 Thai IME + Command Center live traces
+
+- Purpose: Confirm Command Center Intelligence panel shows real traces, spec,
+  certs, efficiency, and artifact tasks without hidden reasoning.
+- Preconditions: LA-002 + at least one live ask.
+- Exact verification: empty analyzer shows INSUFFICIENT_DATA; live traces show
+  requestId/route only; no chain-of-thought.
+- Expected: owner visual check. Cloud unit tests are not live QA.
+- Failure evidence: screenshots, present() JSON.
 
 ---
 

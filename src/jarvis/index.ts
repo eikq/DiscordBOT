@@ -17,7 +17,7 @@ export type {
 } from './core/types';
 export { PassThroughJarvisCore, UnavailableJarvisCore } from './core/JarvisCore';
 export { createJarvisRequest } from './core/request';
-export { JarvisMemoryRetrieval } from './memory';
+export { JarvisMemoryRetrieval, fuseMemoryRetrieval } from './memory';
 export type {
   CompactMemoryItem,
   JarvisMemoryService,
@@ -47,6 +47,8 @@ export type {
 export { LocalLlmJarvisCore } from './standalone/LocalLlmJarvisCore';
 export type { LocalLlmJarvisCoreOptions, StandaloneLlm, TimedCoreResult } from './standalone/LocalLlmJarvisCore';
 export { applyJarvisInteractiveProfile, describeJarvisRuntimeProfile } from './standalone/runtimeProfile';
+export { defaultRuntimeSpec, RuntimeSpecRegistry, diffRuntimeSpec } from './standalone/runtimeSpec';
+export type { JarvisRuntimeSpec } from './standalone/runtimeSpec';
 export { compactTurnTimings } from './standalone/turnTimings';
 export type { TurnTimings, LlmTurnMetrics } from './standalone/turnTimings';
 export {
@@ -236,6 +238,7 @@ export {
   NightCycle,
   AffectEngine,
   CandidateManager,
+  RuntimeSpecOptimizer,
   ModelAdaptationRegistry,
   buildJournal,
   buildEvolutionGraph,
@@ -243,7 +246,11 @@ export {
   applyTaskOutcome,
 } from './evolution';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
-export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, efficiencyFromTraces, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
+export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, realModelCertificationBlocked } from './models';
+export { ArtifactWorkflow } from './artifacts';
+export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';
+export { THAI_COMBINING_FIXTURE } from './i18n/thaiIntegrity';
 export { OwnerControl } from './control';
 export { ProactiveMonitor } from './monitor';
 export { SimulatedDeviceProvider } from './devices';

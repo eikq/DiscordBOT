@@ -15,3 +15,8 @@ export type { JarvisStructuredError } from './errors';
 export { budgetExceeded, mergeBudgets, remainingBudget } from './budgets';
 export { operationalLabel, visualStateFromEvent, visualStateFromEvents } from './visualState';
 export { formatSseComment, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay } from './sse';
+export { TraceStore } from './traceStore';
+export { TraceAnalyzer, ANALYZER_INSUFFICIENT } from './traceAnalyzer';
+export { efficiencyFromTraces } from './efficiencyMetrics';
+export { auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './schedulerAudit';
+export { OpsPersistence, defaultOpsDbPath } from './opsPersistence';

@@ -267,6 +267,8 @@ test('jarvis lab page is a command center and stays Discord-free', () => {
   assert.match(panels, /SIMULATION/);
   assert.match(panels, /Run task/);
   assert.match(panels, /Night cycle/);
+  assert.match(panels, /Intelligence/);
+  assert.match(panels, /INSUFFICIENT_DATA/);
   assert.doesNotMatch(panels, /Discord/);
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');

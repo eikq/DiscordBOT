@@ -182,6 +182,76 @@ export default function CommandCenterPanels({
       </section>
 
       <section className="jcc-block">
+        <h2>Intelligence</h2>
+        <dl className="jcc-kv">
+          <div><dt>Traces</dt><dd>{snapshot?.intelligence?.traces.count ?? 0}</dd></div>
+          <div><dt>Spec</dt><dd>{snapshot?.intelligence?.runtimeSpec.id ?? 'spec_baseline_v1'}</dd></div>
+          <div>
+            <dt>Analyzer</dt>
+            <dd>{snapshot?.intelligence?.analyzer.status ?? 'INSUFFICIENT_DATA'}</dd>
+          </div>
+        </dl>
+        {snapshot?.intelligence?.traces.lastRoute ? (
+          <p className="jcc-hint">
+            Last route {snapshot.intelligence.traces.lastRoute}
+            {snapshot.intelligence.traces.lastInput ? ` · ${snapshot.intelligence.traces.lastInput}` : ''}
+          </p>
+        ) : (
+          <p className="jcc-empty">No operational traces yet.</p>
+        )}
+        {snapshot?.intelligence?.analyzer.status === 'INSUFFICIENT_DATA' ? (
+          <p className="jcc-empty">{snapshot.intelligence?.analyzer.reason || 'INSUFFICIENT_DATA'}</p>
+        ) : (
+          <p className="jcc-hint">
+            Efficiency {snapshot?.intelligence?.efficiency.status}
+            {snapshot?.intelligence?.efficiency.p50Ms != null ? ` · p50 ${Math.round(snapshot.intelligence.efficiency.p50Ms)}ms` : ''}
+            {snapshot?.intelligence?.efficiency.p95Ms != null ? ` · p95 ${Math.round(snapshot.intelligence.efficiency.p95Ms)}ms` : ''}
+          </p>
+        )}
+        <p className="jcc-hint">
+          Models {(snapshot?.intelligence?.models ?? []).map(item => `${item.id}:${item.trustTier}`).join(' · ') || 'none'}
+        </p>
+        <p className="jcc-hint">RESTRICTED models have no security authority.</p>
+        {(snapshot?.intelligence?.certifications.length ?? 0) > 0 ? (
+          <p className="jcc-hint">
+            Certification {snapshot?.intelligence?.certifications[0]?.status}
+            {' · '}
+            {snapshot?.intelligence?.certifications[0]?.passed}/{snapshot?.intelligence?.certifications[0]?.total}
+          </p>
+        ) : (
+          <p className="jcc-empty">Model certification is fixture-only until local acceptance.</p>
+        )}
+        {(snapshot?.intelligence?.specCandidates.length ?? 0) > 0 ? (
+          <ul className="jcc-evidence">
+            {snapshot?.intelligence?.specCandidates.map(item => (
+              <li key={item.id}>
+                <code>{item.status}</code>
+                <span>{item.hypothesis}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="jcc-empty">No runtime-spec candidates. Auto-promote is denied.</p>
+        )}
+        {(snapshot?.intelligence?.artifacts.length ?? 0) > 0 ? (
+          <ul className="jcc-evidence">
+            {snapshot?.intelligence?.artifacts.map(item => (
+              <li key={item.taskId}>
+                <code>{item.status}</code>
+                <span>{item.artifactClass}</span>
+                {item.simulated ? <small>SIMULATION</small> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="jcc-empty">No artifact tasks. Media provider is simulated; publish stays owner-gated.</p>
+        )}
+        <p className="jcc-hint">
+          Schedulers: reminders, night cycle, monitor. Jobs are not permissions.
+        </p>
+      </section>
+
+      <section className="jcc-block">
         <h2>Source graph</h2>
         {graph.length === 0 ? (
           <p className="jcc-empty">No research domains this session.</p>

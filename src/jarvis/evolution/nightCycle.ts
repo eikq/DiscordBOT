@@ -1,11 +1,14 @@
 import type { JarvisEventBus } from '../security/eventBus';
 import { mergeBudgets } from '../ops/budgets';
 import type { JarvisBudgets, ResourcePriority } from '../ops/types';
+import { ANALYZER_INSUFFICIENT, TraceAnalyzer } from '../ops/traceAnalyzer';
+import type { JarvisTraceRecord } from '../ops/traceTypes';
 import type { ExperienceStore } from './experienceStore';
 import { FailureLedger } from './failureLearning';
 import { GrowthPlanner } from './growthPlanner';
 import { reflectStructured } from './reflectionEngine';
 import type { ReflectionLedger } from './reflectionLedger';
+import type { RuntimeSpecOptimizer } from './runtimeSpecOptimizer';
 import type { CapabilitySelfModel } from './selfModel';
 import type { SkillVersionRegistry } from './skillVersions';
 
@@ -39,6 +42,9 @@ export type NightCycleReport = {
   benchmarksRun: number;
   pausedFor?: ResourcePriority;
   simulated?: boolean;
+  traceEvidence: 'INSUFFICIENT_DATA' | 'consumed';
+  specCandidatesReviewed: number;
+  autoPromoted: false;
 };
 
 export type NightCycleOptions = {
@@ -55,6 +61,9 @@ export type NightCycleOptions = {
   simulated?: boolean;
   resource?: () => ResourcePriority;
   runBenchmarks?: () => number;
+  traces?: { list: (limit?: number) => JarvisTraceRecord[] };
+  analyzer?: TraceAnalyzer;
+  specOptimizer?: RuntimeSpecOptimizer;
 };
 
 export class NightCycle {
@@ -211,6 +220,7 @@ export class NightCycle {
     }
     if (stage === 'BENCHMARK') {
       this.report.benchmarksRun = this.options.runBenchmarks?.() ?? 0;
+      this.consumeOperationalEvidence();
     }
     if (stage === 'SELECT_GROWTH_GOALS' && this.options.growth) {
       for (const fail of this.options.failures?.recurring() ?? []) {
@@ -233,6 +243,37 @@ export class NightCycle {
       this.report.failuresDetected = this.options.failures?.recurring().length ?? experiences.filter(item => item.outcome === 'failure').length;
     }
   }
+
+  private consumeOperationalEvidence(): void {
+    const traces = this.options.traces?.list(80) ?? [];
+    const analyzer = this.options.analyzer ?? new TraceAnalyzer();
+    const report = analyzer.summarize(traces, 'capability');
+    this.report.traceEvidence = report.status === 'ok' ? 'consumed' : ANALYZER_INSUFFICIENT;
+    const retries = traces.map(item => item.retryCount).filter((value): value is number => typeof value === 'number');
+    const avgRetries = retries.length ? retries.reduce((acc, value) => acc + value, 0) / retries.length : 0;
+    this.options.specOptimizer?.considerFromEvidence({
+      sampleCount: traces.length,
+      avgRetries,
+      simulated: this.options.simulated,
+    });
+    const candidates = this.options.specOptimizer?.list() ?? [];
+    this.report.specCandidatesReviewed = candidates.length;
+    this.report.autoPromoted = false;
+    const review = candidates.find(item => item.status === 'PROMOTION_CANDIDATE');
+    if (review && this.options.growth && this.options.growth.active().length < 3) {
+      const id = `goal_spec_${review.id.slice(-8)}`;
+      if (!this.options.growth.list().some(item => item.id === id)) {
+        this.options.growth.propose({
+          id,
+          title: 'Owner review runtime spec candidate',
+          evidence: review.hypothesis,
+          practice: 'Inspect isolated benchmark; do not auto-promote',
+          metric: 'owner_review',
+          successCondition: 'Owner accepts or rejects the spec candidate',
+        });
+      }
+    }
+  }
 }
 
 function emptyReport(simulated?: boolean): NightCycleReport {
@@ -249,5 +290,8 @@ function emptyReport(simulated?: boolean): NightCycleReport {
     goalsUpdated: 0,
     benchmarksRun: 0,
     simulated,
+    traceEvidence: ANALYZER_INSUFFICIENT,
+    specCandidatesReviewed: 0,
+    autoPromoted: false,
   };
 }
