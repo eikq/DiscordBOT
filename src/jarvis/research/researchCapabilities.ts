@@ -59,6 +59,16 @@ async function invokeResearch(
       const query = String(input.query || '');
       const maxResults = typeof input.maxResults === 'number' ? input.maxResults : 6;
       const freshness = input.freshness === 'latest' ? 'latest' : 'any';
+      const depth = parseResearchDepth(input.depth);
+      if (depth && depth !== 'standard') {
+        return ok(id, await deps.runtime.current({
+          query,
+          officialOnly: Boolean(input.officialOnly),
+          freshness,
+          maxResults,
+          depth,
+        }));
+      }
       return ok(id, await deps.runtime.search(query, maxResults, freshness));
     }
     if (id === RESEARCH_FETCH) {
@@ -83,9 +93,7 @@ async function invokeResearch(
         compare: input.compare !== false,
         reuseLast: Boolean(input.reuseLast),
         maxResults: typeof input.maxResults === 'number' ? input.maxResults : undefined,
-        depth: input.depth === 'quick' || input.depth === 'standard' || input.depth === 'deep' || input.depth === 'forensic'
-          ? input.depth
-          : undefined,
+        depth: parseResearchDepth(input.depth),
       }));
     }
     return terminal(id, 'unavailable', 'UNKNOWN_CAPABILITY', 'Unknown research capability.');
@@ -137,6 +145,12 @@ function terminal(id: string, status: 'unavailable' | 'rejected', reasonCode: st
     sideEffect: 'read',
     error: message,
   };
+}
+
+function parseResearchDepth(value: unknown): 'none' | 'quick' | 'standard' | 'deep' | 'forensic' | undefined {
+  return value === 'none' || value === 'quick' || value === 'standard' || value === 'deep' || value === 'forensic'
+    ? value
+    : undefined;
 }
 
 function createPrivateBrowseHandler(deps: ResearchCapabilityDeps): CapabilityHandler {
