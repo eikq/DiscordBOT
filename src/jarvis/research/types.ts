@@ -7,6 +7,43 @@ export type SourceClass =
   | 'COMMUNITY'
   | 'UNKNOWN';
 
+export type TrustClass =
+  | 'OFFICIAL'
+  | 'PRIMARY'
+  | 'ACADEMIC'
+  | 'REPUTABLE_SECONDARY'
+  | 'COMMUNITY'
+  | 'UNKNOWN';
+
+export type SourceType = 'webpage' | 'document' | 'search_hit' | 'unknown';
+export type SourceRecency = 'fresh' | 'recent' | 'dated' | 'unknown';
+export type QueryKind =
+  | 'primary'
+  | 'alternate'
+  | 'entity'
+  | 'recency'
+  | 'documentation'
+  | 'opposing'
+  | 'verification';
+
+export type PlannedQuery = {
+  kind: QueryKind;
+  text: string;
+};
+
+export type DepthBudget = {
+  depth: 'none' | 'quick' | 'standard' | 'deep' | 'forensic';
+  maxQueries: number;
+  maxFetches: number;
+  maxRounds: number;
+  allowFollowUp: boolean;
+  crossCheck: boolean;
+  contradictionAnalysis: boolean;
+  verification: boolean;
+  providerAccess: boolean;
+  providerLimit: number;
+};
+
 export type SourceStatus = 'listed' | 'fetched' | 'unsupported' | 'failed' | 'blocked';
 
 export type TrustSignals = {
@@ -24,9 +61,15 @@ export type SourceRecord = {
   publishedAt: string | null;
   updatedAt: string | null;
   fetchedAt: string | null;
+  retrievedAt?: string | null;
   contentType: string | null;
   provider: string;
   sourceClass: SourceClass;
+  trustClass?: TrustClass;
+  sourceType?: SourceType;
+  recency?: SourceRecency;
+  duplicateGroup?: string | null;
+  claimsSupported?: string[];
   trustSignals: TrustSignals;
   status: SourceStatus;
   cached: boolean;
@@ -53,7 +96,16 @@ export type ResearchCitation = {
   sourceClass: SourceClass;
 };
 
-export type ResearchStageId = 'search' | 'fetch' | 'compare' | 'synthesis';
+export type ResearchStageId =
+  | 'intent'
+  | 'plan'
+  | 'search'
+  | 'fetch'
+  | 'normalize'
+  | 'quality'
+  | 'compare'
+  | 'synthesis'
+  | 'verify';
 export type ResearchStageState = 'pending' | 'active' | 'done' | 'failed' | 'empty';
 
 export type ResearchStage = {
@@ -66,6 +118,36 @@ export type ResearchStage = {
 export type ResearchDisagreement = {
   topic: string;
   sides: Array<{ sourceId: string; claim: string }>;
+};
+
+export type ResearchClaim = {
+  claimId: string;
+  text: string;
+  supportingSourceIds: string[];
+  conflictingSourceIds: string[];
+  evidenceIds: string[];
+  confidence: number;
+  uncertainty: string[];
+};
+
+export type ResearchCacheMeta = {
+  cached: boolean;
+  cacheAgeMs: number | null;
+  providerHit: boolean;
+  freshRetrieval: boolean;
+};
+
+export type DuplicateGroup = {
+  groupId: string;
+  representativeSourceId: string;
+  memberSourceIds: string[];
+  reason: 'canonical_url' | 'resource_key' | 'title' | 'snippet';
+};
+
+export type ResearchTraceEvent = {
+  stage: ResearchStageId | 'trace';
+  state: ResearchStageState;
+  detail: string;
 };
 
 export type ResearchResult = {
@@ -83,6 +165,12 @@ export type ResearchResult = {
   researchedAt: string;
   cached: boolean;
   sourceRefs: string[];
+  depth?: 'none' | 'quick' | 'standard' | 'deep' | 'forensic';
+  plan?: { queries: PlannedQuery[]; maxQueries: number; maxFetches: number; maxRounds: number };
+  cache?: ResearchCacheMeta;
+  claims?: ResearchClaim[];
+  duplicates?: DuplicateGroup[];
+  trace?: ResearchTraceEvent[];
 };
 
 export type ResearchSnapshot = {

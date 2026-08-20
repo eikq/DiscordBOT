@@ -84,8 +84,8 @@ export function shouldBuildRichPresentation(plan: PresentationPlan): boolean {
 
 function isResearchTurn(input: PresentationInput): boolean {
   const route = String(input.route || '').toUpperCase();
-  if (input.capabilityId === 'research.search' || route === 'RESEARCH') return true;
-  if (input.capabilityId && input.capabilityId !== 'research.search') return false;
+  if (input.capabilityId?.startsWith('research.') || route === 'RESEARCH') return true;
+  if (input.capabilityId && !input.capabilityId.startsWith('research.')) return false;
   if (route === 'CAPABILITY' || route === 'CONVERSATION') return false;
   return hasResearchBody(input);
 }

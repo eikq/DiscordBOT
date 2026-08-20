@@ -48,6 +48,9 @@ export class PrivateResearchGateway {
   }
 
   public async browse(request: PrivateBrowseRequest, launch: BrowserLaunchOptions = {}): Promise<PrivateBrowseResult> {
+    if (request.depth === 'none') {
+      return closed('RESEARCH_DISABLED', 'Research depth is none. No private browse was performed.');
+    }
     if (this.options.hostPlaywrightFallback) {
       return closed('HOST_PLAYWRIGHT_FALLBACK_FORBIDDEN', 'PRIVATE_BROWSER must not fall back to host Playwright.');
     }

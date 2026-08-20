@@ -505,7 +505,7 @@ function validateResearchInput(capabilityId: string, input: Record<string, unkno
   }
   if (input.depth !== undefined) {
     if (!isResearchDepth(input.depth)) {
-      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'depth must be quick, standard, deep, or forensic.' };
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'depth must be none, quick, standard, deep, or forensic.' };
     }
     value.depth = input.depth;
   }

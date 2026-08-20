@@ -37,7 +37,7 @@ export type PresentationCard = {
 export type PresentationSection = {
   id: string;
   title: string;
-  kind: 'summary' | 'findings' | 'evidence' | 'risks' | 'actions' | 'followups' | 'comparison';
+  kind: 'summary' | 'findings' | 'evidence' | 'risks' | 'actions' | 'followups' | 'comparison' | 'quality' | 'timeline';
   body: string;
   cards?: string[];
 };
@@ -167,10 +167,18 @@ export type PresentationInput = {
   research?: {
     query?: string;
     synthesis?: string;
-    sources?: Array<{ sourceId: string; title: string; url: string; domain?: string }>;
+    sources?: Array<{ sourceId: string; title: string; url: string; domain?: string; trustClass?: string; recency?: string; publishedAt?: string | null }>;
     evidence?: Array<{ evidenceId: string; claim: string; sourceId: string }>;
     uncertainty?: string[];
     disagreements?: Array<{ topic: string }>;
+    cache?: { cached?: boolean; cacheAgeMs?: number | null; freshRetrieval?: boolean; providerHit?: boolean };
+    claims?: Array<{ text: string; supportingSourceIds?: string[]; conflictingSourceIds?: string[]; confidence?: number }>;
+    sourceQuality?: Array<{ sourceId: string; trustClass?: string; recency?: string }>;
+    timeline?: Array<{ sourceId: string; publishedAt?: string | null; label?: string }>;
+    qualityLabel?: string;
+    conflictingEvidence?: string[];
+    recommendedFollowUps?: string[];
+    limitations?: string[];
   };
   systemSnapshot?: {
     summary?: string;

@@ -120,14 +120,14 @@ function cardsFor(
   includeResearch = true,
 ): PresentationCard[] {
   const cards: PresentationCard[] = [];
-  const findings = includeResearch ? (input.research?.evidence ?? []).slice(0, 6) : [];
+  const findings = includeResearch ? findingsFor(input) : [];
   for (const item of findings) {
     cards.push({
       id: item.evidenceId,
       title: 'Finding',
       body: clip(item.claim, 220),
       kind: 'finding',
-      refs: [item.sourceId],
+      refs: item.sourceId ? [item.sourceId] : undefined,
     });
   }
   for (const item of (input.workOutcome?.observations ?? []).slice(0, 4)) {
@@ -211,6 +211,37 @@ function sectionsFor(
       body: evidence.slice(0, 4).map(item => item.label).join(' vs '),
     });
   }
+  const includeResearch = shouldAttachResearch(input, plan);
+  const quality = input.research?.qualityLabel || (input.research?.sourceQuality?.length
+    ? input.research.sourceQuality.map(item => item.trustClass || 'unknown').join(', ')
+    : '');
+  if (includeResearch && quality) {
+    sections.push({
+      id: 'sec-quality',
+      title: 'Source quality',
+      kind: 'quality',
+      body: clip(quality, 280),
+    });
+  }
+  if (includeResearch && (input.research?.timeline?.length ?? 0) > 0) {
+    sections.push({
+      id: 'sec-timeline',
+      title: 'Timeline',
+      kind: 'timeline',
+      body: clip((input.research?.timeline ?? []).map(item => `${item.publishedAt || 'unknown'} ${item.label || item.sourceId}`).join(' · '), 280),
+    });
+  }
+  const conflicts = input.research?.conflictingEvidence?.length
+    ? input.research.conflictingEvidence
+    : (input.research?.disagreements ?? []).map(item => item.topic);
+  if (includeResearch && conflicts.length > 0) {
+    sections.push({
+      id: 'sec-conflicts',
+      title: 'Conflicting evidence',
+      kind: 'comparison',
+      body: clip(conflicts.join(' | '), 320),
+    });
+  }
   if (evidence.length > 0) {
     sections.push({
       id: 'sec-evidence',
@@ -219,7 +250,7 @@ function sectionsFor(
       body: evidence.map(item => item.label).join(' · '),
     });
   }
-  const risks = limitationsFor(input);
+  const risks = limitationsFor(input, includeResearch);
   if (risks.length > 0) {
     sections.push({
       id: 'sec-risks',
@@ -228,7 +259,7 @@ function sectionsFor(
       body: risks.join(' '),
     });
   }
-  const actions = actionsFor(input, plan);
+  const actions = actionsFor(input, plan, includeResearch);
   if (actions.length > 0) {
     sections.push({
       id: 'sec-actions',
@@ -253,13 +284,17 @@ function tablesFor(input: PresentationInput, plan: PresentationPlan): Presentati
   return [{
     id: 'tbl-sources',
     title: 'Sources',
-    headers: ['Source', 'URL'],
-    rows: input.research.sources.slice(0, 6).map(item => [item.title || item.domain || item.sourceId, item.url]),
+    headers: ['Source', 'Quality', 'URL'],
+    rows: input.research.sources.slice(0, 6).map(item => [
+      item.title || item.domain || item.sourceId,
+      item.trustClass || 'unknown',
+      item.url,
+    ]),
   }];
 }
 
 function limitationsFor(input: PresentationInput, includeResearch = true): string[] {
-  const items = [...(includeResearch ? (input.research?.uncertainty ?? []) : [])];
+  const items = [...(includeResearch ? (input.research?.limitations ?? input.research?.uncertainty ?? []) : [])];
   if (input.workOutcome?.outcome === 'PARTIAL' || input.workOutcome?.outcome === 'DEGRADED') {
     items.push('This result is partial or degraded. Do not treat it as complete.');
   }
@@ -279,6 +314,9 @@ function actionsFor(input: PresentationInput, plan: PresentationPlan, includeRes
   }
   if (input.capabilityId?.startsWith('desktop.') && input.displays?.reason) {
     return ['Use Presenter Mode in the lab if the browser host cannot move the window.'];
+  }
+  if (includeResearch && input.research?.recommendedFollowUps?.length) {
+    return unique(input.research.recommendedFollowUps).slice(0, 4);
   }
   if (includeResearch && input.research?.sources?.[0]) {
     return ['Open a cited source only after you choose it.', 'Ask to compare two sources if needed.'];
@@ -308,8 +346,21 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map(item => item.trim()).filter(Boolean))];
 }
 
+function findingsFor(input: PresentationInput): Array<{ evidenceId: string; claim: string; sourceId: string }> {
+  const claims = (input.research?.claims ?? [])
+    .filter(item => item.text)
+    .slice(0, 6)
+    .map((item, index) => ({
+      evidenceId: `claim-${index}`,
+      claim: item.text,
+      sourceId: item.supportingSourceIds?.[0] || item.conflictingSourceIds?.[0] || '',
+    }));
+  if (claims.length > 0) return claims;
+  return (input.research?.evidence ?? []).slice(0, 6);
+}
+
 function shouldAttachResearch(input: PresentationInput, plan: PresentationPlan): boolean {
-  if (input.capabilityId && input.capabilityId !== 'research.search') return false;
+  if (input.capabilityId && !input.capabilityId.startsWith('research.')) return false;
   const route = String(input.route || '').toUpperCase();
   if (route === 'CAPABILITY' || route === 'CONVERSATION') return false;
   return Boolean(input.research) && (plan.reason.startsWith('research') || plan.mode === 'comparison');

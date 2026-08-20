@@ -13,6 +13,7 @@ import type { ReminderSnapshot } from '../automation/types';
 import type { ResearchRuntime, ResearchSnapshot } from '../research';
 import { trySharedResearchRuntime } from '../research';
 import { isResearchResult, researchFactsFromResult } from '../research/researchFacts';
+import { researchToPresentationView } from '../research/researchBriefing';
 import type { WorkspaceRuntime, WorkspaceSnapshot } from '../workspace';
 import { trySharedWorkspaceRuntime } from '../workspace';
 import { probeHostSecurity } from '../security/hostBaseline';
@@ -958,7 +959,7 @@ export class JarvisLabRuntime {
   }): PlannedPresentation {
     const research = this.researchSnapshot();
     const presence = this.presenceStatus();
-    const researchTurn = input.route?.route === 'RESEARCH' || input.capabilityId === 'research.search';
+    const researchTurn = input.route?.route === 'RESEARCH' || Boolean(input.capabilityId?.startsWith('research.'));
     const merged = mergeCapabilityPresentationFacts((input.toolResults ?? []).map(item => {
       const displays = item.facts?.displays;
       const systemSnapshot = item.facts?.systemSnapshot;
@@ -988,23 +989,7 @@ export class JarvisLabRuntime {
       route: input.route?.route,
       capabilityId: input.capabilityId,
       workOutcome: input.workOutcome,
-      research: researchTurn && research.last ? {
-        query: research.last.query,
-        synthesis: research.last.synthesis,
-        sources: research.last.sources.map(item => ({
-          sourceId: item.sourceId,
-          title: item.title,
-          url: item.url,
-          domain: item.domain,
-        })),
-        evidence: research.last.evidence.map(item => ({
-          evidenceId: item.evidenceId,
-          claim: item.claim,
-          sourceId: item.sourceId,
-        })),
-        uncertainty: research.last.uncertainty,
-        disagreements: research.last.disagreements,
-      } : undefined,
+      research: researchTurn && research.last ? researchToPresentationView(research.last) : undefined,
       systemSnapshot: merged.systemSnapshot,
       displays: desktopTurn ? {
         hostKind: merged.displays?.hostKind || presence.hostKind,

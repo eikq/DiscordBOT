@@ -60,16 +60,16 @@ async function invokeResearch(
       const maxResults = typeof input.maxResults === 'number' ? input.maxResults : 6;
       const freshness = input.freshness === 'latest' ? 'latest' : 'any';
       const depth = parseResearchDepth(input.depth);
-      if (depth && depth !== 'standard') {
+      if (depth === 'none' || (depth && depth !== 'standard')) {
         return ok(id, await deps.runtime.current({
           query,
           officialOnly: Boolean(input.officialOnly),
           freshness,
           maxResults,
-          depth,
+          depth: depth ?? 'standard',
         }));
       }
-      return ok(id, await deps.runtime.search(query, maxResults, freshness));
+      return ok(id, await deps.runtime.search(query, maxResults, freshness, depth));
     }
     if (id === RESEARCH_FETCH) {
       return ok(id, await deps.runtime.fetchSource({
@@ -106,6 +106,9 @@ async function invokeResearch(
 }
 
 function ok(id: string, result: ResearchResult): CapabilityResult {
+  if (result.depth === 'none') {
+    return terminal(id, 'unavailable', 'RESEARCH_DISABLED', result.synthesis);
+  }
   const failed = result.sources.length === 0 || result.stages.some(stage => stage.state === 'failed' && stage.id === 'search' && !result.sources.length);
   const noFetch = result.uncertainty.some(item => /unavailable|could not be completed|no public sources/i.test(item)) && result.sources.every(item => item.status !== 'fetched') && result.evidence.length === 0;
   const status = failed && !result.sources.length || (noFetch && !result.evidence.length && result.synthesis.startsWith('Research unavailable'))
@@ -176,15 +179,20 @@ function createPrivateBrowseHandler(deps: ResearchCapabilityDeps): CapabilityHan
       };
     },
     invoke: async (input) => {
+      if (input.depth === 'none') {
+        return terminal(RESEARCH_PRIVATE_BROWSE, 'unavailable', 'RESEARCH_DISABLED', 'Research depth is none. No private browse was performed.');
+      }
       if (!deps.privateGateway) {
         return terminal(RESEARCH_PRIVATE_BROWSE, 'unavailable', 'PRIVATE_BROWSER_UNAVAILABLE', 'Private browser is unavailable. Jarvis will not use the owner browser or host Playwright.');
       }
       const result = await deps.privateGateway.browse({
         url: typeof input.url === 'string' ? input.url : undefined,
         query: typeof input.query === 'string' ? input.query : undefined,
-        depth: input.depth === 'quick' || input.depth === 'standard' || input.depth === 'deep' || input.depth === 'forensic'
-          ? input.depth
-          : 'standard',
+        depth: input.depth === 'none'
+          ? 'none'
+          : input.depth === 'quick' || input.depth === 'standard' || input.depth === 'deep' || input.depth === 'forensic'
+            ? input.depth
+            : 'standard',
       });
       const status = result.status === 'ok' ? 'ok' : result.status === 'denied' ? 'rejected' : 'unavailable';
       return {

@@ -44,11 +44,20 @@ export { classifySource } from './sourceClass';
 export { webpageTextAsData } from './htmlText';
 export { buildEvidenceGraph } from './evidenceGraph';
 export { isStaleKnowledge, knowledgeTtlClass } from './staleness';
-export { syndicateGroups, dedupeHits } from './sourceRanker';
+export { syndicateGroups, dedupeHits, assignDuplicateGroups, snippetFingerprint } from './sourceRanker';
+export { planStructuredResearch, DEPTH_BUDGETS, selectSearchProviders } from './queryPlan';
+export { trustClassOf, enrichSource } from './sourceIntelligence';
+export { buildClaims } from './claims';
+export { sanitizeCitations, citationsAreGrounded } from './citationSafety';
+export { researchCacheMeta, cachedEvidenceNote } from './cacheMeta';
+export { researchToPresentationView } from './researchBriefing';
 export type {
   EvidenceRecord,
   ResearchResult,
   ResearchSnapshot,
   SourceClass,
   SourceRecord,
+  TrustClass,
+  ResearchClaim,
+  ResearchCacheMeta,
 } from './types';

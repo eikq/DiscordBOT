@@ -16,7 +16,7 @@ export function spokenSummaryFrom(summary: string, mode: PresentationModel['mode
   return clipped;
 }
 
-export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | 'summary' | 'sections' | 'recommendedActions' | 'density'>): NarrationSegment[] {
+export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | 'summary' | 'sections' | 'recommendedActions' | 'density' | 'evidence' | 'cards'>): NarrationSegment[] {
   const spoken = spokenSummaryFrom(model.summary, model.mode);
   const segments: NarrationSegment[] = [{
     id: 'narr-summary',
@@ -34,12 +34,15 @@ export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | '
   )).slice(0, 4);
   for (const [index, section] of narratable.entries()) {
     const text = sectionNarration(section);
+    const sourceId = sourceIdForSection(section, model);
     segments.push({
       id: `narr-${section.id}`,
       order: index + 1,
       text,
       kind: 'section',
-      target: section.cards?.[0]
+      target: sourceId
+        ? { type: 'source', id: sourceId }
+        : section.cards?.[0]
         ? { type: section.cards[0].startsWith('system.') ? 'metric' : 'card', id: section.cards[0] }
         : { type: 'section', id: section.id },
       estimatedMs: estimateNarrationMs(text),
@@ -93,6 +96,23 @@ export function scaleNarrationToSpeech(
     ...item,
     estimatedMs: rounded[index] ?? item.estimatedMs,
   }));
+}
+
+function sourceIdForSection(
+  section: PresentationSection,
+  model: Pick<PresentationModel, 'evidence' | 'cards'>,
+): string | undefined {
+  if (section.id === 'sec-conflicts') {
+    return model.evidence?.[1]?.id || model.evidence?.[0]?.id;
+  }
+  if (section.id === 'sec-quality' || section.id === 'sec-timeline' || section.id === 'sec-evidence') {
+    const match = model.evidence?.find(item =>
+      section.body.includes(item.label) || section.body.includes(item.id),
+    );
+    return match?.id || model.evidence?.[0]?.id;
+  }
+  const card = model.cards?.find(item => section.cards?.includes(item.id));
+  return card?.refs?.[0];
 }
 
 function sectionNarration(section: PresentationSection): string {

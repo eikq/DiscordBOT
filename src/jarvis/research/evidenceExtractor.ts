@@ -44,11 +44,25 @@ export function classifyEvidenceKind(text: string): EvidenceKind {
 }
 
 export function compareEvidence(records: EvidenceRecord[]): Array<{ topic: string; sides: Array<{ sourceId: string; claim: string }> }> {
-  const numeric = records.filter(item => /\d/.test(item.claim));
+  const disagreements = [
+    ...numericDisagreements(records),
+    ...polarityDisagreements(records),
+  ];
+  const seen = new Set<string>();
+  return disagreements.filter(item => {
+    const key = item.sides.map(side => `${side.sourceId}:${side.claim}`).join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function numericDisagreements(records: EvidenceRecord[]): Array<{ topic: string; sides: Array<{ sourceId: string; claim: string }> }> {
+  const numeric = records.filter(item => /\d/.test(item.claim) && item.kind !== 'UNCERTAIN');
   if (numeric.length < 2) return [];
   const groups = new Map<string, EvidenceRecord[]>();
   for (const item of numeric) {
-    const key = item.claim.replace(/\d[\d,.]*/g, '#').slice(0, 80);
+    const key = numericClaimKey(item.claim);
     const list = groups.get(key) ?? [];
     list.push(item);
     groups.set(key, list);
@@ -64,3 +78,69 @@ export function compareEvidence(records: EvidenceRecord[]): Array<{ topic: strin
   }
   return disagreements;
 }
+
+function polarityDisagreements(records: EvidenceRecord[]): Array<{ topic: string; sides: Array<{ sourceId: string; claim: string }> }> {
+  const usable = records.filter(item => item.kind !== 'UNCERTAIN');
+  const groups = new Map<string, EvidenceRecord[]>();
+  for (const item of usable) {
+    const key = polarityKey(item.claim);
+    if (key.length < 12) continue;
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
+  const disagreements = [];
+  for (const [topic, items] of groups) {
+    const polarities = new Set(items.map(item => polarityOf(item.claim)));
+    if (polarities.size < 2) continue;
+    disagreements.push({
+      topic,
+      sides: items.slice(0, 4).map(item => ({ sourceId: item.sourceId, claim: item.claim })),
+    });
+  }
+  return disagreements;
+}
+
+function polarityKey(text: string): string {
+  return text.toLowerCase()
+    .replace(/\b(not|no|never|unavailable|available|false|true|denied|confirmed)\b/giu, ' ')
+    .replace(/ไม่(ได้)?|ไม่มี/gu, ' ')
+    .replace(/[^a-z0-9ก-๙]+/gu, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+function polarityOf(text: string): 'neg' | 'pos' {
+  return /\b(not|no|never|unavailable|false|denied)\b|ไม่ได้|ไม่มี/iu.test(text) ? 'neg' : 'pos';
+}
+
+function numericClaimKey(text: string): string {
+  const tokens = text
+    .toLowerCase()
+    .replace(/\d[\d,.]*/g, ' # ')
+    .replace(/[^a-z0-9ก-๙#]+/gu, ' ')
+    .split(/\s+/u)
+    .filter(token => token && !NUMERIC_STOP.has(token));
+  const idx = tokens.indexOf('#');
+  if (idx < 0) return tokens.join(' ').slice(0, 80);
+  return tokens.slice(Math.max(0, idx - 2), idx + 2).join(' ').slice(0, 80);
+}
+
+const NUMERIC_STOP = new Set([
+  'according',
+  'to',
+  'nvidia',
+  'reuters',
+  'bloomberg',
+  'official',
+  'report',
+  'reports',
+  'reporting',
+  'notes',
+  'note',
+  'the',
+  'a',
+  'an',
+  'says',
+  'said',
+]);
