@@ -26,7 +26,7 @@ Current priority: standalone Jarvis first (`JARVIS_FIRST_TASKS.md`). Discord fea
 - `JF-010` permission/action policy — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (safe lab A–F). Owner product sign-off still optional.
 - `JF-011` runtime + system capability pack — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–J; stop/restart confirmed-only, ollama not stopped). Owner product sign-off still optional.
 - `JF-012` reminders + scheduler — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–G + lab HTTP/UI; 45–70s real timers). Owner product sign-off still optional.
-- `JF-013` safe web research — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (lab HTTP + public sources + SSRF). Owner product sign-off still optional. Historical “proactive events” id is `JF-013-PROACTIVE`.
+- `JF-013` safe web research — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (lab HTTP + public sources + SSRF). Research Intelligence V2 (Queue 02): IMPLEMENTED + CLOUD_VERIFIED (unit). Live V2 quality / Whonix remain NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED. Owner product sign-off still optional. Historical “proactive events” id is `JF-013-PROACTIVE`.
 - `JF-013.5` natural intent resolution + conversational recovery — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–J). Owner product sign-off still optional.
 - `JF-014` safe local workspace intelligence — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process jarvis-project search/symbol/retrieve/compare; HTTP Command Center not separately live-QA'd this turn). Historical CCTV id is `JF-014-CCTV`. Owner product sign-off still optional.
 - `JF-014.6` realtime operations telemetry — IMPLEMENTED + UNIT_VERIFIED (SSE replay + lab EventSource). Browser SSE live-QA **BLOCKED_LOCAL_ACCEPTANCE**.

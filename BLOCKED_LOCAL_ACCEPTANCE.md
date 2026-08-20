@@ -161,7 +161,9 @@ LA-023 → LA-024 → LA-025.
 - Purpose: PRIVATE_BROWSER live path through Whonix.
 - Preconditions: LA-003/004 pass; Playwright worker only in Workstation.
 - Exact verification: lab `/api/jarvis/private-research` stays fail-closed on
-  host; guest worker fetch of a public page; no host Chrome/Edge.
+  host; guest worker fetch of a public page; no host Chrome/Edge. Queue 02
+  added cloud-safe fail-closed contracts; do not treat those as Whonix live
+  proof. Research Intelligence V2 live source quality is NEEDS_LOCAL_VERIFY.
 - Expected: `available=true` only when Tor + worker are live.
 - Failure evidence: `reasonCode`, route health, worker log. Host must stay
   fail-closed if Workstation is down.

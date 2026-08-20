@@ -396,7 +396,7 @@ Acceptance:
 
 ## JF-013 — Safe web research + source intelligence
 Depends on JF-005 / JF-010
-Status: IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (2026-08-19). Not the historical proactive-events item.
+Status: IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (2026-08-19 public GET). Research Intelligence V2 (Queue 02): IMPLEMENTED + CLOUD_VERIFIED (unit). Live V2 quality and Whonix/Tor remain NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED. Not a LIVE_VERIFIED upgrade of V2.
 
 Goal:
 Allow Jarvis to research current PUBLIC web information, inspect multiple

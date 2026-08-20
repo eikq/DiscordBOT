@@ -3,7 +3,19 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 01 Presenter + Desktop (evolution branch)
+## This turn — Queue 02 Research Intelligence V2
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+PRIVATE_BROWSER remains fail-closed. Whonix/Tor **LOCAL_VERIFY_REQUIRED**.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `66b4772`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Targeted: `npx tsc --noEmit` PASS; `tests/jarvis_research_v2.test.ts` +
+`tests/jarvis_research.test.ts` 36/36; briefing/security/command-center
+related tests green. Full `npm run test:cloud` follows.
+
+## Previous — Queue 01 Presenter + Desktop (evolution branch)
 
 Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
 LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
@@ -20,7 +32,7 @@ contracts/mocks, comparison routing, Ollama `llm.model`.
 
 Verification (Cloud, re-run on evolution branch): targeted **48/48**;
 `npx tsc --noEmit` PASS; `npm run test:cloud` **517/517**. Handoff:
-`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`. HEAD: `1c5181f`.
+`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`. HEAD: `5d6e5bc`.
 
 ## Previous — Presenter + desktop live acceptance
 

@@ -37,3 +37,10 @@ intersection display matching, native-helper contracts/mocks, comparison
 routing. Evidence: `npx tsc --noEmit` PASS; targeted 48/48; `npm run test:cloud`
 **517/517**. Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). LA-026/LA-027 remain
 PARTIAL / NATIVE_SHELL_REQUIRED. Native helper is not installed.
+
+Queue 02 Research Intelligence V2 on the same branch: structured query
+planning, depth budgets (NONE never hits providers), source quality
+metadata, claim/evidence mapping, contradictions, cache honesty,
+citation grounding, research Presenter mapping. IMPLEMENTED +
+CLOUD_VERIFIED (unit). Not LIVE_VERIFIED. Whonix/Tor
+LOCAL_VERIFY_REQUIRED.

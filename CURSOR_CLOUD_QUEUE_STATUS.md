@@ -24,7 +24,7 @@ Work landed first on
 `cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838` and is now the
 starting HEAD of the dedicated evolution branch.
 
-Queue 01 HEAD: `1c5181f12740bf198fa43093ba8da5b480ed5422`
+Queue 01 HEAD: `5d6e5bc32cf6d5d330e37e9dff0eccb1ccf11d89`
 
 Cloud evidence: `npx tsc --noEmit` PASS; targeted Presenter/Desktop
 48/48; `npm run test:cloud` **517/517**.
@@ -39,6 +39,24 @@ Labels stay:
 Native helper is not installed. Do not mark LIVE_VERIFIED from Cloud.
 
 Handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+
+## Queue 02 — Research Intelligence V2
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+
+Implementation HEAD: `66b4772`
+
+Structured query planning, depth budgets (NONE never hits providers),
+source trustClass metadata, dedup with provenance, claim/evidence
+links, contradiction reporting, cache honesty, citation grounding,
+research Presenter mapping, observable traces. PRIVATE_BROWSER stays
+fail-closed. Whonix/Tor: **LOCAL_VERIFY_REQUIRED**.
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted research/v2 +
+JF-013 + Presenter briefing tests green. Full `npm run test:cloud`
+count is recorded after the verification commit.
+
+Handoff: `docs/JF013_SAFE_WEB_RESEARCH.md`, ADR-024.
 
 ## Operating constraints still in force
 

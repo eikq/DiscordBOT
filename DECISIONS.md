@@ -927,4 +927,44 @@ plus a later CONTROL + PRESENTER pair on one runtime/session.
 
 ---
 
+## ADR-024 — Research Intelligence V2 is an evidence engine, not a snippet dump
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live provider quality and Whonix/Tor remain **LOCAL_VERIFY_REQUIRED**.
+
+### Context
+
+JF-013 already retrieved public pages, ranked sources, and cited URLs.
+Queue 02 needed structured query planning, source quality, claim/evidence
+links, contradiction reporting, and cache honesty without weakening
+CapabilityHost or treating web text as authority.
+
+### Decision
+
+- Keep the existing GET research runtime and CapabilityHost path.
+- Add a bounded query planner (primary / alternate / entity / recency /
+  documentation / opposing / verification) behind depth budgets.
+- NONE must not call providers. Quick uses one provider and no follow-up.
+- Attach `trustClass`, recency, duplicate groups, claims, cache metadata,
+  and observable traces on `ResearchResult`.
+- Presenter maps summary, findings, source quality, timeline, conflicts,
+  limitations, and follow-ups. Motion may focus the cited source.
+- PRIVATE_BROWSER remains fail-closed. No host Playwright fallback.
+  Cloud must not claim Whonix/Tor live verification.
+
+### Alternatives considered
+
+- Recursive open-ended search — rejected (unbounded).
+- Treating `trustClass` as ground truth — rejected (metadata only).
+- Inventing citations to fill a briefing — rejected.
+- Direct-host browser fallback — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit).
+- Live search quality, Edge-TTS research briefings, and Whonix:
+  NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED.
+
+
 
