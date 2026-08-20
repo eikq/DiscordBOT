@@ -313,6 +313,10 @@ export class JarvisLabRuntime {
     return sharedJarvisEventBus().recent(40);
   }
 
+  public capabilities(): CapabilityHost | undefined {
+    return this.capabilityHost;
+  }
+
   public async securitySnapshot(): Promise<HostSecuritySnapshot> {
     return probeHostSecurity();
   }

@@ -42,6 +42,9 @@ export { classifyResearchUrl, assertPublicDestination, canonicalizeUrl, isBlocke
 export { SourceFetcher, nodeResearchGet } from './sourceFetcher';
 export { classifySource } from './sourceClass';
 export { webpageTextAsData } from './htmlText';
+export { buildEvidenceGraph } from './evidenceGraph';
+export { isStaleKnowledge, knowledgeTtlClass } from './staleness';
+export { syndicateGroups, dedupeHits } from './sourceRanker';
 export type {
   EvidenceRecord,
   ResearchResult,

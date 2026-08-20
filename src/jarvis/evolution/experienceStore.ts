@@ -1,14 +1,21 @@
 import { randomBytes } from 'node:crypto';
 import { looksLikeSecret } from '../security/redaction';
 import type { PrivilegeActor } from '../security/types';
+import type { JsonCollection } from './persistTypes';
 import type { ExperienceRecord } from './types';
 
 export type CreateExperienceInput = Omit<ExperienceRecord, 'id' | 'createdAt'> & { id?: string };
 
 export class ExperienceStore {
   private readonly items = new Map<string, ExperienceRecord>();
+  private readonly now: () => number;
+  private readonly persist?: JsonCollection<ExperienceRecord>;
 
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(now: () => number = () => Date.now(), persist?: JsonCollection<ExperienceRecord>) {
+    this.now = now;
+    this.persist = persist;
+    for (const item of persist?.load() ?? []) this.items.set(item.id, item);
+  }
 
   public create(input: CreateExperienceInput, actor: PrivilegeActor = 'system'): ExperienceRecord {
     if (actor === 'webpage' || actor === 'skill') {
@@ -27,7 +34,13 @@ export class ExperienceStore {
       tools: input.tools ?? [],
     };
     this.items.set(record.id, record);
+    this.persist?.replace(this.list());
     return { ...record };
+  }
+
+  public createIfSignificant(input: CreateExperienceInput, actor: PrivilegeActor = 'system'): ExperienceRecord | null {
+    if ((input.significance ?? 0.5) < 0.2) return null;
+    return this.create(input, actor);
   }
 
   public get(id: string): ExperienceRecord | undefined {

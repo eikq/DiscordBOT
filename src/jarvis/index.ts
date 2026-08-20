@@ -226,7 +226,42 @@ export {
   createCandidateSandbox,
   rejectProductionWrite,
   resolveMemoryContradiction,
+  ClaimStore,
+  reflectStructured,
+  FailureLedger,
+  CapabilitySelfModel,
+  GrowthPlanner,
+  PracticeEngine,
+  BenchmarkBank,
+  NightCycle,
+  AffectEngine,
+  CandidateManager,
+  ModelAdaptationRegistry,
+  buildJournal,
+  buildEvolutionGraph,
+  affectCannotAuthorize,
+  applyTaskOutcome,
 } from './evolution';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker } from './agent';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
+export { OwnerControl } from './control';
+export { ProactiveMonitor } from './monitor';
+export { SimulatedDeviceProvider } from './devices';
+export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
+export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
+export type { CommandCenterSnapshot } from './standalone/commandCenter';
+export type { DemoScenarioId } from './standalone/commandCenterHttp';
+export { presentCommandCenter } from './standalone/commandCenterView';
+export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
+export {
+  parseDemoScenario,
+  parseControlPatch,
+  applyOwnerControl,
+  parseTaskId,
+  parseObjective,
+  parseNightAction,
+  DEMO_SCENARIOS,
+} from './standalone/commandCenterHttp';
 export {
   classifyActionability,
   compactCapabilityCatalog,

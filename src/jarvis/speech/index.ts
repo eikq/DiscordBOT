@@ -24,3 +24,5 @@ export { edgeTtsAvailable, synthesizeEdgeTts } from './edgeTts';
 export { probeJaitts } from './jaittsClient';
 export { probeRvc } from './rvcConvert';
 export { RouterVoiceResolver } from './voiceResolver';
+export { applyBargeIn, applySpeechCancel, speechTelemetryPayload } from './contracts';
+export type { SpeechPhase, SpeechTurnContract } from './contracts';
