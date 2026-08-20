@@ -7,6 +7,7 @@ import {
   CommandCenterRuntime,
   FORBIDDEN_TRACE_KEYS,
   TraceStore,
+  correlationIsCoherent,
   createCapabilityWorkInvoker,
   presentCommandCenter,
 } from '../src/jarvis';
@@ -88,12 +89,21 @@ test('research ask traces keep the same requestId and invoked capability', async
   });
   assert.equal(asked.route?.route, 'RESEARCH');
   assert.ok(asked.taskId);
-  assert.equal(asked.request.requestId, asked.request.requestId);
   const trace = center.traces.list().find(item => item.taskId === asked.taskId);
   assert.ok(trace);
   assert.equal(trace?.requestId, asked.request.requestId);
   assert.equal(trace?.sessionId, 'la-corr');
-  assert.equal(trace?.turnId, asked.request.requestId);
+  assert.ok(trace?.turnId);
+  assert.notEqual(trace?.turnId, asked.request.requestId);
+  assert.equal(
+    correlationIsCoherent({
+      sessionId: trace!.sessionId,
+      requestId: trace!.requestId,
+      turnId: trace!.turnId,
+      taskId: trace!.taskId,
+    }),
+    true,
+  );
   assert.equal(trace?.taskId, asked.taskId);
   assert.ok(trace?.capabilities?.some(item => item.id === 'research.search' && item.status === 'ok'));
   assert.ok(seen.length > 0);
