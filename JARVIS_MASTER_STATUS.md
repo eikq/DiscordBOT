@@ -44,3 +44,10 @@ metadata, claim/evidence mapping, contradictions, cache honesty,
 citation grounding, research Presenter mapping. IMPLEMENTED +
 CLOUD_VERIFIED (unit). Not LIVE_VERIFIED. Whonix/Tor
 LOCAL_VERIFY_REQUIRED.
+
+Queue 03 Canonical Memory Intelligence V2 on the same branch: SQLite
+stays canonical; schema v3 quality fields; contradiction-safe
+supersession; hybrid fusion drops orphan vectors; query-aware classes;
+bounded scored retrieval; episode→candidate learning; owner correction;
+optional Presenter provenance. Qdrant is not started. IMPLEMENTED +
+CLOUD_VERIFIED (unit) `npm run test:cloud` **541/541**. Not LIVE_VERIFIED.

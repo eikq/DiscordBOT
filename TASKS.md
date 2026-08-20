@@ -16,6 +16,7 @@ Current priority: standalone Jarvis first (`JARVIS_FIRST_TASKS.md`). Discord fea
 - `JF-003` / MEMORY-002 canonical SQLite store — DONE (unit-tested; temp DBs only; not live user-data migrated)
 - `JF-004` generic memory retrieval — DONE (unit-tested; no Qdrant)
 - `JF-004B` Core consumes `JarvisMemoryService` — DONE (unit-tested; temp DBs only)
+- `JF-004C` Canonical Memory Intelligence V2 — DONE (unit-tested + cloud 541/541; SQLite remains canonical; Qdrant not started; not live owner-memory verified)
 - `JF-005` generic capability registry + world-intel adapter — DONE (unit-tested; not live world-intel verified)
 - `JF-006` isolated `/jarvis-lab` shell — DONE (unit-tested; command-center UI UI-R1–R8 live-verified 2026-08-19)
 - `JF-007` standalone presentation profile runtime — DONE (unit-tested; speech not active)
@@ -34,7 +35,7 @@ Current priority: standalone Jarvis first (`JARVIS_FIRST_TASKS.md`). Discord fea
 - `EVO-001`–`EVO-010` evolution runtime — IMPLEMENTED + UNIT_VERIFIED fail-closed (no auto-promote; LoRA registry only). Live night cycle **BLOCKED_LOCAL_ACCEPTANCE**.
 - `JF-016`/`JF-017`/`JF-018` vision / monitor / devices — IMPLEMENTED + UNIT_VERIFIED simulated architecture. Live capture/CCTV **BLOCKED_LOCAL_ACCEPTANCE**.
 - Next READY after this layer: owner product sign-off, browser Command Center QA, or a later write-boundary / open-document task. No generic process/shell, no scheduled CapabilityHost execution, no unattended web monitoring, no Qdrant-as-canonical.
-- Still blocked: Qdrant / MEMORY-003; Discord JARVIS-006+; rewriting the Digital Me dashboard; UI-R9 WebGL until asked
+- Still blocked: live Qdrant / MEMORY-003 as a running index; Discord JARVIS-006+; rewriting the Digital Me dashboard; UI-R9 WebGL until asked
 
 ---
 
@@ -304,7 +305,10 @@ Safe first pieces after baseline:
 - `UI-R1`–`UI-R8` CSS/SVG command center — DONE (live lab UI verified 2026-08-19)
 - `UI-001` / `UI-R9` WebGL/3D core — not started; keep 2D fallback if ever started
 
-Keep `MEMORY-003+` (Qdrant/hybrid retrieval quality) and a Digital Me dashboard rewrite blocked until reviewed.
+Keep `MEMORY-003+` (live Qdrant service / Qdrant-as-canonical) blocked.
+Canonical Memory Intelligence V2 (JF-004C) adds hybrid *fusion when
+semantic hits are supplied*, query-aware classes, candidates, and owner
+correction. SQLite stays canonical. Do not start Qdrant from Cloud.
 
 ---
 

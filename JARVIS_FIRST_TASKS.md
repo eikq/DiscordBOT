@@ -130,6 +130,30 @@ Evidence:
 - Seeded `architecture.memory_backend = SQLite` reaches Core `memoryRefs`; no LLM wording asserted
 - Not live Ollama verified
 
+## JF-004C — Canonical Memory Intelligence V2
+Depends on JF-004 / JF-004B
+Status: DONE (cloud-safe software). Not LIVE_VERIFIED.
+
+Goal:
+Improve memory quality, retrieval, contradiction handling, importance,
+and safe learning without replacing SQLite.
+
+Acceptance:
+- SQLite remains canonical; vector index is derived-only; no Qdrant service started
+- Record quality fields + ACTIVE/SUPERSEDED/FORGOTTEN/EXPIRED
+- No silent overwrite; owner changes supersede
+- Hybrid fusion drops orphan vector hits
+- Query-aware class retrieval; bounded context; transparent scores
+- Episode → candidate → validate; research is never owner-trusted
+- Owner correction: จำอันนี้ / อันนี้ไม่ใช่ / เปลี่ยนเป็น / ลืมเรื่องนี้
+- Optional Presenter provenance: "Jarvis remembered this because..."
+
+Evidence:
+- Schema `003_memory_intelligence_v2.sql`; `JARVIS_MEMORY_SCHEMA_VERSION = 3`
+- `tests/jarvis_memory_v2.test.ts`
+- `npx tsc --noEmit` PASS; `npm run test:cloud` **541/541**
+- ADR-025
+
 ## JF-005 — Tool/Capability registry
 Status: DONE
 

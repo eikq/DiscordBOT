@@ -966,5 +966,62 @@ CapabilityHost or treating web text as authority.
 - Live search quality, Edge-TTS research briefings, and Whonix:
   NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED.
 
+## ADR-025 — Canonical Memory Intelligence V2 keeps SQLite as truth
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live Qdrant, live owner-memory QA, and Discord memory migration remain
+out of scope.
+
+### Context
+
+Queue 03 needed better memory quality, retrieval, contradiction
+handling, importance, and safe learning without replacing the canonical
+SQLite store or starting Qdrant as a source of truth.
+
+### Decision
+
+- SQLite is canonical truth. Vector/Qdrant is a derived index only.
+  Obsidian/view layers are presentation only.
+- Preserve product classes: working, episodic, semantic, procedural,
+  social, identity, perceptual. Storage kinds stay fact/episode/…
+- Important records carry canonical id, type, content, provenance,
+  created/updated, confidence, importance, status, supersedes/
+  supersededBy, expiry, ownerTrusted, derived, memoryRefs.
+- Never silently overwrite contradictory facts. Owner preference
+  changes insert a new fact and mark the previous SUPERSEDED. Forgotten
+  and expired rows are retained but not retrieved by default.
+- Hybrid fusion ranks lexical/FTS, optional semantic hits, recency,
+  importance, active status, and query class. Semantic hits without a
+  SQLite canonical record are dropped. Canonical text always comes from
+  SQLite.
+- Query-aware retrieval: conversation → identity/social/episodic;
+  technical work → procedural/semantic; device tasks → perceptual/
+  procedural. Do not dump all owner memory into every prompt.
+- Turn context stays bounded (default 8, max 12). Scores are visible
+  debug metadata, not hidden reasoning.
+- Completed tasks may emit semantic *candidates*. Promotion requires an
+  explicit accept path and a trust rule. Research/web claims cannot
+  become owner-trusted facts.
+- Owner correction understands จำอันนี้ / อันนี้ไม่ใช่ / เปลี่ยนเป็น /
+  ลืมเรื่องนี้ (and English equivalents) and uses canonical status
+  transitions plus `memory_feedback`.
+- Presenter may optionally show "Jarvis remembered this because..." with
+  refs/provenance. Presentation still does not retrieve.
+
+### Alternatives considered
+
+- Making Qdrant canonical — rejected.
+- Auto-promoting every episode to trusted semantic memory — rejected.
+- Silently overwriting owner preferences — rejected.
+- Dumping all memory classes into every prompt — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit). Schema version is 3.
+- Live embedding/Qdrant index and owner-memory quality:
+  NEEDS_LOCAL_VERIFY. Do not start Qdrant from Cloud.
+
+
 
 

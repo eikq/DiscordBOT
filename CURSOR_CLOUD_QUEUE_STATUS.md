@@ -58,6 +58,38 @@ JF-013 + Presenter briefing tests green; `npm run test:cloud`
 
 Handoff: `docs/JF013_SAFE_WEB_RESEARCH.md`, ADR-024.
 
+## Queue 03 — Canonical Memory Intelligence V2
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+
+Implementation: `b7b9e49dc6c637fef4ea847d39254bd8693b55f2`
+Queue 03 HEAD is pinned after this docs commit on
+`cursor/jarvis-cloud-evolution-2026-08-20`.
+
+SQLite remains canonical truth. Qdrant/vector is a derived retrieval
+index only and is **not** started. Obsidian/view layers stay
+presentation only. SocialMemoryBrain JSON/JSONL is unchanged.
+
+Shipped:
+
+- Schema v3 quality fields: confidence, importance, status, provenance,
+  created/updated, ownerTrusted, derived, memoryClass, supersedes,
+  expiry, memoryRefs
+- Statuses: ACTIVE / SUPERSEDED / FORGOTTEN / EXPIRED (no silent overwrite)
+- Owner preference change: new fact + old retained as superseded
+- Hybrid fusion: lexical/FTS + optional semantic hits + recency +
+  importance + active + class relevance; orphan vector ids dropped
+- Query-aware classes: conversation / technical / device / general
+- Bounded turn retrieval (default 8, max 12) with transparent scores
+- Episode → significance → candidate → validate → semantic or reject
+- Web/research cannot become owner-trusted facts
+- Owner correction: จำอันนี้ / อันนี้ไม่ใช่ / เปลี่ยนเป็น / ลืมเรื่องนี้
+- Optional Presenter "Jarvis remembered this because..." provenance view
+
+Cloud evidence: `npx tsc --noEmit` PASS; `npm run test:cloud` **541/541**.
+
+Handoff: ADR-025, `tests/jarvis_memory_v2.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution
