@@ -10,12 +10,14 @@ Do not claim live Tor, native helper, or host-browser verification.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
-HEAD: _pending pin_
+HEAD: `935b01bfe3d36eb6ba1819140c8d203470e13f51`
+Implementation: `a3487504f652aab4ffb30b3a3456c323781b4690`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 ADR: ADR-032.
 Evidence: `npx tsc --noEmit` PASS; targeted
 `tests/jarvis_security_hardening.test.ts` plus existing security /
-skills / memory / perception / presenter tests green.
+skills / memory / perception / presenter tests **127/127**;
+`npm run test:cloud` **614/614**.
 
 LLM output is not execution. Untrusted research/web/model/vision cannot
 approve privilege, plant owner-trusted memory, or mint TRUSTED skills.

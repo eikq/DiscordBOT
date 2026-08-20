@@ -1405,7 +1405,8 @@ authority. LLM output is not execution.
 ### Consequences
 
 - Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_security_hardening.test.ts`
-  plus existing `tests/jarvis_security.test.ts`; `npx tsc --noEmit` PASS).
+  plus existing `tests/jarvis_security.test.ts`; `npx tsc --noEmit` PASS;
+  `npm run test:cloud` **614/614**).
   Not LIVE_VERIFIED.
 - Live Tor, native helper install, and host browser: host-only.
   LA-026/027 remain PARTIAL. Do not mark LIVE_VERIFIED from Cloud.

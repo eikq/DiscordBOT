@@ -306,7 +306,9 @@ Handoff: ADR-031, `tests/jarvis_command_center_v2.test.ts`.
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 Defensive review. Existing controls were not disabled.
 
-Queue 10 HEAD: _pending pin after docs commit_
+Queue 10 HEAD: `935b01bfe3d36eb6ba1819140c8d203470e13f51`
+
+Implementation: `a3487504f652aab4ffb30b3a3456c323781b4690`
 
 Shipped:
 
@@ -322,8 +324,8 @@ Shipped:
 - Gitignore + Night denylist: display aliases, model weights, runtime DBs
 
 Cloud evidence: `npx tsc --noEmit` PASS; targeted security / skills /
-memory / perception / presenter tests green. Full `npm run test:cloud`
-run as part of this queue.
+memory / perception / presenter tests **127/127**; `npm run test:cloud`
+**614/614**.
 
 Labels stay:
 
