@@ -2,7 +2,7 @@ import { routeJarvisRequest } from '../intent/requestRouter';
 import type { InterruptionKind } from './types';
 
 const STOP = /^(stop|cancel|พอ|หยุด|เงียบ|ยกเลิก|อย่าพูด|quiet)([!. ]|$)/iu;
-const CORRECTION = /\b(ไม่ใช่|ผิด|actually|i meant|correction|แก้เป็น|เปลี่ยนเป็น)\b/iu;
+const CORRECTION = /(ไม่ใช่|ผิด|แก้เป็น|เปลี่ยนเป็น|\bactually\b|\bi meant\b|\bcorrection\b)/iu;
 const QUESTION = /(\?|ไหม|มั้ย|หรือเปล่า|อะไร|ทำไม|why\b|what\b|how\b|which\b)/iu;
 
 /**

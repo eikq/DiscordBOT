@@ -175,6 +175,7 @@ test('barge-in while speaking classifies stop, question, correction, and new com
   assert.equal(classifyInterruption('stop'), 'stop');
   assert.equal(classifyInterruption('what is that?'), 'question');
   assert.equal(classifyInterruption('ไม่ใช่ แก้เป็น Jarvis'), 'correction');
+  assert.equal(classifyInterruption('actually I meant no'), 'correction');
   assert.equal(classifyInterruption('inspect these files'), 'new_command');
   assert.deepEqual([...INTERRUPTION_KINDS], ['question', 'correction', 'stop', 'new_command', 'unknown']);
 
