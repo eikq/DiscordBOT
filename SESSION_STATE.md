@@ -3,11 +3,27 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — cloud finalization (ask router, ActionGate handshake, one evolution loop)
+## This turn — cloud finalization wiring (memory, stream, depth, night resume, grant)
 
 Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware/browser/Ollama remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed.
 
 Branch: `cursor/jarvis-cloud-finalization-4838` from `6ba63bd` (`cursor/jarvis-runtime-integration-4838`).
+
+Follow-up after the ask-router / ActionGate pass (`8945da3`):
+
+- Experience writes validate actor + secrets + Discord social filter **before** idempotent id reuse. Duplicate `exp_task_*` ids cannot smuggle `DISCORD_TOKEN=…` or webpage actors.
+- Default lab memory store attaches to Command Center so a real WorkAgent outcome writes one canonical `jarvis.db` episode (`trustedSemanticWrite: false`).
+- `askStream` uses the same typed router as `ask` (research/work no longer fall through to LLM-only).
+- Owner `researchDepth` is forwarded into `research.search` / `research.current`. Depth `none` performs no web fetch.
+- Night Cycle `run()` continues from the paused stage; HTTP accepts `action: resume`.
+- Command Center client snapshot now includes `permission.taskId/stepId/proposalId` and registry-only model-adaptation counts. Grant once posts those ids. SSE skips `seq <= lastSeq`.
+- Affect may suppress casual slang when formal; it cannot authorize and cannot drop immutable facts.
+
+Verification this turn: targeted suite **119/119**; `npx tsc --noEmit` PASS. Full `npm run test:cloud` recorded after push. Browser visual QA not run (no browser MCP).
+
+## Previous — cloud finalization (ask router, ActionGate handshake, one evolution loop)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed.
 
 - P0 router: `routeJarvisRequest` → CONVERSATION / INFORMATION / RESEARCH / WORK / CAPABILITY with IGNORE/REACT/SPEAK. `hello` / `how are you?` / `explain recursion` stay off WorkAgent. Research/work/unbound capability go through `/api/jarvis/ask` → WorkAgent.
 - P0 permission: `grantPermission` no longer marks gated steps done. Owner lease is bound to task/step/capability/scope/risk/expiry. Same step resumes through CapabilityHost. Jarvis/system cannot self-approve. Tokens are stripped from `work.db`. Denial stays denied.
@@ -15,8 +31,6 @@ Branch: `cursor/jarvis-cloud-finalization-4838` from `6ba63bd` (`cursor/jarvis-r
 - P0 memory: optional canonical episode write via `writeExperienceEpisode`. Research/untrusted tool output cannot become owner-trusted semantic memory.
 - P1: failure-adaptive retry bounds, trusted-only skill retrieval, night BENCHMARK stage, Command Center route/permission/benchmarks/honest empty Fluctlight, affect style metadata only.
 - P2: vision health + SEE≠CLICK, monitor simulation helper, VIEW≠CONFIGURE preserved. Authoritative queue: `BLOCKED_LOCAL_ACCEPTANCE.md` LA-001–LA-013.
-
-Verification this turn: targeted finalization + existing cloud suite (see handoff). Browser visual QA not run (no browser MCP).
 
 ## Previous — runtime integration (CapabilityHost, persistence, night cycle)
 
