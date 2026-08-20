@@ -29,7 +29,9 @@ Do not merge. Do not push `main` or rewrite the local acceptance branch.
 
 ## C. Final cloud HEAD
 
-`6a7bac4216d625cfc2c50528918c7a47c34099f8`
+`e6504734ee81a16f14be298033f4073c57a2092d` plus this documentation pin on
+`cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`. Confirm with
+`git rev-parse HEAD`.
 
 ## D. Commits (this pass only)
 
@@ -40,6 +42,7 @@ Do not merge. Do not push `main` or rewrite the local acceptance branch.
 | `f5a9eb3` | feat(jarvis): route supplied-data comparisons without web research |
 | `9ca981a` | test(jarvis): add Presenter and Desktop cloud regression coverage |
 | `6a7bac4` | docs: record Presenter/Desktop cloud implementation handoff |
+| `e650473` | docs: pin Presenter/Desktop cloud HEAD and commit list |
 
 ## E. Files / features changed
 
