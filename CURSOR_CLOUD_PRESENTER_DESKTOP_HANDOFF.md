@@ -29,7 +29,7 @@ Do not merge. Do not push `main` or rewrite the local acceptance branch.
 
 ## C. Final cloud HEAD
 
-`9ca981ab72a49f53055d30d2709208632d93c7c1`
+`6a7bac4216d625cfc2c50528918c7a47c34099f8`
 
 ## D. Commits (this pass only)
 
@@ -39,7 +39,7 @@ Do not merge. Do not push `main` or rewrite the local acceptance branch.
 | `bcc3770` | feat(jarvis): drive Presenter from structured facts and TTS narration |
 | `f5a9eb3` | feat(jarvis): route supplied-data comparisons without web research |
 | `9ca981a` | test(jarvis): add Presenter and Desktop cloud regression coverage |
-| *(this docs commit)* | docs: record Presenter/Desktop cloud implementation handoff |
+| `6a7bac4` | docs: record Presenter/Desktop cloud implementation handoff |
 
 ## E. Files / features changed
 
