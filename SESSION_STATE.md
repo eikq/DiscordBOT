@@ -3,7 +3,24 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 04 Safe Evolution + Procedural Skills V2
+## This turn — Queue 05 Model Registry, Certification, Routing and Efficiency
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+RESTRICTED models are never auto-selected and never security authorities.
+Cloud certification is FIXTURE_ONLY. No model downloads. No live hardware
+benchmarks. SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `e38f27281841dc8938eeaf07890a8617d396b6c0`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-027.
+Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_models_v2.test.ts` +
+`tests/jarvis_research_addendum.test.ts` 20/20; `npm run test:cloud`
+**562/562**.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 04 Safe Evolution + Procedural Skills V2
 
 Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
 SQLite remains canonical. Qdrant is not started.

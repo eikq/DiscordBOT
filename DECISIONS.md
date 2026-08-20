@@ -1074,6 +1074,52 @@ uncontrolled self-modification or self-approved privilege expansion.
 - Owner must still explicitly trust REVIEW_REQUIRED skills.
 - Live night/Ollama skill quality: BLOCKED_LOCAL_ACCEPTANCE.
 
+## ADR-027 — Model routing is evidence-and-policy, never RESTRICTED auto-select
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live Ollama/model quality and hardware benchmarks remain
+BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 05 needed Jarvis to choose models from evidence instead of
+assuming a single local LLM is always correct. Cloud must not download
+models, invent tok/s, or mark certification LIVE_VERIFIED.
+
+### Decision
+
+- Keep trust tiers STANDARD, EXPERIMENTAL, RESTRICTED.
+- RESTRICTED specialists are never auto-selected, including via owner
+  preference, and `securityAuthority` stays false. Models are not the
+  permission system.
+- Unknown abilities stay `unverified`. Do not invent RAM/VRAM/energy.
+- Workloads: casual, information, deep_reasoning, research, coding,
+  voice_realtime, night_background, vision.
+- Router obeys trust, certification, availability, latency, context,
+  and owner preference. If the selected model is unavailable, fall back
+  only to a compatible trusted model and record `fallbackFrom` /
+  `fallbackReason` on the trace.
+- Night may use a stronger/slower EXPERIMENTAL model only when runtime
+  reports `idle === true`. Assumed idle does not count.
+- Cloud fixture certification status is FIXTURE_ONLY (CLOUD_VERIFIED is
+  reserved). Never LIVE_VERIFIED.
+
+### Alternatives considered
+
+- Auto-selecting the uncensored specialist when the owner prefers it —
+  rejected.
+- Treating unverified Qwen abilities as certified — rejected.
+- Assuming the machine is idle at night — rejected.
+- Recording RAM/VRAM/energy without a probe — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit). `npm run test:cloud` **562/562**.
+- Live Ollama discovery, real latency, and GPU metrics:
+  BLOCKED_LOCAL_ACCEPTANCE / NEEDS_LOCAL_VERIFY.
+
+
 
 
 

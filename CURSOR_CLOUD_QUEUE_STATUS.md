@@ -119,6 +119,40 @@ green; `npm run test:cloud` **553/553**.
 
 Handoff: ADR-026, `tests/jarvis_skills_v2.test.ts`.
 
+## Queue 05 — Model Registry, Certification, Routing and Efficiency
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+
+Implementation: `e38f27281841dc8938eeaf07890a8617d396b6c0`
+
+Trust tiers remain STANDARD / EXPERIMENTAL / RESTRICTED.
+RESTRICTED models are never auto-selected and are never security
+authorities. Unknown abilities stay `unverified`. Cloud certification
+is FIXTURE_ONLY (never LIVE_VERIFIED). No model downloads. No invented
+RAM/VRAM/energy or live tok/s.
+
+Shipped:
+
+- Profile fields: modelId, provider, engine, trustTier, context/tool/
+  structured/coding/Thai/research/vision/recovery, latency and
+  throughput evidence, hardware requirements, certification state
+- Workload router: casual, information, deep_reasoning, research,
+  coding, voice_realtime, night_background, vision
+- Routing obeys policy/trust, certification, availability, latency,
+  context, and owner preference (RESTRICTED preference is ignored)
+- Night stronger/slower model only when `idle === true` is measured;
+  assumed idle does not unlock it
+- Compatible trusted fallback with `fallbackFrom` / `fallbackReason`
+  on traces
+- Efficiency: success rate, latency, p50, p95, tokens, tokens/sec,
+  tool calls, retries; hardware metrics only when a probe exists
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_models_v2.test.ts` + `tests/jarvis_research_addendum.test.ts`
+20/20; `npm run test:cloud` **562/562**.
+
+Handoff: ADR-027, `tests/jarvis_models_v2.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution
