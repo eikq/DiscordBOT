@@ -242,6 +242,8 @@ test('jarvis lab page is a command center and stays Discord-free', () => {
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'labUiState.ts'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'browserMicrophone.ts'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'CommandCenterPanels.tsx'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'CommandCenterModeShell.tsx'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'commandCenterV2.ts'),
   ];
   const discord = /from\s+['"](?:discord(?:\.js)?|@discordjs\/)['"]/u;
   const page = fs.readFileSync(files[0]!, 'utf8');

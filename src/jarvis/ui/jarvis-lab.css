@@ -1577,3 +1577,250 @@
 }
 
 .jcc-permit--task { margin-top: 0.55rem; }
+
+/* ------------------------------------------------------------------ */
+/* Command Center V2 modes, presence, motion, layouts                  */
+/* ------------------------------------------------------------------ */
+
+.jcc-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  max-width: 36rem;
+}
+
+.jcc-modes button {
+  cursor: pointer;
+  border: 1px solid rgb(125 211 252 / 0.14);
+  background: rgb(7 18 28 / 0.45);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.22rem 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.58rem;
+}
+
+.jcc-modes button[aria-pressed="true"] {
+  color: var(--ice);
+  border-color: rgb(125 211 252 / 0.42);
+  background: rgb(125 211 252 / 0.1);
+}
+
+.jcc-presence-chip {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.22rem 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.58rem;
+  font-weight: 650;
+  border: 1px solid var(--line-strong);
+}
+
+.jcc-presence-chip--real {
+  color: #bbf7d0;
+  border-color: rgb(52 211 153 / 0.45);
+  background: rgb(6 40 28 / 0.72);
+}
+
+.jcc-presence-chip--simulation {
+  color: #fde68a;
+  border-color: rgb(250 204 21 / 0.45);
+  background: rgb(64 48 8 / 0.78);
+}
+
+.jcc-presence-chip--degraded {
+  color: #cbd5e1;
+  border-color: rgb(100 116 139 / 0.55);
+  background: rgb(30 41 59 / 0.78);
+}
+
+.jcc-presence-chip--offline {
+  color: #fecaca;
+  border-color: rgb(248 113 113 / 0.45);
+  background: rgb(69 10 10 / 0.72);
+}
+
+.jcc-home {
+  position: absolute;
+  left: 50%;
+  bottom: 11.2rem;
+  transform: translateX(-50%);
+  width: min(34rem, 68vw);
+  z-index: 7;
+  pointer-events: auto;
+  padding: 0.7rem 0.85rem 0.8rem;
+  border: 1px solid rgb(125 211 252 / 0.16);
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, rgb(6 18 30 / 0.82), rgb(3 10 18 / 0.72));
+  backdrop-filter: blur(16px);
+}
+
+.jcc-home header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.jcc-home h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.jcc-home .jcc-kv dd {
+  max-height: 3.2rem;
+  overflow: hidden;
+}
+
+.jcc-home__next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0.55rem 0 0;
+}
+
+.jcc-subhead {
+  margin: 0.55rem 0 0.2rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.jcc-memory-correct {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  margin-top: 0.28rem;
+}
+
+.jcc-memory-correct button {
+  cursor: pointer;
+  border: 1px solid rgb(125 211 252 / 0.18);
+  background: transparent;
+  color: #9fd6cf;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.35rem;
+}
+
+.jcc-presenter--fullscreen,
+.jcc[data-mode="presenter"] .jcc-presenter {
+  left: 6%;
+  right: 6%;
+  top: 3.2rem;
+  width: auto;
+  max-width: none;
+  max-height: calc(100% - 7.2rem);
+  z-index: 12;
+}
+
+.jcc[data-mode="assistant"] .jcc-memory,
+.jcc[data-mode="assistant"] .jcc-tools,
+.jcc[data-mode="presenter"] .jcc-memory,
+.jcc[data-mode="presenter"] .jcc-tools {
+  display: none;
+}
+
+.jcc[data-mode="assistant"] .jcc-overlay,
+.jcc[data-mode="presenter"] .jcc-overlay,
+.jcc.left-closed[data-mode="assistant"] .jcc-overlay,
+.jcc.right-closed[data-mode="assistant"] .jcc-overlay,
+.jcc.left-closed.right-closed[data-mode="assistant"] .jcc-overlay,
+.jcc.left-closed[data-mode="presenter"] .jcc-overlay,
+.jcc.right-closed[data-mode="presenter"] .jcc-overlay,
+.jcc.left-closed.right-closed[data-mode="presenter"] .jcc-overlay {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.jcc[data-mode="memory"] .jcc-tools { display: none; }
+.jcc[data-mode="memory"] .jcc-overlay,
+.jcc.right-closed[data-mode="memory"] .jcc-overlay,
+.jcc.left-closed.right-closed[data-mode="memory"] .jcc-overlay {
+  grid-template-columns: minmax(17rem, 20.5rem) minmax(0, 1fr);
+}
+.jcc.left-closed[data-mode="memory"] .jcc-overlay {
+  grid-template-columns: 2.1rem minmax(0, 1fr);
+}
+
+.jcc[data-mode="operations"] .jcc-memory,
+.jcc[data-mode="intelligence"] .jcc-memory,
+.jcc[data-mode="devices"] .jcc-memory { display: none; }
+
+.jcc[data-mode="operations"] .jcc-overlay,
+.jcc[data-mode="intelligence"] .jcc-overlay,
+.jcc[data-mode="devices"] .jcc-overlay,
+.jcc.left-closed[data-mode="operations"] .jcc-overlay,
+.jcc.left-closed[data-mode="intelligence"] .jcc-overlay,
+.jcc.left-closed[data-mode="devices"] .jcc-overlay,
+.jcc.left-closed.right-closed[data-mode="operations"] .jcc-overlay,
+.jcc.left-closed.right-closed[data-mode="intelligence"] .jcc-overlay,
+.jcc.left-closed.right-closed[data-mode="devices"] .jcc-overlay {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22.5rem);
+}
+
+.jcc.right-closed[data-mode="operations"] .jcc-overlay,
+.jcc.right-closed[data-mode="intelligence"] .jcc-overlay,
+.jcc.right-closed[data-mode="devices"] .jcc-overlay {
+  grid-template-columns: minmax(0, 1fr) 2.1rem;
+}
+
+.jcc[data-mode="presenter"] .jcc-answer,
+.jcc[data-mode="presenter"] .jcc-timeline,
+.jcc[data-mode="presenter"] .jcc-home {
+  display: none;
+}
+
+@keyframes jcc-mode-motion {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.28); }
+}
+
+.jcc[data-motion-animate="true"][data-motion="permission-wait"] .jcc-permit,
+.jcc[data-motion-animate="true"][data-motion="alert"] .jcc-presence-chip,
+.jcc[data-motion-animate="true"][data-motion="request-path"] .jcc-timeline__stage.is-active,
+.jcc[data-motion-animate="true"][data-motion="narration-target"] .jcc-presenter__section.is-focused {
+  animation: jcc-mode-motion 1.5s ease-in-out infinite;
+}
+
+.jcc-sim-banner--degraded,
+.jcc-sim-banner--offline {
+  border-color: rgb(148 163 184 / 0.4);
+  background: rgb(15 23 42 / 0.78);
+  color: #e2e8f0;
+}
+
+@media (min-width: 1600px) {
+  .jcc[data-mode="operations"] .jcc-overlay,
+  .jcc[data-mode="intelligence"] .jcc-overlay,
+  .jcc[data-mode="devices"] .jcc-overlay {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+  }
+  .jcc[data-mode="memory"] .jcc-overlay {
+    grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+  }
+  .jcc-home { width: min(40rem, 52vw); }
+}
+
+@media (max-width: 1100px) {
+  .jcc[data-mode="assistant"] .jcc-overlay,
+  .jcc[data-mode="presenter"] .jcc-overlay,
+  .jcc[data-mode="memory"] .jcc-overlay,
+  .jcc[data-mode="operations"] .jcc-overlay,
+  .jcc[data-mode="intelligence"] .jcc-overlay,
+  .jcc[data-mode="devices"] .jcc-overlay {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jcc-home {
+    width: min(28rem, 86vw);
+    bottom: 10.2rem;
+  }
+}
+

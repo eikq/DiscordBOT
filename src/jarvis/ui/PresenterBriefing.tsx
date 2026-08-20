@@ -8,6 +8,7 @@ type Props = {
   onClose: () => void;
   onBriefingChange: (next: PlannedPresentation) => void;
   spokenAtMs?: number;
+  fullscreenReady?: boolean;
 };
 
 export default function PresenterBriefing({
@@ -16,11 +17,13 @@ export default function PresenterBriefing({
   onClose,
   onBriefingChange,
   spokenAtMs = 0,
+  fullscreenReady = false,
 }: Props) {
   if (!open) return null;
+  const chrome = `jcc-presenter${fullscreenReady ? ' jcc-presenter--fullscreen' : ''}`;
   if (!briefing || briefing.density === 'plain') {
     return (
-      <aside className="jcc-presenter" aria-label="Presenter briefing">
+      <aside className={chrome} aria-label="Presenter briefing">
         <header>
           <h2>Presenter</h2>
           <button type="button" onClick={onClose} aria-label="Close presenter">×</button>
@@ -38,7 +41,7 @@ export default function PresenterBriefing({
   };
 
   return (
-    <aside className={`jcc-presenter${reduced ? ' is-reduced' : ''}`} aria-label="Presenter briefing">
+    <aside className={`${chrome}${reduced ? ' is-reduced' : ''}`} aria-label="Presenter briefing">
       <header>
         <p className="jcc-hint">{briefing.mode}</p>
         <h2>{briefing.title}</h2>

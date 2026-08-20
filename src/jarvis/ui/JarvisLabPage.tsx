@@ -9,8 +9,14 @@ import {
 } from '../presentation/types';
 import { BrowserMicrophoneInput } from './browserMicrophone';
 import JarvisCoreVisual from './JarvisCoreVisual';
-import CommandCenterPanels from './CommandCenterPanels';
+import CommandCenterModeShell, { AssistantHome, CommandCenterModeNav, MemoryMode } from './CommandCenterModeShell';
 import PresenterBriefing from './PresenterBriefing';
+import {
+  deriveCommandCenterV2,
+  parseCommandCenterMode,
+  type CommandCenterMode,
+  type RecommendedAction,
+} from './commandCenterV2';
 import type { PlannedPresentation } from '../presentation/briefing/types';
 import { applySpokenDuration, playbackAtElapsed, segmentStartMs } from '../presentation/briefing/playback';
 import { acceptSseSeq } from './operationsView';
@@ -279,6 +285,7 @@ export default function JarvisLabPage() {
   const [commandCenter, setCommandCenter] = useState<CommandCenterClientSnapshot | null>(null);
   const [opsBusy, setOpsBusy] = useState(false);
   const [viewMode, setViewMode] = useState<'core' | 'graph' | 'presenter'>('core');
+  const [operationalMode, setOperationalMode] = useState<CommandCenterMode>('assistant');
   const [briefing, setBriefing] = useState<PlannedPresentation | undefined>(undefined);
   const [spokenAtMs, setSpokenAtMs] = useState(0);
 
@@ -720,6 +727,28 @@ export default function JarvisLabPage() {
     sttReachable: status?.stt?.reachable,
   });
 
+  const ccView = deriveCommandCenterV2({
+    mode: operationalMode,
+    snapshot: commandCenter,
+    conversationText: draftText || response?.presented.text || null,
+    modelName: status?.llm?.model || response?.llm?.model || null,
+    voiceState: speechState === 'speaking'
+      ? 'speaking'
+      : status?.presentation?.voice.available
+        ? 'ready'
+        : (status?.presentation?.voice.reason || 'idle'),
+    reducedMotion,
+    statusReady: status?.ready,
+    llmReachable: status?.llm?.reachable,
+    coreState: status?.coreState,
+    phase,
+    memoryRefs,
+    pendingConfirmation,
+    busy,
+    catalogIds: status?.capabilities?.ids ?? [],
+    narrationTargetId: briefing && briefing.density !== 'plain' ? briefing.playback?.targetId : null,
+  });
+
   const pipeline = derivePipelineStages({
     busy,
     hasResponse: Boolean(response),
@@ -1151,9 +1180,61 @@ export default function JarvisLabPage() {
   const fireCamera = (kind: CameraAction['kind']) => {
     cameraSeq.current += 1;
     setCameraAction({ seq: cameraSeq.current, kind });
-    if (kind === 'presenter') setViewMode('presenter');
-    if (kind === 'core') setViewMode('core');
-    if (kind === 'graph') setViewMode('graph');
+    if (kind === 'presenter') {
+      setViewMode('presenter');
+      setOperationalMode('presenter');
+    }
+    if (kind === 'core' || kind === 'graph') {
+      setViewMode(kind);
+      setOperationalMode(current => (current === 'presenter' ? 'assistant' : current));
+    }
+  };
+
+  const selectOperationalMode = (mode: CommandCenterMode) => {
+    const next = parseCommandCenterMode(mode);
+    setOperationalMode(next);
+    if (next === 'presenter') {
+      cameraSeq.current += 1;
+      setCameraAction({ seq: cameraSeq.current, kind: 'presenter' });
+      setViewMode('presenter');
+      return;
+    }
+    if (viewMode === 'presenter') {
+      cameraSeq.current += 1;
+      setCameraAction({ seq: cameraSeq.current, kind: 'core' });
+      setViewMode('core');
+    }
+  };
+
+  const runCommandCenterGrant = () => {
+    const perm = commandCenter?.permission;
+    const taskId = commandCenter?.task?.id || perm?.taskId;
+    if (taskId) {
+      void postCommandCenter('/api/jarvis/command-center/grant', {
+        taskId,
+        stepId: perm?.stepId,
+        proposalId: perm?.proposalId,
+        capability: perm?.capability,
+      });
+    }
+  };
+
+  const onRecommendedAction = (action: RecommendedAction) => {
+    if (action.id === 'grant_permission') {
+      if (pendingConfirmation) {
+        void settleConfirmation('allow', speakEnabled, 'ui');
+      } else {
+        runCommandCenterGrant();
+      }
+      selectOperationalMode('operations');
+      return;
+    }
+    if (action.id === 'ask_jarvis' || action.id === 'continue') {
+      askField.current?.focus();
+      selectOperationalMode('assistant');
+      return;
+    }
+    selectOperationalMode(action.mode);
   };
 
   useEffect(() => {
@@ -1277,12 +1358,30 @@ export default function JarvisLabPage() {
   /* --------------------------- render --------------------------- */
 
   return (
-    <div className={`jarvis-lab jcc${leftOpen ? '' : ' left-closed'}${rightOpen ? '' : ' right-closed'}`} data-fx={fx} data-hidden={documentHidden ? 'true' : 'false'} data-quality={String(effectiveLevel)}>
+    <div
+      className={`jarvis-lab jcc${leftOpen ? '' : ' left-closed'}${rightOpen ? '' : ' right-closed'}`}
+      data-fx={fx}
+      data-hidden={documentHidden ? 'true' : 'false'}
+      data-quality={String(effectiveLevel)}
+      data-mode={operationalMode}
+      data-presence={ccView.presence.presence}
+      data-layout={ccView.layout}
+      data-motion={ccView.motion[0]?.kind || 'none'}
+      data-motion-animate={ccView.motion.some(item => item.animate) ? 'true' : 'false'}
+    >
       <header className="jcc-ribbon">
         <div className="jcc-brand">
           <span>JARVIS COMMAND CENTER</span>
           <small>local ai assistant · secure · private</small>
         </div>
+        <span
+          className={`jcc-presence-chip jcc-presence-chip--${ccView.presence.presence.toLowerCase()}`}
+          role="status"
+          title={ccView.presence.reason}
+        >
+          {ccView.presence.label}
+        </span>
+        <CommandCenterModeNav mode={operationalMode} onChange={selectOperationalMode} />
         <ul className="jcc-ribbon__items" aria-label="System status">
           {ribbon.map(item => (
             <li key={item.id} className={`jcc-dot jcc-dot--${item.tone}${item.lit ? ' is-lit' : ''}`}>
@@ -1365,7 +1464,13 @@ export default function JarvisLabPage() {
 
                 <section className="jcc-block">
                   <h2>Memory evidence</h2>
-                  {memoryRefs.length === 0 ? (
+                  {operationalMode === 'memory' ? (
+                    <MemoryMode
+                      items={memoryRefs}
+                      onCorrect={phrase => { void ask(undefined, phrase); }}
+                      onFocus={id => onSelectNode(id, false)}
+                    />
+                  ) : memoryRefs.length === 0 ? (
                     <p className="jcc-empty">No canonical memory attached to this turn.</p>
                   ) : (
                     <ul className="jcc-evidence">
@@ -1569,9 +1674,10 @@ export default function JarvisLabPage() {
 
             <PresenterBriefing
               briefing={briefing}
-              open={viewMode === 'presenter'}
+              open={operationalMode === 'presenter' || viewMode === 'presenter'}
+              fullscreenReady={ccView.presenter.fullscreenReady}
               spokenAtMs={spokenAtMs}
-              onClose={() => fireCamera('core')}
+              onClose={() => selectOperationalMode('assistant')}
               onBriefingChange={next => {
                 setBriefing(next);
                 if (next.density === 'plain') return;
@@ -1629,8 +1735,16 @@ export default function JarvisLabPage() {
               {night?.counts ? <p className="jcc-hint">{night.counts.pass}/{night.counts.total} pass</p> : null}
             </div>
 
-            {commandCenter?.simulationMode || commandCenter?.task?.simulated ? (
+            {ccView.presence.presence === 'SIMULATION' || commandCenter?.simulationMode || commandCenter?.task?.simulated ? (
               <p className="jcc-sim-banner" role="status">SIMULATION — events are tagged and not live hardware</p>
+            ) : ccView.presence.presence !== 'REAL' ? (
+              <p className={`jcc-sim-banner jcc-sim-banner--${ccView.presence.presence.toLowerCase()}`} role="status">
+                {ccView.presence.label} — {ccView.presence.reason}
+              </p>
+            ) : null}
+
+            {operationalMode === 'assistant' ? (
+              <AssistantHome view={ccView} onRecommended={onRecommendedAction} />
             ) : null}
 
             <div className="jcc-answer" data-state={busy ? 'busy' : response || draftText ? 'ready' : 'empty'}>
@@ -1792,30 +1906,27 @@ export default function JarvisLabPage() {
             </button>
             {rightOpen ? (
               <div className="jcc-rail__body">
-                <CommandCenterPanels
+                <CommandCenterModeShell
+                  mode={operationalMode}
+                  view={ccView}
                   snapshot={commandCenter}
                   domains={(research?.last?.sources ?? []).map(item => item.domain).filter(Boolean)}
                   busy={opsBusy}
+                  memoryRefs={memoryRefs}
+                  onModeChange={selectOperationalMode}
+                  onRecommended={onRecommendedAction}
+                  onOwnerCorrection={phrase => { void ask(undefined, phrase); }}
+                  onFocusMemory={id => onSelectNode(id, false)}
                   onDemo={(scenario: DemoScenarioId) => { void postCommandCenter('/api/jarvis/command-center/demo', { scenario }); }}
                   onCancel={() => {
                     if (commandCenter?.task?.id) void postCommandCenter('/api/jarvis/command-center/cancel', { taskId: commandCenter.task.id });
                   }}
-                  onGrant={() => {
-                    const perm = commandCenter?.permission;
-                    const taskId = commandCenter?.task?.id || perm?.taskId;
-                    if (taskId) {
-                      void postCommandCenter('/api/jarvis/command-center/grant', {
-                        taskId,
-                        stepId: perm?.stepId,
-                        proposalId: perm?.proposalId,
-                        capability: perm?.capability,
-                      });
-                    }
-                  }}
+                  onGrant={runCommandCenterGrant}
                   onSimulation={enabled => { void postCommandCenter('/api/jarvis/command-center/control', { simulationMode: enabled }); }}
                   onRunTask={objective => { void postCommandCenter('/api/jarvis/command-center/task', { objective }); }}
                   onNight={() => { void postCommandCenter('/api/jarvis/command-center/night', { action: 'run' }); }}
                 />
+                {operationalMode === 'operations' ? (
                 <section className="jcc-block">
                   <h2>Tool activity</h2>
                   {response?.intent ? (
@@ -1885,7 +1996,10 @@ export default function JarvisLabPage() {
                         : 'No capability host attached.'}
                   </p>
                 </section>
+                ) : null}
 
+                {operationalMode === 'intelligence' ? (
+                <>
                 <section className="jcc-block">
                   <h2>Sources</h2>
                   <p className="jcc-hint">
@@ -2004,7 +2118,10 @@ export default function JarvisLabPage() {
                     </dl>
                   ) : null}
                 </section>
+                </>
+                ) : null}
 
+                {operationalMode === 'operations' ? (
                 <section className="jcc-block">
                   <h2>Reminders</h2>
                   <p className="jcc-hint">
@@ -2033,7 +2150,9 @@ export default function JarvisLabPage() {
                     </ul>
                   )}
                 </section>
+                ) : null}
 
+                {operationalMode === 'devices' ? (
                 <section className="jcc-block">
                   <h2>System health</h2>
                   <ul className="jcc-meters">
@@ -2081,7 +2200,9 @@ export default function JarvisLabPage() {
                     </div>
                   </dl>
                 </section>
+                ) : null}
 
+                {operationalMode === 'intelligence' ? (
                 <section className="jcc-block">
                   <h2>Model status</h2>
                   <dl className="jcc-kv">
@@ -2100,7 +2221,9 @@ export default function JarvisLabPage() {
                     onRestart={id => { void requestServiceAction('jarvis.restartService', id); }}
                   />
                 </section>
+                ) : null}
 
+                {operationalMode === 'devices' ? (
                 <section className="jcc-block">
                   <h2>Voice / STT</h2>
                   <dl className="jcc-kv">
@@ -2115,7 +2238,9 @@ export default function JarvisLabPage() {
                     onRestart={id => { void requestServiceAction('jarvis.restartService', id); }}
                   />
                 </section>
+                ) : null}
 
+                {operationalMode === 'operations' ? (
                 <section className="jcc-block">
                   <h2>Night agent</h2>
                   {night?.available ? (
@@ -2130,6 +2255,7 @@ export default function JarvisLabPage() {
                     <p className="jcc-empty">{night?.reason || 'No night-agent state on this machine.'}</p>
                   )}
                 </section>
+                ) : null}
               </div>
             ) : null}
           </aside>
