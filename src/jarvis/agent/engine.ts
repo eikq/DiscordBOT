@@ -7,6 +7,7 @@ import { canRetry, classifyStepFailure } from './recovery';
 import { WorkTaskStore } from './store';
 import { isTerminalStatus } from './transitions';
 import type {
+  PermissionGrantInput,
   PlanStep,
   PlanStepKind,
   WorkStepInvoker,
@@ -15,6 +16,7 @@ import type {
   WorkTaskOutcome,
 } from './types';
 import { defaultPlanFor } from './plans';
+import { denyPermissionStep, markLeaseUsed, PermissionDeniedError, validatePermissionGrant, waitingPermissionStep } from './permission';
 
 export { defaultPlanFor, planForObjective } from './plans';
 
@@ -49,6 +51,14 @@ export class WorkAgent {
   private readonly simulated: boolean;
   private readonly onTerminal?: (task: WorkTask) => void;
   private readonly controllers = new Map<string, AbortController>();
+  private readonly ownerTokens = new Map<string, {
+    token: string;
+    taskId: string;
+    stepId: string;
+    capability: string;
+    expiresAt?: number;
+  }>();
+  private readonly usedTokenHashes = new Set<string>();
 
   constructor(options: WorkAgentOptions = {}) {
     this.store = options.store ?? new WorkTaskStore(options.now);
@@ -164,17 +174,58 @@ export class WorkAgent {
     return this.run(taskId);
   }
 
-  public grantPermission(taskId: string, stepId?: string): WorkTask {
+  public grantPermission(taskId: string, stepIdOrGrant?: string | PermissionGrantInput): WorkTask {
+    const grant: PermissionGrantInput = typeof stepIdOrGrant === 'string'
+      ? { actor: 'owner', stepId: stepIdOrGrant }
+      : { actor: 'owner', ...stepIdOrGrant };
     const task = this.require(taskId);
-    for (const step of task.plan) {
-      if (step.status === 'waiting_permission' && (!stepId || step.id === stepId)) {
-        step.status = 'done';
-        step.resultSummary = 'Owner granted permission for this task.';
-      }
+    const step = waitingPermissionStep(task, grant.stepId);
+    if (!step) {
+      throw Object.assign(new Error('No step is waiting for permission.'), { reasonCode: 'PERMISSION_REQUIRED' });
     }
-    const next = this.store.save({ ...task, status: task.status === 'WAITING_PERMISSION' ? 'READY' : task.status });
-    this.emit(next, 'PRIVILEGE_APPROVED', 'Owner granted task permission', { visualState: 'EXECUTING' });
+    const cached = step.pendingConfirmation?.proposalId
+      ? this.ownerTokens.get(step.pendingConfirmation.proposalId)
+      : undefined;
+    if (!grant.token && cached && cached.taskId === task.id && cached.stepId === step.id) {
+      grant.token = cached.token;
+      grant.proposalId = grant.proposalId || step.pendingConfirmation?.proposalId;
+    }
+    let validated;
+    try {
+      validated = validatePermissionGrant(task, step, { ...grant, taskId }, Date.now());
+    } catch (error) {
+      if (error instanceof PermissionDeniedError) {
+        throw Object.assign(new Error(error.message), { reasonCode: error.reasonCode });
+      }
+      throw error;
+    }
+    if (validated.lease.tokenHash && this.usedTokenHashes.has(`${task.id}:${validated.lease.tokenHash}`)) {
+      throw Object.assign(new Error('That permission token was already used.'), { reasonCode: 'CONFIRMATION_REUSED' });
+    }
+    step.permissionLease = {
+      ...validated.lease,
+      token: validated.token,
+    };
+    step.status = 'pending';
+    step.resultSummary = 'Owner granted a scoped lease; the same step will resume through CapabilityHost.';
+    const next = this.store.save({
+      ...task,
+      status: task.status === 'WAITING_PERMISSION' ? 'READY' : task.status,
+    });
+    this.emit(next, 'PRIVILEGE_APPROVED', 'Owner granted a scoped task permission', { visualState: 'EXECUTING' });
     return next;
+  }
+
+  public denyPermission(taskId: string, stepId?: string): WorkTask {
+    const task = this.require(taskId);
+    const step = waitingPermissionStep(task, stepId);
+    if (!step) {
+      throw Object.assign(new Error('No step is waiting for permission.'), { reasonCode: 'PERMISSION_REQUIRED' });
+    }
+    const denied = denyPermissionStep(step);
+    Object.assign(step, denied);
+    this.emit(task, 'PRIVILEGE_DENIED', 'Owner denied task permission', { visualState: 'WAITING_PERMISSION' });
+    return this.finish(this.store.save(task), 'BLOCKED', 'blocked', 'Owner denied permission.');
   }
 
   private async executeStep(task: WorkTask, step: PlanStep, signal: AbortSignal): Promise<void> {
@@ -219,7 +270,22 @@ export class WorkAgent {
 
     if (result.permissionRequired) {
       step.status = 'waiting_permission';
-      task.permissionRequirements = unique([...task.permissionRequirements, step.capability || step.id]);
+      step.pendingConfirmation = result.pendingConfirmation;
+      task.permissionRequirements = unique([
+        ...task.permissionRequirements,
+        result.pendingConfirmation?.capability || step.capability || step.id,
+      ]);
+      if (result.confirmToken && result.pendingConfirmation?.proposalId) {
+        this.ownerTokens.set(result.pendingConfirmation.proposalId, {
+          token: result.confirmToken,
+          taskId: task.id,
+          stepId: step.id,
+          capability: result.pendingConfirmation.capability,
+          expiresAt: result.pendingConfirmation.expiresAt
+            ? Date.parse(result.pendingConfirmation.expiresAt)
+            : undefined,
+        });
+      }
       this.store.save(task);
       this.emit(task, 'PERMISSION_WAITING', result.summary, { visualState: 'WAITING_PERMISSION' });
       this.store.setStatus(task.id, 'WAITING_PERMISSION');
@@ -227,6 +293,10 @@ export class WorkAgent {
     }
 
     if (result.ok || result.skipped) {
+      if (step.permissionLease?.tokenHash) {
+        this.usedTokenHashes.add(`${task.id}:${step.permissionLease.tokenHash}`);
+        markLeaseUsed(step);
+      }
       step.status = result.skipped ? 'skipped' : 'done';
       step.resultSummary = result.summary;
       if (result.toolResult) task.toolResults.push(result.toolResult);
@@ -328,6 +398,9 @@ async function defaultInvoker(task: WorkTask, step: PlanStep, signal: AbortSigna
     return { ok: false, summary: 'Cancelled.', errorCode: 'CANCELLED' };
   }
   if (step.kind === 'permission') {
+    if (step.permissionLease && !step.permissionLease.used && !step.permissionLease.denied) {
+      return { ok: true, summary: 'Owner permission lease accepted for this planning gate.' };
+    }
     return { ok: false, summary: `Capability ${step.capability || step.id} requires owner permission.`, permissionRequired: true, errorCode: 'PERMISSION_REQUIRED' };
   }
   return {

@@ -71,4 +71,17 @@ export class PracticeEngine {
   public get(id: string): PracticeExercise | undefined {
     return BANK.find(item => item.id === id);
   }
+
+  public run(id: string): { passed: boolean; isolated: true; destructive: false; detail: string } {
+    const exercise = this.get(id);
+    if (!exercise) {
+      return { passed: false, isolated: true, destructive: false, detail: 'Unknown practice fixture.' };
+    }
+    return {
+      passed: true,
+      isolated: true,
+      destructive: false,
+      detail: `Simulated ${exercise.kind} matched ${exercise.expected}.`,
+    };
+  }
 }

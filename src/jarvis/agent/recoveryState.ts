@@ -1,9 +1,11 @@
+import { sanitizeTaskForPersist } from './persistSanitize';
 import type { WorkTask } from './types';
 
 export function recoverInterruptedTask(task: WorkTask): WorkTask {
+  const sanitized = sanitizeTaskForPersist(task);
   const next: WorkTask = {
-    ...task,
-    plan: task.plan.map(step => {
+    ...sanitized,
+    plan: sanitized.plan.map(step => {
       if (step.status !== 'running') return { ...step };
       if (step.kind === 'apply' && step.riskLevel !== 'LOW') {
         return {

@@ -42,7 +42,16 @@ export default function CommandCenterPanels({
         <p className="jcc-hint">
           {snapshot?.visualLabel || 'IDLE'}
           {snapshot?.task ? ` · ${snapshot.task.status}` : ''}
+          {snapshot?.request ? ` · ${snapshot.request.route}` : ''}
         </p>
+        {snapshot?.request ? (
+          <p className="jcc-hint">
+            Route {snapshot.request.route} · {snapshot.request.socialAction}
+            {snapshot.request.agentic ? ' · agentic' : ' · conversation'}
+          </p>
+        ) : (
+          <p className="jcc-empty">No current request route.</p>
+        )}
         {!snapshot?.task ? (
           <p className="jcc-empty">No multi-step work task. Demos below are tagged simulation.</p>
         ) : (
@@ -132,6 +141,20 @@ export default function CommandCenterPanels({
         )}
         {snapshot?.evolution.goals[0] ? <p className="jcc-hint">Goal: {snapshot.evolution.goals[0]}</p> : null}
         {snapshot?.evolution.lessons[0] ? <p className="jcc-hint">Lesson: {snapshot.evolution.lessons[0]}</p> : null}
+        {snapshot?.evolution.graph.empty ? (
+          <p className="jcc-empty">Fluctlight is empty until a real experience is recorded.</p>
+        ) : (
+          <p className="jcc-hint">
+            Fluctlight {snapshot?.evolution.graph.nodes ?? 0} nodes · {snapshot?.evolution.graph.edges ?? 0} edges
+          </p>
+        )}
+        {(snapshot?.evolution.benchmarks.length ?? 0) > 0 ? (
+          <p className="jcc-hint">
+            Benchmarks {snapshot?.evolution.benchmarks.filter(item => item.passed).length}/{snapshot?.evolution.benchmarks.length} passed
+          </p>
+        ) : (
+          <p className="jcc-empty">No benchmark runs yet.</p>
+        )}
         {(snapshot?.evolution.candidates.length ?? 0) > 0 ? (
           <ul className="jcc-evidence">
             {snapshot?.evolution.candidates.map(item => (

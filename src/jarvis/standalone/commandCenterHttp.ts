@@ -51,6 +51,24 @@ export function parseStepId(value: unknown): string | undefined {
   return /^[a-z][a-z0-9_]{2,40}$/iu.test(id) ? id : undefined;
 }
 
+export function parsePermissionGrant(body: unknown): {
+  taskId?: string;
+  stepId?: string;
+  proposalId?: string;
+  token?: string;
+  capability?: string;
+} {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return {};
+  const raw = body as Record<string, unknown>;
+  return {
+    taskId: parseTaskId(raw.taskId),
+    stepId: parseStepId(raw.stepId),
+    proposalId: typeof raw.proposalId === 'string' ? raw.proposalId.trim() : undefined,
+    token: typeof raw.token === 'string' ? raw.token : undefined,
+    capability: typeof raw.capability === 'string' ? raw.capability.trim() : undefined,
+  };
+}
+
 function asAutonomy(value: unknown): AutonomyLevel | undefined {
   return typeof value === 'number' && (AUTONOMY_LEVELS as readonly number[]).includes(value)
     ? value as AutonomyLevel

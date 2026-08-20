@@ -24,15 +24,23 @@ export type EvolutionLifecycleStores = {
 export type EvolutionLifecycleResult = {
   experience: ExperienceRecord | null;
   reflection: ReflectionRecord | null;
+  duplicate?: boolean;
 };
 
 export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStores): EvolutionLifecycleResult {
+  const experienceId = `exp_task_${task.id}`;
+  const existing = stores.experiences.get(experienceId);
+  if (existing) {
+    const reflection = stores.reflections.list().find(item => item.experienceId === existing.id) ?? null;
+    return { experience: existing, reflection, duplicate: true };
+  }
   const outcome = task.outcome === 'success'
     ? 'success'
     : task.outcome === 'cancelled'
       ? 'partial'
       : 'failure';
   const experience = stores.experiences.createIfSignificant({
+    id: experienceId,
     kind: 'episodic',
     domain: 'task',
     goal: task.objective,

@@ -18,6 +18,9 @@ export class ExperienceStore {
   }
 
   public create(input: CreateExperienceInput, actor: PrivilegeActor = 'system'): ExperienceRecord {
+    if (input.id && this.items.has(input.id)) {
+      return { ...this.items.get(input.id)! };
+    }
     if (actor === 'webpage' || actor === 'skill') {
       throw Object.assign(new Error('Untrusted content cannot write experience memory.'), { reasonCode: 'UNTRUSTED_MEMORY_WRITE' });
     }
@@ -39,6 +42,9 @@ export class ExperienceStore {
   }
 
   public createIfSignificant(input: CreateExperienceInput, actor: PrivilegeActor = 'system'): ExperienceRecord | null {
+    if (input.id && this.items.has(input.id)) {
+      return { ...this.items.get(input.id)! };
+    }
     if ((input.significance ?? 0.5) < 0.2) return null;
     return this.create(input, actor);
   }

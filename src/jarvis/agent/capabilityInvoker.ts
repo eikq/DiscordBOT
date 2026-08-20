@@ -32,6 +32,9 @@ async function invokeThroughHost(
     return { ok: true, summary: 'Structured reflection recorded. Failure cannot mint a trusted skill.' };
   }
   if (step.kind === 'permission') {
+    if (step.permissionLease && !step.permissionLease.used && !step.permissionLease.denied) {
+      return { ok: true, summary: 'Owner permission lease accepted for this planning gate.' };
+    }
     return {
       ok: false,
       permissionRequired: true,
@@ -89,12 +92,16 @@ async function invokeThroughHost(
     };
   }
 
+  const confirmation = step.permissionLease?.token && step.pendingConfirmation?.proposalId
+    ? { proposalId: step.pendingConfirmation.proposalId, token: step.permissionLease.token }
+    : undefined;
   const result = await host.invoke({
     id: resolved.id,
     input: resolved.input,
     source: 'system',
     sessionId: options.sessionId || task.id,
     requestId: `${task.id}:${step.id}`,
+    ...(confirmation ? { confirmation } : {}),
   });
   return mapCapabilityResult(result);
 }
@@ -129,12 +136,27 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
   ].filter(Boolean);
 
   if (result.status === 'confirmation_required') {
+    const structured = result.structured ?? {};
     return {
       ok: false,
       permissionRequired: true,
       summary: result.error || `Owner permission required for ${result.capabilityId}.`,
       errorCode: 'PERMISSION_REQUIRED',
       toolResult,
+      pendingConfirmation: typeof structured.proposalId === 'string'
+        ? {
+            proposalId: structured.proposalId,
+            capability: result.capabilityId,
+            risk: String(structured.risk || 'CONFIRM_REQUIRED'),
+            expiresAt: typeof structured.expiresAt === 'string' ? structured.expiresAt : undefined,
+            summary: typeof structured.summary === 'string' ? structured.summary : result.error,
+          }
+        : {
+            proposalId: `${result.capabilityId}:pending`,
+            capability: result.capabilityId,
+            risk: String(structured.risk || 'CONFIRM_REQUIRED'),
+          },
+      confirmToken: typeof structured.confirmToken === 'string' ? structured.confirmToken : undefined,
     };
   }
   if (result.status === 'rejected') {

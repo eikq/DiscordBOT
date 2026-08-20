@@ -1,7 +1,13 @@
 import path from 'node:path';
-import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type WorkStepInvoker, type WorkTask } from '../agent';
+import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type PermissionGrantInput, type WorkStepInvoker, type WorkTask } from '../agent';
+import { adaptPlanForFailures } from '../agent/adaptivePlan';
 import { createCapabilityWorkInvoker } from '../agent/capabilityInvoker';
 import { inferCapabilityFromObjective, planForObjective } from '../agent/capabilityResolve';
+import { synthesizeTaskResponse } from '../agent/synthesize';
+import { routeJarvisRequest, type RouteDecision } from '../intent/requestRouter';
+import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
+import { writeExperienceEpisode } from '../memory/experienceBridge';
+import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
 import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
 import { SimulatedDeviceProvider, type DeviceRecord } from '../devices';
@@ -58,7 +64,17 @@ export type CommandCenterSnapshot = {
     affectStyle: ReturnType<AffectEngine['style']>;
     selfModel: ReturnType<CapabilitySelfModel['matrix']>;
     candidates: ReturnType<CandidateManager['list']>;
+    benchmarks: ReturnType<BenchmarkBank['latest']>;
   };
+  request: { route: RouteDecision; objective: string; taskId?: string } | null;
+  permission: {
+    waiting: boolean;
+    taskId?: string;
+    stepId?: string;
+    capability?: string;
+    proposalId?: string;
+  };
+  memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: DeviceRecord[];
   vision: VisualContext | null;
   control: OwnerControlState;
@@ -74,6 +90,7 @@ export type CommandCenterOptions = {
   persistRoot?: string;
   workDbPath?: string;
   evolutionDbPath?: string;
+  memoryStore?: JarvisMemoryStore;
 };
 
 export class CommandCenterRuntime {
@@ -87,7 +104,7 @@ export class CommandCenterRuntime {
   public readonly selfModel: CapabilitySelfModel;
   public readonly growth: GrowthPlanner;
   public readonly practice = new PracticeEngine();
-  public readonly benchmarks = new BenchmarkBank();
+  public readonly benchmarks: BenchmarkBank;
   public readonly affect = new AffectEngine();
   public readonly candidates: CandidateManager;
   public readonly modelAdaptation = new ModelAdaptationRegistry();
@@ -101,6 +118,8 @@ export class CommandCenterRuntime {
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
+  private readonly memoryStore?: JarvisMemoryStore;
+  private lastRequest: { route: RouteDecision; objective: string; taskId?: string } | null = null;
 
   constructor(options: CommandCenterOptions = {}) {
     const simulated = Boolean(options.simulated);
@@ -128,6 +147,8 @@ export class CommandCenterRuntime {
     this.growth = new GrowthPlanner(this.persistence?.growth);
     this.candidates = new CandidateManager(this.persistence?.candidates);
     this.reflectionLedger = new ReflectionLedger(this.persistence?.reflections);
+    this.benchmarks = new BenchmarkBank(now, this.persistence?.benchmarks);
+    this.memoryStore = options.memoryStore;
     this.agent = new WorkAgent({
       store: new WorkTaskStore({ now: options.now, dbPath: workDb }),
       events: this.events,
@@ -149,6 +170,7 @@ export class CommandCenterRuntime {
       events: this.events,
       now: options.now,
       simulated,
+      runBenchmarks: () => runCloudBenchmarkBank(this.benchmarks, now).length,
     });
   }
 
@@ -183,7 +205,7 @@ export class CommandCenterRuntime {
         graph: buildEvolutionGraph({
           experiences: experiences.map(item => ({ id: item.id, goal: item.goal, outcome: item.outcome })),
           reflections: reflections.map(item => ({ experienceId: item.experienceId, reusableLesson: item.reusableLesson })),
-          skills: this.skills.list().map(item => ({ skillId: item.skillId, version: item.version, purpose: item.purpose })),
+          skills: this.skills.list().map(item => ({ skillId: item.skillId, version: item.version, purpose: item.purpose, evidence: item.evidence })),
           goals: this.growth.list(),
           failures: this.failures.list(),
         }),
@@ -192,6 +214,14 @@ export class CommandCenterRuntime {
         affectStyle: this.affect.style(),
         selfModel: this.selfModel.matrix(),
         candidates: this.candidates.list(),
+        benchmarks: this.benchmarks.latest(),
+      },
+      request: this.lastRequest,
+      permission: permissionOf(active),
+      memoryActivity: {
+        experiences: experiences.length,
+        reflections: reflections.length,
+        skills: this.skills.list().length,
       },
       devices: this.devices.list(),
       vision: this.vision,
@@ -214,7 +244,7 @@ export class CommandCenterRuntime {
   }
 
   public recordTaskExperience(task: WorkTask): void {
-    applyTaskOutcome(task, {
+    const result = applyTaskOutcome(task, {
       experiences: this.experiences,
       reflections: this.reflectionLedger,
       failures: this.failures,
@@ -224,13 +254,27 @@ export class CommandCenterRuntime {
       affect: this.affect,
       events: this.events,
     });
+    if (result.experience && !result.duplicate && this.memoryStore) {
+      writeExperienceEpisode(this.memoryStore, result.experience, task);
+    }
   }
 
-  public async runObjective(objective: string, options: { simulated?: boolean } = {}): Promise<WorkTask> {
+  public async runObjective(objective: string, options: { simulated?: boolean; sessionId?: string } = {}): Promise<WorkTask> {
     const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
     if (simulated) this.control.patch({ simulationMode: true }, 'owner');
     const capabilityId = inferCapabilityFromObjective(objective, this.host);
-    const task = this.agent.receive(objective, planForObjective(objective, capabilityId), { simulated });
+    const routed = routeJarvisRequest({ text: objective });
+    const route = capabilityId && routed.route === 'CONVERSATION'
+      ? { ...routed, route: 'CAPABILITY' as const, agentic: true, reason: 'bound_capability' }
+      : routed;
+    const trustedSkills = this.skills.retrieveTrusted(objective);
+    const plan = adaptPlanForFailures(
+      planForObjective(objective, capabilityId),
+      this.failures,
+      trustedSkills,
+    );
+    const task = this.agent.receive(objective, plan, { simulated });
+    this.lastRequest = { route, objective, taskId: task.id };
     return this.agent.run(task.id);
   }
 
@@ -252,12 +296,27 @@ export class CommandCenterRuntime {
     return presentCommandCenter(this.snapshot());
   }
 
-  public async grantAndResume(taskId: string, stepId?: string) {
-    const granted = this.agent.grantPermission(taskId, stepId);
+  public async grantAndResume(taskId: string, stepIdOrGrant?: string | PermissionGrantInput) {
+    const granted = this.agent.grantPermission(taskId, stepIdOrGrant);
     if (granted.status === 'READY' || granted.status === 'WAITING_PERMISSION' || granted.status === 'PAUSED') {
       return this.agent.resume(taskId);
     }
     return granted;
+  }
+
+  public synthesize(task?: WorkTask) {
+    const current = task ?? this.agent.store.active()[0] ?? this.agent.store.list().at(-1);
+    return current ? synthesizeTaskResponse(current) : undefined;
+  }
+
+  public runPractice(goalId: string) {
+    const goal = this.growth.list().find(item => item.id === goalId);
+    const exercise = this.practice.exercises(1)[0];
+    const result = this.practice.run(exercise?.id || 'practice_planning_dag');
+    if (result.passed && goal) {
+      this.selfModel.observe('practice', 'success');
+    }
+    return { goalId, isolated: result.isolated, destructive: result.destructive, passed: result.passed };
   }
 
   public notify(signal: MonitorSignal): ReturnType<ProactiveMonitor['ingest']> {
@@ -376,4 +435,15 @@ export function sharedCommandCenter(): CommandCenterRuntime {
 
 export function resetSharedCommandCenter(): void {
   sharedCenter = undefined;
+}
+
+function permissionOf(task: WorkTask | null): CommandCenterSnapshot['permission'] {
+  const waiting = task?.plan.find(step => step.status === 'waiting_permission');
+  return {
+    waiting: Boolean(waiting),
+    taskId: task?.id,
+    stepId: waiting?.id,
+    capability: waiting?.pendingConfirmation?.capability || waiting?.capability,
+    proposalId: waiting?.pendingConfirmation?.proposalId,
+  };
 }

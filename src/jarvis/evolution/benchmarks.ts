@@ -24,8 +24,18 @@ export type BenchmarkResult = {
 
 export class BenchmarkBank {
   private readonly results: BenchmarkResult[] = [];
+  private readonly persist?: { load: () => BenchmarkResult[]; replace: (items: BenchmarkResult[]) => void };
 
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(
+    now: () => number = () => Date.now(),
+    persist?: { load: () => BenchmarkResult[]; replace: (items: BenchmarkResult[]) => void },
+  ) {
+    this.now = now;
+    this.persist = persist;
+    if (persist) this.results.push(...persist.load());
+  }
+
+  private readonly now: () => number;
 
   public record(input: Omit<BenchmarkResult, 'at'> & { at?: string }): BenchmarkResult {
     const result: BenchmarkResult = {
@@ -34,6 +44,7 @@ export class BenchmarkBank {
       score: input.score,
     };
     this.results.push(result);
+    this.persist?.replace(this.history());
     return { ...result };
   }
 

@@ -32,3 +32,14 @@ export const DEFAULT_MONITOR_PREFERENCES: MonitorPreferences = {
   minSeverity: 'warning',
   cooldownMs: 15 * 60_000,
 };
+
+export function simulatedMonitorSignal(input: Partial<MonitorSignal> & Pick<MonitorSignal, 'id' | 'summary'>): MonitorSignal {
+  return {
+    type: 'system_health',
+    severity: 'warning',
+    at: new Date().toISOString(),
+    ownerRelevant: true,
+    simulated: true,
+    ...input,
+  };
+}

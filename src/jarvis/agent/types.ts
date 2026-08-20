@@ -50,6 +50,41 @@ export const PLAN_STEP_STATUSES = [
 
 export type PlanStepStatus = (typeof PLAN_STEP_STATUSES)[number];
 
+export type PermissionLease = {
+  taskId: string;
+  stepId: string;
+  capability: string;
+  scope: Record<string, unknown>;
+  risk: string;
+  proposalId?: string;
+  expiresAt?: string;
+  grantedAt?: string;
+  used: boolean;
+  denied: boolean;
+  tokenHash?: string;
+  token?: string;
+};
+
+export type PendingStepConfirmation = {
+  proposalId: string;
+  capability: string;
+  risk: string;
+  expiresAt?: string;
+  summary?: string;
+};
+
+export type PermissionGrantInput = {
+  actor?: 'owner' | 'system' | 'jarvis';
+  taskId?: string;
+  stepId?: string;
+  capability?: string;
+  scope?: Record<string, unknown>;
+  risk?: string;
+  proposalId?: string;
+  token?: string;
+  expiresAt?: string;
+};
+
 export type PlanStep = {
   id: string;
   title: string;
@@ -63,6 +98,9 @@ export type PlanStep = {
   input?: Record<string, unknown>;
   resultSummary?: string;
   errorCode?: JarvisErrorCode;
+  pendingConfirmation?: PendingStepConfirmation;
+  permissionLease?: PermissionLease;
+  deniedPermission?: boolean;
 };
 
 export type WorkTaskOutcome = 'success' | 'failure' | 'cancelled' | 'blocked' | 'degraded';
@@ -96,6 +134,24 @@ export type WorkStepResult = {
   toolResult?: { capability: string; status: string; summary: string };
   evidence?: string[];
   skipped?: boolean;
+  pendingConfirmation?: PendingStepConfirmation;
+  confirmToken?: string;
+};
+
+export type SynthesizedOutcome =
+  | 'SUCCESS'
+  | 'PARTIAL'
+  | 'BLOCKED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'DEGRADED';
+
+export type SynthesizedTaskResponse = {
+  outcome: SynthesizedOutcome;
+  text: string;
+  evidence: string[];
+  observations: string[];
+  verification?: string;
 };
 
 export type WorkStepInvoker = (task: WorkTask, step: PlanStep, signal: AbortSignal) => Promise<WorkStepResult>;

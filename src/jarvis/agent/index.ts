@@ -6,10 +6,14 @@ export { inferCapabilityFromObjective, isBlockedCapabilityId, resolveStepCapabil
 export { assertAcyclic, readySteps } from './dag';
 export { canTransition, isTerminalStatus } from './transitions';
 export { canRetry, classifyStepFailure, failureSignature } from './recovery';
+export { synthesizeTaskResponse } from './synthesize';
+export { adaptPlanForFailures } from './adaptivePlan';
 export type {
+  PermissionGrantInput,
   PlanStep,
   PlanStepKind,
   PlanStepStatus,
+  SynthesizedTaskResponse,
   WorkStepInvoker,
   WorkStepResult,
   WorkTask,

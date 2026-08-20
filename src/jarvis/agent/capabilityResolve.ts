@@ -23,7 +23,7 @@ export function inferCapabilityFromObjective(objective: string, host?: Capabilit
   if ((/research|ค้นเว็บ|search the web|official source/iu.test(text)) && has(RESEARCH_SEARCH)) {
     return RESEARCH_SEARCH;
   }
-  if ((/workspace|หาไฟล์|find symbol|local file|search (the )?repo/iu.test(text)) && has(WORKSPACE_SEARCH)) {
+  if ((/workspace|หาไฟล์|find symbol|local file|search (the )?repo|inspect these files|fix the issue/iu.test(text)) && has(WORKSPACE_SEARCH)) {
     return WORKSPACE_SEARCH;
   }
   return undefined;

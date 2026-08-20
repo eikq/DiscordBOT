@@ -93,6 +93,9 @@ test('cancellation stops a running task', async () => {
 test('permission waiting does not execute the gated step', async () => {
   const agent = new WorkAgent({
     invoke: async (_task, planStep) => {
+      if (planStep.permissionLease && !planStep.permissionLease.used) {
+        return { ok: true, summary: 'lease accepted' };
+      }
       if (planStep.kind === 'permission' || planStep.capability === 'workspace.getDocument') {
         return { ok: false, permissionRequired: true, summary: 'Need owner allow', errorCode: 'PERMISSION_REQUIRED' };
       }

@@ -67,7 +67,12 @@ export type CommandCenterClientSnapshot = {
     };
     candidates: Array<{ id: string; hypothesis: string; status: string; simulated?: boolean }>;
     productionPromotionAllowed: false;
+    benchmarks: Array<{ id: string; category: string; passed: boolean; detail: string }>;
+    graph: { nodes: number; edges: number; empty: boolean };
   };
+  request: { route: string; socialAction: string; agentic: boolean; reason: string } | null;
+  permission: { waiting: boolean; capability?: string; proposalId?: string };
+  memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: Array<{
     id: string;
     label: string;
@@ -154,7 +159,32 @@ export function presentCommandCenter(
         simulated: item.simulated,
       })),
       productionPromotionAllowed: false,
+      benchmarks: snapshot.evolution.benchmarks.slice(0, 8).map(item => ({
+        id: item.id,
+        category: item.category,
+        passed: item.passed,
+        detail: item.detail,
+      })),
+      graph: {
+        nodes: snapshot.evolution.graph.nodes.length,
+        edges: snapshot.evolution.graph.edges.length,
+        empty: snapshot.evolution.graph.nodes.length === 0,
+      },
     },
+    request: snapshot.request
+      ? {
+          route: snapshot.request.route.route,
+          socialAction: snapshot.request.route.socialAction,
+          agentic: snapshot.request.route.agentic,
+          reason: snapshot.request.route.reason,
+        }
+      : null,
+    permission: {
+      waiting: snapshot.permission.waiting,
+      capability: snapshot.permission.capability,
+      proposalId: snapshot.permission.proposalId,
+    },
+    memoryActivity: snapshot.memoryActivity,
     devices: snapshot.devices.map(device => ({
       id: device.id,
       label: device.label,

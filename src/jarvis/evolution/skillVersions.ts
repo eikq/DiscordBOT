@@ -91,6 +91,19 @@ export class SkillVersionRegistry {
     return [...this.versions.values()].flatMap(items => items.map(item => ({ ...item })));
   }
 
+  public retrieveTrusted(query: string): ProceduralSkillVersion[] {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    return this.list().filter(skill => {
+      if (!skill.knownGood && skill.status !== 'ACTIVE' && skill.status !== 'TRUSTED_INSTRUCTION') {
+        return false;
+      }
+      return skill.trigger.toLowerCase().includes(needle.slice(0, 48))
+        || skill.purpose.toLowerCase().includes(needle.slice(0, 48))
+        || needle.includes(skill.skillId.toLowerCase());
+    });
+  }
+
   private require(skillId: string, version: number): ProceduralSkillVersion {
     const found = this.versions.get(skillId)?.find(item => item.version === version);
     if (!found) throw Object.assign(new Error('Unknown skill version.'), { reasonCode: 'UNKNOWN_SKILL_VERSION' });

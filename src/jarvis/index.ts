@@ -242,7 +242,7 @@ export {
   affectCannotAuthorize,
   applyTaskOutcome,
 } from './evolution';
-export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker } from './agent';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
 export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
 export { OwnerControl } from './control';
 export { ProactiveMonitor } from './monitor';
@@ -260,6 +260,7 @@ export {
   parseTaskId,
   parseObjective,
   parseNightAction,
+  parsePermissionGrant,
   DEMO_SCENARIOS,
 } from './standalone/commandCenterHttp';
 export {
@@ -268,8 +269,10 @@ export {
   resolveUserIntent,
   validateIntentResolution,
   InteractionContextStore,
+  routeJarvisRequest,
+  shouldUseWorkAgent,
 } from './intent';
-export type { IntentResolution, InteractionContext, CompactCapability } from './intent';
+export type { IntentResolution, InteractionContext, CompactCapability, RouteDecision, JarvisRequestRoute } from './intent';
 export type { ResearchResult, ResearchRuntime, ResearchSnapshot, SourceRecord } from './research';
 export {
   WORKSPACE_CURRENT,

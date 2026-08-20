@@ -20,7 +20,7 @@ import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants
 import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
 import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
 import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
-import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
+import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parsePermissionGrant, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
 dotenv.config({ quiet: true });
 if (process.env.JARVIS_STANDALONE === '1') {
@@ -1112,10 +1112,17 @@ async function startServer() {
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
       return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
     }
-    const taskId = parseTaskId(req.body?.taskId);
+    const grant = parsePermissionGrant(req.body);
+    const taskId = grant.taskId || parseTaskId(req.body?.taskId);
     if (!taskId) return res.status(400).json({ error: 'taskId is required.', reasonCode: 'PLAN_INVALID' });
     try {
-      await sharedCommandCenter().grantAndResume(taskId, parseStepId(req.body?.stepId));
+      await sharedCommandCenter().grantAndResume(taskId, {
+        actor: 'owner',
+        stepId: grant.stepId,
+        proposalId: grant.proposalId,
+        token: grant.token,
+        capability: grant.capability,
+      });
       return res.json(sharedCommandCenter().present());
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });

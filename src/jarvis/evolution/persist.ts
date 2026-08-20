@@ -8,6 +8,7 @@ import type { GrowthGoal } from './growthPlanner';
 import type { NightCycleReport } from './nightCycle';
 import type { ReflectionRecord } from './reflectionEngine';
 import type { CapabilityAssessment } from './selfModel';
+import type { BenchmarkResult } from './benchmarks';
 import type { ExperienceRecord, ProceduralSkillVersion } from './types';
 
 import type { JsonCollection } from './persistTypes';
@@ -48,6 +49,7 @@ export class EvolutionPersistence {
   public readonly candidates: JsonCollection<ImprovementCandidate>;
   public readonly claims: JsonCollection<DurableClaim>;
   public readonly night: JsonCollection<NightCycleReport & { id: string }>;
+  public readonly benchmarks: JsonCollection<BenchmarkResult>;
 
   constructor(dbPath: string) {
     const opened = openOperationalSqlite(dbPath, 'Evolution store');
@@ -71,6 +73,7 @@ export class EvolutionPersistence {
     this.candidates = this.collection('candidates', item => item.id);
     this.claims = this.collection('claims', item => item.id);
     this.night = this.collection('night', item => item.id);
+    this.benchmarks = this.collection('benchmarks', item => item.id);
   }
 
   public close(): void {

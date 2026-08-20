@@ -44,7 +44,7 @@ const EDGE_CAP = 120;
 export function buildEvolutionGraph(input: {
   experiences: Array<{ id: string; goal: string; outcome: string }>;
   reflections: Array<{ experienceId: string; reusableLesson: string }>;
-  skills: Array<{ skillId: string; version: number; purpose: string }>;
+  skills: Array<{ skillId: string; version: number; purpose: string; evidence?: string[] }>;
   goals?: Array<{ id: string; title: string }>;
   failures?: Array<{ signature: string }>;
 }): EvolutionGraph {
@@ -86,6 +86,17 @@ export function buildEvolutionGraph(input: {
   for (const skill of input.skills) {
     const id = `skill_${skill.skillId}_v${skill.version}`;
     addNode({ id, kind: 'skill', label: `${skill.skillId} v${skill.version}` });
+    for (const evidence of skill.evidence ?? []) {
+      const lessonId = `les_${evidence}`;
+      if (nodes.has(lessonId)) {
+        addEdge({
+          id: `e_${lessonId}_${id}`,
+          source: lessonId,
+          target: id,
+          kind: 'lesson_to_skill',
+        });
+      }
+    }
   }
   for (const goal of input.goals ?? []) {
     addNode({ id: goal.id, kind: 'goal', label: goal.title.slice(0, 48) });

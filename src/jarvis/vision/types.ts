@@ -32,3 +32,19 @@ export type VisionAnalyzer = {
 };
 
 export type VisionPermissionState = 'denied' | 'granted' | 'unknown';
+
+export type VisionProviderHealth = {
+  capture: 'SIMULATION' | 'REAL' | 'UNAVAILABLE' | 'BLOCKED';
+  analyzer: 'SIMULATION' | 'REAL' | 'UNAVAILABLE' | 'BLOCKED';
+  permission: VisionPermissionState;
+  seeImpliesClick: false;
+};
+
+export function defaultVisionHealth(): VisionProviderHealth {
+  return {
+    capture: 'SIMULATION',
+    analyzer: 'SIMULATION',
+    permission: 'unknown',
+    seeImpliesClick: false,
+  };
+}

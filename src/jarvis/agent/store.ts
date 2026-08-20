@@ -3,6 +3,7 @@ import type { PlanStep, WorkTask, WorkTaskStatus } from './types';
 import { assertTransition, isTerminalStatus } from './transitions';
 import { recoverInterruptedTask } from './recoveryState';
 import { SqliteWorkTaskPersistence } from './sqliteStore';
+import { sanitizeTaskForPersist } from './persistSanitize';
 
 export function newTaskId(): string {
   return `task_${randomBytes(6).toString('hex')}`;
@@ -127,7 +128,7 @@ export class WorkTaskStore {
   }
 
   private write(task: WorkTask): void {
-    this.disk?.upsert(task);
+    this.disk?.upsert(sanitizeTaskForPersist(task));
   }
 
   private require(id: string): WorkTask {

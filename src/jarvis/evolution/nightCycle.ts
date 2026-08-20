@@ -17,6 +17,7 @@ export const NIGHT_STAGES = [
   'DISTILL_SKILLS',
   'UPDATE_SELF_MODEL',
   'SELECT_GROWTH_GOALS',
+  'BENCHMARK',
   'CLEANUP',
 ] as const;
 
@@ -53,6 +54,7 @@ export type NightCycleOptions = {
   now?: () => number;
   simulated?: boolean;
   resource?: () => ResourcePriority;
+  runBenchmarks?: () => number;
 };
 
 export class NightCycle {
@@ -192,6 +194,9 @@ export class NightCycle {
         if (current && current.attempts >= (seen.get(cap) ?? 0)) continue;
         this.options.selfModel.observe(cap, experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure', experience.cause);
       }
+    }
+    if (stage === 'BENCHMARK') {
+      this.report.benchmarksRun = this.options.runBenchmarks?.() ?? 0;
     }
     if (stage === 'SELECT_GROWTH_GOALS' && this.options.growth) {
       for (const fail of this.options.failures?.recurring() ?? []) {
