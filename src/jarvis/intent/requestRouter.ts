@@ -1,3 +1,4 @@
+import { isActionGateConfirmCapability } from '../capabilities/actions/constants';
 import { classifyActionability } from './classify';
 import type { ActionabilityClass, IntentKind } from './types';
 
@@ -167,9 +168,12 @@ export function shouldUseWorkAgent(
 ): boolean {
   if (input.explicitCalls) return false;
   if (route.forbidden) return false;
-  if (input.intentKind === 'FORBIDDEN' || input.intentKind === 'CLARIFICATION' || input.intentKind === 'UNSUPPORTED') {
+  if (input.intentKind === 'FORBIDDEN') return false;
+  if (route.route === 'WORK' || route.route === 'RESEARCH') return true;
+  if (input.intentKind === 'CLARIFICATION' || input.intentKind === 'UNSUPPORTED') {
     return false;
   }
-  if (route.route === 'WORK' || route.route === 'RESEARCH') return true;
-  return route.route === 'CAPABILITY' && route.agentic && !input.capabilityId;
+  if (route.route !== 'CAPABILITY' || !route.agentic) return false;
+  if (input.capabilityId && isActionGateConfirmCapability(input.capabilityId)) return true;
+  return !input.capabilityId;
 }

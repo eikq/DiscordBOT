@@ -15,8 +15,10 @@ LA-023 → LA-024 → LA-025.
 
 ## LA-001 Ollama / Qwen real task path
 
-- Status: **LIVE_VERIFIED** 2026-08-20 ~19:02 ICT on `local/jarvis-acceptance-2026-08-20`
-  after a schema fix so WorkAgent `researchDepth` is a legal `research.search` argument.
+- Status: **LIVE_VERIFIED** 2026-08-20 21:50 ICT on
+  `local/jarvis-acceptance-2026-08-20` with **Simulation OFF**. Owner screenshots
+  from earlier the same day were taken while Simulation was ON and are historical
+  only. Agent close-pass evidence below is the close record. Not OWNER_VERIFIED.
 - Purpose: Prove a normal `/api/jarvis/ask` turn uses local Qwen for conversation
   and informational routes, and that agentic routes still invoke CapabilityHost.
 - Preconditions: Ollama reachable; `digital-me-qwen38:27b-ad-q4km` (or current
@@ -30,34 +32,49 @@ LA-023 → LA-024 → LA-025.
   no fabricated citations.
 - Failure evidence: Ollama probe, `/api/jarvis` status, requestId, route JSON,
   work.db task row if any.
-- Live evidence (standalone lab `http://127.0.0.1:3010`, `JARVIS_STANDALONE=1`,
-  session `la001-acceptance`, model `digital-me-qwen38:27b-ad-q4km`, Ollama 0.32.14):
-  1. `hello` → route `CONVERSATION` / SPEAK / `agentic:false`.
-     `requestId=jarvis-1787226985067`. No `taskId`. Trace `tr_ba10607df519`.
-     Reply: “Hello! How can I help you today?” ~9612ms, 10 tokens.
-  2. `explain recursion` → route `INFORMATION`. `requestId=jarvis-1787227003970`.
-     No `taskId`. Trace `tr_dd8a20d15f1f`. Real recursion explanation. ~4572ms, 137 tokens.
-     Note: `intent.kind` stayed `CONVERSATION` while the ask router used `INFORMATION`.
-  3. First research attempt failed: `INVALID_ARGUMENT` because ActionGate allowed
-     `depth` on `research.current` but not `research.search` while WorkAgent injected
-     owner `researchDepth=standard`. Task `task_f8ffa0146aa6` FAILED. After allowing
-     `depth` on `research.search` and restarting the lab: `requestId=jarvis-1787227331469`,
-     `taskId=task_b74988aeabe5`, WorkAgent → CapabilityHost `research.search` ok,
-     6 real public URLs (github.com/QwenLM, arxiv.org, qwen.ai, qwen.readthedocs.io).
-     Citations were not invented. Trace `tr_b84bed3e1b18` `verification=success`.
-     work.db: COMPLETED, `simulated=0`, plan understand/research.search/verify/reflect.
-  4. `สถานะระบบ` → route `CAPABILITY`, bound `system.status`, ActionGate completed.
-     `requestId=jarvis-1787227114017`. No WorkAgent. Trace `tr_2c64ea49cbfa`.
-     Host metrics included NVIDIA GeForce RTX 5090 Laptop GPU. ~226–268ms.
-- Traces: 5 rows in `data/jarvis/runtime/ops.db`. No CoT / scratchpad / secrets /
-  confirmation-token keys. Analyzer: `INSUFFICIENT_DATA` (need ≥3 samples per route).
-  Research traces omit `requestId` (task traces do not copy it). Capability traces
-  currently store an empty `capabilities` array.
+- Simulation-off evidence (session `la001-simoff`, lab `http://127.0.0.1:3010`,
+  `JARVIS_STANDALONE=1`, Ollama 0.32.14, model `digital-me-qwen38:27b-ad-q4km`,
+  profile `local-env-llm`, engine `interactive`). Control before this pass:
+  `simulationMode=true`. Owner POST `/api/jarvis/command-center/control`
+  `{simulationMode:false}` → HTTP 200, afterward `simulationMode=false`.
+  Browser ops panel showed no `SIMULATION — events are tagged` banner; Simulation
+  mode checkbox was not `checked`.
+  1. `hello` **PASS**. Route `CONVERSATION` / SPEAK / `agentic:false`.
+     `requestId=jarvis-1787230170393`. `taskId=null`. No WorkAgent. Real Ollama:
+     `timings.llmMs=1106`, 10 tokens, 29.6 tok/s. Trace `tr_b5230b91992c`
+     `simulated` absent/false. Reply: “Hello! How can I help you today?”
+  2. `explain recursion` **PASS**. Route `INFORMATION` / SPEAK / `agentic:false`.
+     `requestId=jarvis-1787230171517`. `taskId=null`. Real Ollama: `totalMs=5567`,
+     142 tokens, 27.6 tok/s. Trace `tr_20119f66b18c`. Recursion explanation, no DAG.
+  3. Uncached research **PASS**. Query included unique marker
+     `LA001-UNCACHED-2026-08-20-1787232948618`. Route `RESEARCH` / agentic.
+     `requestId=jarvis-1787232959132`. WorkAgent `taskId=task_693bb3aeb0ae`
+     COMPLETED, work.db `simulated=0`, `cached=false`. `research.search` invoked
+     the live configured provider. Six real URLs (github.com/QwenLM, qwen.ai,
+     openlm.ai, qwen15.readthedocs.io, releasebot.io). Marked untrusted.
+     Trace `tr_4430cb02f901` keeps the same `requestId`, capability
+     `{id:research.search,status:ok,risk:READ_ONLY}`, `verification=success`.
+     Earlier same-day cached research (`task_94c449be1d57`, `cached=true`) is
+     historical only and does not close this item.
+  4. `สถานะระบบ` **PASS**. Route `CAPABILITY`. `requestId=jarvis-1787232970933`.
+     `taskId=null`. Action `system.status` `status=ok` `risk=READ_ONLY`.
+     Trace `tr_003c467ced03` records that capability. Telemetry on the earlier
+     sim-off pass: CPU 23.6% / 24 cores, RAM 56.5%, Disk 1498 GB free, GPU
+     NVIDIA GeForce RTX 5090 Laptop GPU 25%.
+- Close-pass hello after tokens-keep fix: `requestId=jarvis-1787233596801`,
+  trace `tr_acc97921764e` `tokens=10`, no CoT / scratchpad / confirmToken /
+  `.env` / credentials. Usage `tokens` is kept; confirmation tokens stay redacted.
+- Ask JSON still does not include `llm.model` (model id is on `/api/jarvis/status`
+  and `modelProfileId`).
+- Earlier same-day turns (session `la001-acceptance`) remain historical evidence
+  of the `research.search` `depth` schema fix; they are not this close pack.
 
 ## LA-002 Command Center browser / SSE visual QA
 
-- Status: still **BLOCKED_LOCAL_ACCEPTANCE** for owner sign-off and live DAG
-  visibility. Agent browser QA ran 2026-08-20; **not OWNER_VERIFIED**.
+- Status: **LIVE_VERIFIED** 2026-08-20 21:50 ICT agent-browser QA on
+  `http://127.0.0.1:3010/jarvis-lab` with **Simulation OFF**. Not OWNER_VERIFIED
+  (owner visual sign-off remains LA-013). Owner screenshots from earlier the
+  same day with Simulation ON are historical only.
 - Purpose: Owner visual acceptance of `/jarvis-lab` as the observability surface.
 - Preconditions: local dashboard; browser; reduced-motion check; EventSource
   supported.
@@ -83,15 +100,42 @@ LA-023 → LA-024 → LA-025.
     reconnected (performance entries 8ms then 6713ms). HTTP replay
     `?stream=1&after=0` returned seq 1–20. Client `seq <= lastSeq` drop path
     exists in `JarvisLabPage.tsx`.
-- Remaining before LIVE_VERIFIED:
-  1. Live operations DAG is only rendered while `snapshot.task` is active.
-     Completed WorkAgent tasks disappear immediately (“No multi-step work task”).
-     80ms polling during a cached research ask never observed `task.steps`.
-  2. Command Center `lastRequest` is only set on WorkAgent runs, so after a
-     dock `hello` the ops panel can still say `Route RESEARCH · agentic`.
-  3. Open operations panel intercepts the dock Ask button.
-  4. Permission-wait UI was not exercised.
-  5. Owner visual sign-off (LA-013) is separate.
+- Simulation-off SSE evidence (same lab, after seq 51):
+  - Live delivery: stream `?stream=1&after=51` received seq **52–61**,
+    `simulated=true` count **0**.
+  - Replay: `?stream=1&after=0` returned seq **1–51** before the asks.
+  - Reconnect/replay after cursor: second `after=51` returned the same 52–61 set;
+    concatenating the two copies dropped seqs `<= lastSeq` (**10 duplicates
+    suppressed**). Browser EventSource connected to `/api/jarvis/events?stream=1`.
+    A reconnect with `after=61` (current head) delivered **0** historical events
+    (empty replay, no duplicates of 1–61).
+  - After sim-off turns, Intelligence “Last route CAPABILITY · สถานะระบบ”.
+    Device rows remain fixture `SIMULATION · VIEW only`.
+- Close-pass agent browser (same lab, Simulation OFF):
+  - Newest request is a single `noteLatestRequest` writer. Sequence RESEARCH →
+    CONVERSATION → INFORMATION → CAPABILITY updated Live Operations each time.
+    After tokens-fix reload: `Route CONVERSATION · SPEAK · conversation ·
+    jarvis-1787233596801` and Intelligence `Last route CONVERSATION · hello`.
+  - Completed DAG stays inspectable as **Last task** (not live). After grant:
+    `Last task · COMPLETED · task_f2fe0ec67647` with steps, taskId, verification.
+    After uncached research the live DAG was visible while executing, then Last
+    task `task_693bb3aeb0ae`. `recentTasks` is bounded to 5.
+  - Permission wait on safe `desktop.openTrustedUrl`: UI showed taskId, stepId,
+    capability, `CONFIRM_REQUIRED`, proposalId, URL, Grant once / Cancel.
+    A+B+D on `task_4ebf6826844b`: no approval does not execute; wrong token
+    HTTP 400 `INVALID_TOKEN`; cancel → CANCELLED. C on `task_f2fe0ec67647`:
+    Grant once resumed the same step and executed once.
+  - SSE UI: live update without refresh while the tab is visible; refresh
+    restores lastRequest + Last task from the API/`work.db`; EventSource
+    reconnects on `onerror` and after hidden-tab pause; `acceptSseSeq` drops
+    `seq <= lastSeq`. No duplicate visible event rows observed. Console: no
+    errors (THREE.Clock deprecation warn only). Hidden-tab pause of SSE + 5s
+    poll is product behavior — a hidden Cursor tab will not live-update until
+    shown or reloaded.
+  - REAL vs SIMULATION remains honest: simulationMode=false; demos stay labeled
+    SIMULATION; device fixtures stay `SIMULATION · VIEW only`.
+- Remaining: owner visual sign-off (LA-013). Open operations panel still
+  intercepts the dock Ask button; that is not an LA-002 closer.
 
 ## LA-003 Whonix Gateway health
 

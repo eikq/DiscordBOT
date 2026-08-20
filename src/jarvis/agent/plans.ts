@@ -1,4 +1,4 @@
-import { isGatedCapabilityId, isReadOnlyGatedCapability } from '../capabilities/actions/constants';
+import { isActionGateConfirmCapability, isGatedCapabilityId, isReadOnlyGatedCapability } from '../capabilities/actions/constants';
 import { newStepId } from './store';
 import type { PlanStep, PlanStepKind } from './types';
 
@@ -29,7 +29,7 @@ export function planForObjective(objective: string, capabilityId?: string): Plan
   const understand = makeStep('understand', [], `Understand: ${title.slice(0, 80)}`);
   const deps = [understand.id];
   const steps: PlanStep[] = [understand];
-  if (needsOwnerPermission(capabilityId)) {
+  if (needsOwnerPermission(capabilityId) && !isActionGateConfirmCapability(capabilityId)) {
     const permission = makeStep('permission', deps, `Request permission for ${capabilityId}`, capabilityId);
     steps.push(permission);
     deps[0] = permission.id;

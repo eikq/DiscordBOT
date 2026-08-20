@@ -31,7 +31,8 @@ export function parseObjective(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const objective = value.trim();
   if (objective.length < 2 || objective.length > 240) return undefined;
-  if (/[\\/]|\.\./u.test(objective)) return undefined;
+  if (/\.\./u.test(objective) || /\\/u.test(objective)) return undefined;
+  if (/\//u.test(objective) && !/\bhttps?:\/\//iu.test(objective)) return undefined;
   return objective;
 }
 

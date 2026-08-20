@@ -42,6 +42,9 @@ export class WorkTaskStore {
     retryBudget?: number;
     simulated?: boolean;
     permissionRequirements?: string[];
+    requestId?: string;
+    sessionId?: string;
+    turnId?: string;
   }): WorkTask {
     const at = new Date(this.now()).toISOString();
     const task: WorkTask = {
@@ -58,6 +61,9 @@ export class WorkTaskStore {
       retriesUsed: 0,
       errors: [],
       simulated: input.simulated || undefined,
+      ...(input.requestId ? { requestId: input.requestId } : {}),
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.turnId ? { turnId: input.turnId } : {}),
     };
     this.tasks.set(task.id, task);
     this.write(task);

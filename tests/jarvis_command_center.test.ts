@@ -142,6 +142,8 @@ test('command-center HTTP parsers stay fail-closed', () => {
   assert.ok(parseTaskId('task_aabbccddeeff'));
   assert.equal(parseObjective('x'), undefined);
   assert.ok(parseObjective('Read system status'));
+  assert.equal(parseObjective('open https://example.com'), 'open https://example.com');
+  assert.equal(parseObjective('read /etc/passwd'), undefined);
   assert.equal(parseNightAction('run'), 'run');
   const bad = parseControlPatch({ maxAutonomy: 9 });
   assert.equal(bad.ok, false);

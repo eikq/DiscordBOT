@@ -1,4 +1,4 @@
-import { SYSTEM_STATUS } from '../capabilities/actions/constants';
+import { DESKTOP_OPEN_TRUSTED_URL, SYSTEM_STATUS } from '../capabilities/actions/constants';
 import type { CapabilityHost } from '../capabilities/types';
 import { RESEARCH_SEARCH } from '../research/constants';
 import { WORKSPACE_SEARCH } from '../workspace/constants';
@@ -19,6 +19,10 @@ export function inferCapabilityFromObjective(objective: string, host?: Capabilit
   const has = (id: string) => Boolean(host?.lookup(id));
   if ((/system status|สถานะระบบ|runtime status/iu.test(text) || /^status$/iu.test(text)) && has(SYSTEM_STATUS)) {
     return SYSTEM_STATUS;
+  }
+  const url = firstHttpsUrl(text);
+  if (url && has(DESKTOP_OPEN_TRUSTED_URL)) {
+    return DESKTOP_OPEN_TRUSTED_URL;
   }
   if ((/research|ค้นเว็บ|search the web|official source/iu.test(text)) && has(RESEARCH_SEARCH)) {
     return RESEARCH_SEARCH;
@@ -53,5 +57,14 @@ function defaultInputFor(id: string, task: WorkTask, step: PlanStep): Record<str
   if (id === RESEARCH_SEARCH || id === WORKSPACE_SEARCH) {
     return { query: String(extra.query || task.objective).slice(0, 200), ...extra };
   }
+  if (id === DESKTOP_OPEN_TRUSTED_URL) {
+    const url = String(extra.url || firstHttpsUrl(task.objective) || '').slice(0, 500);
+    return url ? { ...extra, url } : extra;
+  }
   return extra;
+}
+
+function firstHttpsUrl(text: string): string | undefined {
+  const match = text.match(/https:\/\/[^\s]+/iu);
+  return match?.[0]?.replace(/[)\].,;]+$/u, '');
 }

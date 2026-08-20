@@ -69,7 +69,12 @@ export class WorkAgent {
     this.onTerminal = options.onTerminal;
   }
 
-  public receive(objective: string, plan?: PlanStep[], extra: { simulated?: boolean } = {}): WorkTask {
+  public receive(objective: string, plan?: PlanStep[], extra: {
+    simulated?: boolean;
+    requestId?: string;
+    sessionId?: string;
+    turnId?: string;
+  } = {}): WorkTask {
     const steps = plan && plan.length > 0 ? plan : defaultPlanFor(objective);
     assertAcyclic(steps);
     if (steps.length > this.budgets.taskSteps) {
@@ -80,6 +85,9 @@ export class WorkAgent {
       plan: steps,
       retryBudget: this.budgets.retries,
       simulated: extra.simulated ?? this.simulated,
+      requestId: extra.requestId,
+      sessionId: extra.sessionId,
+      turnId: extra.turnId,
     });
     this.emit(task, 'TASK_RECEIVED', `Task received: ${task.objective}`, { visualState: 'UNDERSTANDING' });
     return this.store.setStatus(task.id, 'UNDERSTANDING');
@@ -190,6 +198,9 @@ export class WorkAgent {
       grant.token = cached.token;
       grant.proposalId = grant.proposalId || step.pendingConfirmation?.proposalId;
     }
+    if (cached && grant.token && grant.token !== cached.token) {
+      throw Object.assign(new Error('Owner confirmation token is invalid.'), { reasonCode: 'INVALID_TOKEN' });
+    }
     let validated;
     try {
       validated = validatePermissionGrant(task, step, { ...grant, taskId }, Date.now());
@@ -286,6 +297,7 @@ export class WorkAgent {
             : undefined,
         });
       }
+      if (result.toolResult) task.toolResults.push(result.toolResult);
       this.store.save(task);
       this.emit(task, 'PERMISSION_WAITING', result.summary, { visualState: 'WAITING_PERMISSION' });
       this.store.setStatus(task.id, 'WAITING_PERMISSION');

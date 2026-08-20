@@ -14,6 +14,12 @@ export type TraceErrorRef = {
   message: string;
 };
 
+export type TraceCapabilityRef = {
+  id: string;
+  status: string;
+  risk?: string;
+};
+
 export type JarvisTraceRecord = {
   id: string;
   at: string;
@@ -26,7 +32,7 @@ export type JarvisTraceRecord = {
   engine?: string;
   memoryRefs?: string[];
   skillRefs?: string[];
-  capabilities?: string[];
+  capabilities?: TraceCapabilityRef[];
   sources?: string[];
   toolResults?: TraceToolRef[];
   stepDurationMs?: number;
@@ -55,4 +61,10 @@ export const FORBIDDEN_TRACE_KEYS = [
   'systemPrompt',
   'system_prompt',
   'rawPrompt',
+  'scratchpad',
+  'confirmToken',
+  'confirmationToken',
+  'token',
+  'cookie',
+  'cookies',
 ] as const;

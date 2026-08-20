@@ -34,6 +34,8 @@ export default function CommandCenterPanels({
 }: Props) {
   const graph = sourceGraphLayout(domains);
   const simulation = Boolean(snapshot?.simulationMode || snapshot?.task?.simulated);
+  const inspect = snapshot?.task ?? snapshot?.lastTask ?? null;
+  const liveTask = Boolean(snapshot?.task);
   return (
     <>
       <section className="jcc-block">
@@ -48,38 +50,50 @@ export default function CommandCenterPanels({
           <p className="jcc-hint">
             Route {snapshot.request.route} · {snapshot.request.socialAction}
             {snapshot.request.agentic ? ' · agentic' : ' · conversation'}
+            {snapshot.request.requestId ? ` · ${snapshot.request.requestId}` : ''}
           </p>
         ) : (
           <p className="jcc-empty">No current request route.</p>
         )}
-        {!snapshot?.task ? (
-          <p className="jcc-empty">No multi-step work task. Demos below are tagged simulation.</p>
+        {inspect ? (
+          <>
+            <p className="jcc-hint">
+              {liveTask ? 'Active task' : 'Last task'} · {inspect.status}
+              {` · ${inspect.id}`}
+              {inspect.verification ? ` · ${inspect.verification}` : inspect.outcome ? ` · ${inspect.outcome}` : ''}
+            </p>
+            <ol className="jcc-ops">
+              {inspect.steps.map(step => (
+                <li key={step.id} className={`jcc-ops__step is-${step.state}`}>
+                  <em>{step.index}</em>
+                  <span>
+                    {step.title}
+                    {step.capability ? <small> · {step.capability}</small> : null}
+                    {step.summary ? <small>{step.summary}</small> : null}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </>
         ) : (
-          <ol className="jcc-ops">
-            {snapshot.task.steps.map(step => (
-              <li key={step.id} className={`jcc-ops__step is-${step.state}`}>
-                <em>{step.index}</em>
-                <span>
-                  {step.title}
-                  {step.capability ? <small> · {step.capability}</small> : null}
-                  {step.summary ? <small>{step.summary}</small> : null}
-                </span>
-              </li>
-            ))}
-          </ol>
+          <p className="jcc-empty">No multi-step work task. Demos below are tagged simulation.</p>
         )}
-        {snapshot?.task?.evidence[0] ? <p className="jcc-hint">Evidence: {snapshot.task.evidence[0]}</p> : null}
-        {snapshot?.task?.errors[0] ? <p className="jcc-error">{snapshot.task.errors[0]}</p> : null}
+        {inspect?.evidence[0] ? <p className="jcc-hint">Evidence: {inspect.evidence[0]}</p> : null}
+        {inspect?.errors[0] ? <p className="jcc-error">{inspect.errors[0]}</p> : null}
         {snapshot?.task?.waitingPermission ? (
           <div className="jcc-permit jcc-permit--task">
-            <p className="jcc-permit__kicker">Work agent waiting</p>
+            <p className="jcc-permit__kicker">WAITING_PERMISSION</p>
             <p>{snapshot.task.objective}</p>
-            {snapshot.permission?.capability ? (
-              <p className="jcc-hint">
-                {snapshot.permission.capability}
-                {snapshot.permission.stepId ? ` · ${snapshot.permission.stepId}` : ''}
-              </p>
-            ) : null}
+            <p className="jcc-hint">
+              {snapshot.permission?.taskId || snapshot.task.id}
+              {snapshot.permission?.stepId ? ` · ${snapshot.permission.stepId}` : ''}
+              {snapshot.permission?.capability ? ` · ${snapshot.permission.capability}` : ''}
+            </p>
+            <p className="jcc-hint">
+              {snapshot.permission?.risk ? `${snapshot.permission.risk}` : ''}
+              {snapshot.permission?.proposalId ? ` · ${snapshot.permission.proposalId}` : ''}
+              {snapshot.permission?.scope?.url ? ` · ${String(snapshot.permission.scope.url)}` : ''}
+            </p>
             <div className="jcc-permit__actions">
               <button type="button" className="jcc-permit__deny" disabled={busy} onClick={onCancel}>Cancel</button>
               <button type="button" className="jcc-permit__allow" disabled={busy} onClick={onGrant}>Grant once</button>

@@ -309,7 +309,9 @@ test('command center runObjective invokes a real host capability', async () => {
 test('HTTP objective and night parsers stay fail-closed', () => {
   assert.equal(parseObjective(''), undefined);
   assert.equal(parseObjective('../etc/passwd'), undefined);
+  assert.equal(parseObjective('/etc/passwd'), undefined);
   assert.ok(parseObjective('Read system status'));
+  assert.equal(parseObjective('open https://example.com'), 'open https://example.com');
   assert.equal(parseNightAction('explode'), undefined);
   assert.equal(parseNightAction('run'), 'run');
 });

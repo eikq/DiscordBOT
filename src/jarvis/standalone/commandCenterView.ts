@@ -1,5 +1,5 @@
 import { AUTONOMY_LABELS } from '../control';
-import { liveOpsSteps, capabilityBar, systemNodeState, visualStatusLine, windowedEvents, type LiveOpsStep } from '../ui/operationsView';
+import { liveOpsSteps, capabilityBar, systemNodeState, visualStatusLine, uniqueEventsBySeq, windowedEvents, type LiveOpsStep } from '../ui/operationsView';
 import type { CommandCenterSnapshot } from './commandCenter';
 // Snapshot type only — keep this module import-safe for the Express lab server.
 
@@ -40,6 +40,20 @@ export type CommandCenterClientSnapshot = {
     objective: string;
     status: string;
     outcome?: string;
+    verification?: string;
+    simulated?: boolean;
+    waitingPermission: boolean;
+    active: boolean;
+    steps: LiveOpsStep[];
+    evidence: string[];
+    errors: string[];
+  } | null;
+  lastTask: {
+    id: string;
+    objective: string;
+    status: string;
+    outcome?: string;
+    verification?: string;
     simulated?: boolean;
     waitingPermission: boolean;
     active: boolean;
@@ -71,8 +85,16 @@ export type CommandCenterClientSnapshot = {
     graph: { nodes: number; edges: number; empty: boolean };
     modelAdaptation: { trained: false; candidates: number };
   };
-  request: { route: string; socialAction: string; agentic: boolean; reason: string } | null;
-  permission: { waiting: boolean; taskId?: string; stepId?: string; capability?: string; proposalId?: string };
+  request: { route: string; socialAction: string; agentic: boolean; reason: string; requestId?: string } | null;
+  permission: {
+    waiting: boolean;
+    taskId?: string;
+    stepId?: string;
+    capability?: string;
+    proposalId?: string;
+    risk?: string;
+    scope?: Record<string, unknown>;
+  };
   memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: Array<{
     id: string;
@@ -103,7 +125,7 @@ export function presentCommandCenter(
   snapshot: CommandCenterSnapshot,
   now: () => number = Date.now,
 ): CommandCenterClientSnapshot {
-  const operations = windowedEvents(snapshot.operations, 40).map(event => ({
+  const operations = uniqueEventsBySeq(windowedEvents(snapshot.operations, 40)).map(event => ({
     id: event.id,
     seq: event.seq,
     type: event.type,
@@ -118,33 +140,24 @@ export function presentCommandCenter(
   }));
   const lastAt = operations.at(-1)?.at;
   const fresh = Boolean(lastAt && now() - Date.parse(lastAt) < 15_000);
-  const task = snapshot.task;
   return {
     simulationMode: snapshot.simulationMode,
     visualState: snapshot.visualState,
     visualLabel: visualStatusLine(snapshot.visualState, snapshot.operations.at(-1)?.progress),
     fresh,
     operations,
-    task: task
-      ? {
-          id: task.id,
-          objective: task.objective,
-          status: task.status,
-          simulated: task.simulated,
-          waitingPermission: task.status === 'WAITING_PERMISSION' || task.plan.some(step => step.status === 'waiting_permission'),
-          active: ACTIVE_TASK.has(task.status),
-          steps: liveOpsSteps(task),
-          evidence: task.evidence.slice(0, 6),
-          errors: task.errors.map(item => item.message).slice(0, 4),
-          ...(task.outcome ? { outcome: task.outcome } : {}),
-        }
-      : null,
-    recentTasks: snapshot.tasks.slice(-5).reverse().map(item => ({
-      id: item.id,
-      objective: item.objective,
-      status: item.status,
-      simulated: item.simulated,
-    })),
+    task: presentInspectableTask(snapshot.task),
+    lastTask: presentInspectableTask(snapshot.lastTask),
+    recentTasks: [...snapshot.tasks]
+      .sort((a, b) => (Date.parse(a.updatedAt) || 0) - (Date.parse(b.updatedAt) || 0))
+      .slice(-5)
+      .reverse()
+      .map(item => ({
+        id: item.id,
+        objective: item.objective,
+        status: item.status,
+        simulated: item.simulated,
+      })),
     evolution: {
       experiences: snapshot.evolution.experiences,
       reflections: snapshot.evolution.reflections,
@@ -194,6 +207,7 @@ export function presentCommandCenter(
           socialAction: snapshot.request.route.socialAction,
           agentic: snapshot.request.route.agentic,
           reason: snapshot.request.route.reason,
+          ...(snapshot.request.requestId ? { requestId: snapshot.request.requestId } : {}),
         }
       : null,
     permission: {
@@ -202,6 +216,8 @@ export function presentCommandCenter(
       stepId: snapshot.permission.stepId,
       capability: snapshot.permission.capability,
       proposalId: snapshot.permission.proposalId,
+      ...(snapshot.permission.risk ? { risk: snapshot.permission.risk } : {}),
+      ...(snapshot.permission.scope ? { scope: snapshot.permission.scope } : {}),
     },
     memoryActivity: snapshot.memoryActivity,
     devices: snapshot.devices.map(device => ({
@@ -276,5 +292,25 @@ export function presentCommandCenter(
       },
       productionPromotionAllowed: false,
     },
+  };
+}
+
+function presentInspectableTask(
+  task: CommandCenterSnapshot['task'],
+): CommandCenterClientSnapshot['task'] {
+  if (!task) return null;
+  const verification = task.verification?.summary || task.outcome;
+  return {
+    id: task.id,
+    objective: task.objective,
+    status: task.status,
+    simulated: task.simulated,
+    waitingPermission: task.status === 'WAITING_PERMISSION' || task.plan.some(step => step.status === 'waiting_permission'),
+    active: ACTIVE_TASK.has(task.status),
+    steps: liveOpsSteps(task),
+    evidence: task.evidence.slice(0, 6),
+    errors: task.errors.map(item => item.message).slice(0, 4),
+    ...(task.outcome ? { outcome: task.outcome } : {}),
+    ...(verification ? { verification } : {}),
   };
 }

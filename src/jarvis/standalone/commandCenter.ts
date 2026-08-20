@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type PermissionGrantInput, type WorkStepInvoker, type WorkTask } from '../agent';
+import { isTerminalStatus } from '../agent/transitions';
 import { adaptPlanForFailures } from '../agent/adaptivePlan';
 import { createCapabilityWorkInvoker } from '../agent/capabilityInvoker';
 import { inferCapabilityFromObjective, planForObjective } from '../agent/capabilityResolve';
@@ -46,10 +47,12 @@ import { OpsPersistence } from '../ops/opsPersistence';
 import { auditSchedulers, type SchedulerAuditSnapshot } from '../ops/schedulerAudit';
 import { TraceAnalyzer } from '../ops/traceAnalyzer';
 import { TraceStore } from '../ops/traceStore';
+import { traceCapabilitiesFromWork } from '../ops/traceCapabilities';
 import type { JarvisTraceRecord } from '../ops/traceTypes';
 import { visualStateFromEvents } from '../ops/visualState';
 import type { JarvisVisualState } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
+import { redactDeep } from '../security/redaction';
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
 import type { JarvisOperationEvent } from '../security/types';
 import { presentCommandCenter } from './commandCenterView';
@@ -61,6 +64,7 @@ export type CommandCenterSnapshot = {
   visualState: JarvisVisualState;
   operations: JarvisOperationEvent[];
   task: WorkTask | null;
+  lastTask: WorkTask | null;
   tasks: WorkTask[];
   evolution: {
     experiences: number;
@@ -78,13 +82,15 @@ export type CommandCenterSnapshot = {
     benchmarks: ReturnType<BenchmarkBank['latest']>;
     modelAdaptation: { trained: false; candidates: number; nextAfterPolicy: string | null };
   };
-  request: { route: RouteDecision; objective: string; taskId?: string } | null;
+  request: { route: RouteDecision; objective: string; taskId?: string; requestId?: string } | null;
   permission: {
     waiting: boolean;
     taskId?: string;
     stepId?: string;
     capability?: string;
     proposalId?: string;
+    risk?: string;
+    scope?: Record<string, unknown>;
   };
   memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: DeviceRecord[];
@@ -166,7 +172,7 @@ export class CommandCenterRuntime {
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
   private memoryStore?: JarvisMemoryStore;
-  private lastRequest: { route: RouteDecision; objective: string; taskId?: string } | null = null;
+  private lastRequest: { route: RouteDecision; objective: string; taskId?: string; requestId?: string } | null = null;
 
   constructor(options: CommandCenterOptions = {}) {
     const simulated = Boolean(options.simulated);
@@ -247,6 +253,7 @@ export class CommandCenterRuntime {
   public snapshot(): CommandCenterSnapshot {
     const tasks = this.agent.store.list();
     const active = this.agent.store.active()[0] ?? null;
+    const lastTask = lastTerminalTask(tasks, active?.id);
     const experiences = this.experiences.list();
     const reflections = this.reflectionLedger.list();
     return {
@@ -254,6 +261,7 @@ export class CommandCenterRuntime {
       visualState: visualStateFromEvents(this.events.recent(12)),
       operations: this.events.recent(40),
       task: active,
+      lastTask,
       tasks,
       evolution: {
         experiences: experiences.length,
@@ -331,12 +339,18 @@ export class CommandCenterRuntime {
     }
   }
 
-  public async runObjective(objective: string, options: { simulated?: boolean; sessionId?: string } = {}): Promise<WorkTask> {
+  public async runObjective(objective: string, options: {
+    simulated?: boolean;
+    sessionId?: string;
+    requestId?: string;
+    turnId?: string;
+    route?: RouteDecision;
+  } = {}): Promise<WorkTask> {
     const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
     if (simulated) this.control.patch({ simulationMode: true }, 'owner');
     const started = Date.now();
     const capabilityId = inferCapabilityFromObjective(objective, this.host);
-    const routed = routeJarvisRequest({ text: objective });
+    const routed = options.route ?? routeJarvisRequest({ text: objective });
     const route = capabilityId && routed.route === 'CONVERSATION'
       ? { ...routed, route: 'CAPABILITY' as const, agentic: true, reason: 'bound_capability' }
       : routed;
@@ -346,29 +360,65 @@ export class CommandCenterRuntime {
       this.failures,
       trustedSkills,
     );
-    const task = this.agent.receive(objective, plan, { simulated });
-    this.lastRequest = { route, objective, taskId: task.id };
+    const requestId = options.requestId?.trim() || `jarvis-${started}`;
+    const turnId = options.turnId?.trim() || requestId;
+    const task = this.agent.receive(objective, plan, {
+      simulated,
+      requestId,
+      sessionId: options.sessionId,
+      turnId,
+    });
+    this.noteLatestRequest({
+      route,
+      objective,
+      taskId: task.id,
+      requestId,
+    });
     const ran = await this.agent.run(task.id);
     this.recordTaskTrace(ran, {
       sessionId: options.sessionId,
+      requestId,
+      turnId,
       route: route.route,
       started,
     });
     return ran;
   }
 
+  public noteLatestRequest(input: {
+    route: RouteDecision;
+    objective: string;
+    taskId?: string;
+    requestId?: string;
+  }): void {
+    this.lastRequest = {
+      route: input.route,
+      objective: input.objective,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      ...(input.requestId ? { requestId: input.requestId } : {}),
+    };
+  }
+
   public recordTurnTrace(input: Omit<JarvisTraceRecord, 'id' | 'at'>): JarvisTraceRecord {
     return this.traces.record(input);
   }
 
-  private recordTaskTrace(task: WorkTask, meta: { sessionId?: string; route: string; started: number }): void {
+  private recordTaskTrace(task: WorkTask, meta: {
+    sessionId?: string;
+    requestId?: string;
+    turnId?: string;
+    route: string;
+    started: number;
+  }): void {
     const retries = task.plan.reduce((acc, step) => acc + (step.retryPolicy?.attempted ?? 0), 0);
     this.traces.record({
-      sessionId: meta.sessionId,
+      requestId: meta.requestId || task.requestId,
+      sessionId: meta.sessionId || task.sessionId,
+      turnId: meta.turnId || task.turnId,
       taskId: task.id,
       route: meta.route,
       inputText: task.objective,
-      capabilities: task.plan.map(step => step.capability).filter((id): id is string => Boolean(id)),
+      capabilities: traceCapabilitiesFromWork(task.toolResults),
       skillRefs: this.skills.retrieveTrusted(task.objective).map(item => item.skillId),
       toolResults: task.toolResults.map(item => ({
         toolName: item.capability,
@@ -458,11 +508,19 @@ export class CommandCenterRuntime {
   }
 
   public async grantAndResume(taskId: string, stepIdOrGrant?: string | PermissionGrantInput) {
+    const started = Date.now();
     const granted = this.agent.grantPermission(taskId, stepIdOrGrant);
-    if (granted.status === 'READY' || granted.status === 'WAITING_PERMISSION' || granted.status === 'PAUSED') {
-      return this.agent.resume(taskId);
-    }
-    return granted;
+    const ran = granted.status === 'READY' || granted.status === 'WAITING_PERMISSION' || granted.status === 'PAUSED'
+      ? await this.agent.resume(taskId)
+      : granted;
+    this.recordTaskTrace(ran, {
+      sessionId: ran.sessionId,
+      requestId: ran.requestId,
+      turnId: ran.turnId,
+      route: this.lastRequest?.route.route || 'CAPABILITY',
+      started,
+    });
+    return ran;
   }
 
   public synthesize(task?: WorkTask) {
@@ -600,11 +658,43 @@ export function resetSharedCommandCenter(): void {
 
 function permissionOf(task: WorkTask | null): CommandCenterSnapshot['permission'] {
   const waiting = task?.plan.find(step => step.status === 'waiting_permission');
+  const scope = sanitizePermissionScope(waiting?.permissionLease?.scope ?? waiting?.input);
   return {
     waiting: Boolean(waiting),
     taskId: task?.id,
     stepId: waiting?.id,
     capability: waiting?.pendingConfirmation?.capability || waiting?.capability,
     proposalId: waiting?.pendingConfirmation?.proposalId,
+    ...(waiting?.pendingConfirmation?.risk || waiting?.permissionLease?.risk
+      ? { risk: waiting.pendingConfirmation?.risk || waiting.permissionLease?.risk }
+      : {}),
+    ...(scope ? { scope } : {}),
   };
+}
+
+function lastTerminalTask(tasks: WorkTask[], activeId?: string): WorkTask | null {
+  let latest: WorkTask | null = null;
+  let latestAt = 0;
+  for (const task of tasks) {
+    if (task.id === activeId) continue;
+    if (!isTerminalStatus(task.status)) continue;
+    const at = Date.parse(task.updatedAt) || 0;
+    if (!latest || at >= latestAt) {
+      latest = task;
+      latestAt = at;
+    }
+  }
+  return latest;
+}
+
+function sanitizePermissionScope(scope: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!scope) return undefined;
+  const redacted = redactDeep(scope) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(redacted)) {
+    if (/password|secret|token|cookie|authorization|api[_-]?key|\.env/iu.test(key)) continue;
+    if (typeof value === 'string') out[key] = value.slice(0, 160);
+    else if (typeof value === 'number' || typeof value === 'boolean') out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }

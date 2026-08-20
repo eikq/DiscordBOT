@@ -111,9 +111,12 @@ export type WorkTask = {
   createdAt: string;
   updatedAt: string;
   status: WorkTaskStatus;
+  requestId?: string;
+  sessionId?: string;
+  turnId?: string;
   plan: PlanStep[];
   evidence: string[];
-  toolResults: Array<{ capability: string; status: string; summary: string }>;
+  toolResults: Array<{ capability: string; status: string; summary: string; risk?: string }>;
   permissionRequirements: string[];
   retryBudget: number;
   retriesUsed: number;
@@ -131,7 +134,7 @@ export type WorkStepResult = {
   status?: PlanStepStatus;
   permissionRequired?: boolean;
   errorCode?: JarvisErrorCode;
-  toolResult?: { capability: string; status: string; summary: string };
+  toolResult?: { capability: string; status: string; summary: string; risk?: string };
   evidence?: string[];
   skipped?: boolean;
   pendingConfirmation?: PendingStepConfirmation;

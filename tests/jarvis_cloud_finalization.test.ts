@@ -101,9 +101,11 @@ test('request router sends research, work, and unbound capability through WorkAg
   assert.equal(work.route, 'WORK');
   assert.equal(capability.route, 'CAPABILITY');
   assert.equal(shouldUseWorkAgent(research), true);
+  assert.equal(shouldUseWorkAgent(research, { intentKind: 'UNSUPPORTED' }), true);
   assert.equal(shouldUseWorkAgent(work), true);
   assert.equal(shouldUseWorkAgent(capability), true);
   assert.equal(shouldUseWorkAgent(capability, { capabilityId: 'desktop.openSettings' }), false);
+  assert.equal(shouldUseWorkAgent(capability, { capabilityId: 'desktop.openTrustedUrl' }), true);
 });
 
 test('lab ask conversation path does not create a work task', async () => {

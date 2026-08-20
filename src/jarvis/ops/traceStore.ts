@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { clipPreservingCombining } from '../i18n/thaiIntegrity';
-import { FORBIDDEN_TRACE_KEYS, type JarvisTraceRecord } from './traceTypes';
+import { redactDeep, redactSecrets } from '../security/redaction';
+import { FORBIDDEN_TRACE_KEYS, type JarvisTraceRecord, type TraceCapabilityRef } from './traceTypes';
 
 const DEFAULT_MAX = 500;
 const INPUT_MAX = 2_000;
@@ -68,18 +69,44 @@ export class TraceStore {
   }
 }
 
+function isSecretTraceKey(key: string): boolean {
+  return /^(password|secret|token|confirmToken|confirmationToken|rawConfirmationToken|cookie|cookies|authorization|api[_-]?key)$/iu.test(key)
+    || /\.env/iu.test(key);
+}
+
 function clone<T>(value: T[] | undefined): T[] | undefined {
-  return value ? [...value] : undefined;
+  if (!value) return undefined;
+  return value.map(item => (item && typeof item === 'object' ? { ...item } as T : item));
 }
 
 function sanitizeTrace(input: TraceRecordInput): TraceRecordInput {
   const record: Record<string, unknown> = { ...input };
-  for (const key of FORBIDDEN_TRACE_KEYS) {
+  for (const key of [...FORBIDDEN_TRACE_KEYS, 'prompt']) {
     delete record[key];
   }
-  delete record.prompt;
-  if (typeof record.inputText === 'string') {
-    record.inputText = clipPreservingCombining(record.inputText, INPUT_MAX);
+  for (const key of Object.keys(record)) {
+    if (isSecretTraceKey(key)) delete record[key];
   }
-  return record as TraceRecordInput;
+  const cleaned = redactDeep(record) as Record<string, unknown>;
+  if (typeof cleaned.inputText === 'string') {
+    cleaned.inputText = clipPreservingCombining(redactSecrets(cleaned.inputText), INPUT_MAX);
+  }
+  if (Array.isArray(cleaned.capabilities)) {
+    cleaned.capabilities = cleaned.capabilities
+      .map(normalizeCapability)
+      .filter((item): item is TraceCapabilityRef => Boolean(item));
+  }
+  return cleaned as TraceRecordInput;
+}
+
+function normalizeCapability(value: unknown): TraceCapabilityRef | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const item = value as { id?: unknown; status?: unknown; risk?: unknown };
+  if (typeof item.id !== 'string' || !item.id.trim()) return undefined;
+  if (typeof item.status !== 'string' || !item.status.trim()) return undefined;
+  return {
+    id: item.id.trim(),
+    status: item.status.trim(),
+    ...(typeof item.risk === 'string' && item.risk.trim() ? { risk: item.risk.trim() } : {}),
+  };
 }

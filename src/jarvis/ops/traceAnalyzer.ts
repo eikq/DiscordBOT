@@ -76,7 +76,7 @@ export class TraceAnalyzer {
 function keysOf(trace: JarvisTraceRecord, dimension: AnalyzerDimension): string[] {
   if (dimension === 'model') return trace.modelProfileId ? [trace.modelProfileId] : [];
   if (dimension === 'route') return trace.route ? [trace.route] : [];
-  if (dimension === 'capability') return trace.capabilities ?? [];
+  if (dimension === 'capability') return (trace.capabilities ?? []).map(item => item.id);
   if (dimension === 'skill') return trace.skillRefs ?? [];
   if (dimension === 'memory') return (trace.memoryRefs?.length ?? 0) > 0 ? ['retrieved'] : ['none'];
   if (dimension === 'failure') {

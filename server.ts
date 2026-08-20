@@ -1128,7 +1128,13 @@ async function startServer() {
       });
       return res.json(sharedCommandCenter().present());
     } catch (error) {
-      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+      const reasonCode = error && typeof error === 'object' && 'reasonCode' in error
+        ? String((error as { reasonCode?: string }).reasonCode)
+        : undefined;
+      return res.status(400).json({
+        error: error instanceof Error ? error.message : String(error),
+        ...(reasonCode ? { reasonCode } : {}),
+      });
     }
   });
   app.get('/api/jarvis/security', async (_req, res) => {

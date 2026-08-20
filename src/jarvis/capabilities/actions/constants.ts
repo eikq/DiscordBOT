@@ -73,3 +73,10 @@ export function isReadOnlyGatedCapability(id: string): boolean {
     || isResearchReadCapability(id)
     || isWorkspaceReadCapability(id);
 }
+
+export function isActionGateConfirmCapability(id: string): boolean {
+  return id === DESKTOP_OPEN_TRUSTED_URL
+    || id === JARVIS_STOP_SERVICE
+    || id === JARVIS_RESTART_SERVICE
+    || id === RESEARCH_PRIVATE_BROWSE;
+}

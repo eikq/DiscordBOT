@@ -102,12 +102,13 @@ async function invokeThroughHost(
     const depth = options.researchDepth?.();
     if (depth) input = { ...input, depth };
   }
+  step.input = { ...input };
   const result = await host.invoke({
     id: resolved.id,
     input,
     source: 'system',
-    sessionId: options.sessionId || task.id,
-    requestId: `${task.id}:${step.id}`,
+    sessionId: task.sessionId || options.sessionId,
+    ...(task.requestId ? { requestId: task.requestId } : {}),
     ...(confirmation ? { confirmation } : {}),
   });
   return mapCapabilityResult(result);
@@ -132,10 +133,12 @@ function structuredVerify(task: WorkTask): WorkStepResult {
 
 function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
   const summary = result.content?.trim() || result.error || result.status;
+  const risk = typeof result.structured?.risk === 'string' ? String(result.structured.risk) : undefined;
   const toolResult = {
     capability: result.capabilityId,
     status: result.status,
     summary: result.untrustedOutput && result.status === 'ok' ? 'untrusted external data' : summary.slice(0, 240),
+    ...(risk ? { risk } : {}),
   };
   const evidence = [
     ...result.sourceUrls.slice(0, 6),

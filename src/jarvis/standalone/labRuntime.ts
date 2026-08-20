@@ -74,6 +74,7 @@ import { describeJarvisRuntimeProfile, type JarvisRuntimeProfile } from './runti
 import { runStandaloneTextTurn, type StandaloneTextTurnOutput } from './textHarness';
 import { CommandCenterRuntime, sharedCommandCenter } from './commandCenter';
 import { routeJarvisRequest, shouldUseWorkAgent, type RouteDecision } from '../intent/requestRouter';
+import { traceCapabilitiesFromTurn } from '../ops/traceCapabilities';
 import { synthesizeTaskResponse } from '../agent/synthesize';
 import type { SynthesizedTaskResponse } from '../agent/types';
 import type { AffectStyle } from '../evolution/affect';
@@ -561,24 +562,7 @@ export class JarvisLabRuntime {
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak);
-    const center = this.commandCenter;
-    if (center) {
-      const spec = center.runtimeSpecs.current();
-      center.recordTurnTrace({
-        requestId: adjusted.request.requestId,
-        sessionId: prepared.sessionId,
-        route: route.route,
-        inputText: String(input.text || ''),
-        totalLatencyMs: adjusted.timings.totalMs,
-        tokens: adjusted.llm?.outputTokens,
-        tokensPerSec: adjusted.llm?.tokensPerSec,
-        memoryRefs: adjusted.result.memoryRefs?.map(item => item.canonicalId),
-        capabilities: input.capabilities,
-        modelProfileId: spec.layers.intelligence.modelProfileId,
-        engine: spec.layers.engine.interactiveProfile,
-        success: true,
-      });
-    }
+    this.observeAskTurn(input, prepared.sessionId, route, adjusted);
     return {
       ...adjusted,
       coreState: 'complete',
@@ -619,6 +603,7 @@ export class JarvisLabRuntime {
     });
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
+    this.observeAskTurn(input, prepared.sessionId, route, adjusted);
     const finalPayload = {
       ...adjusted,
       coreState: 'complete' as const,
@@ -665,7 +650,12 @@ export class JarvisLabRuntime {
         proposalId: input.proposalId,
         token: input.token,
       });
-      return this.finishWorkTask({ text: waiting.objective, sessionId, speak: input.speak }, sessionId, routeJarvisRequest({ text: waiting.objective }), task);
+      return this.finishWorkTask(
+        { text: waiting.objective, sessionId, speak: input.speak },
+        sessionId,
+        routeJarvisRequest({ text: waiting.objective }),
+        task,
+      );
     }
     const invoked = await this.capabilityHost.confirm({
       proposalId: input.proposalId,
@@ -743,8 +733,17 @@ export class JarvisLabRuntime {
     if (!center) {
       throw new Error('Work agent is unavailable for this request.');
     }
-    const task = await center.runObjective(String(input.text || '').trim(), { sessionId });
-    return this.finishWorkTask(input, sessionId, route, task);
+    const request = createJarvisRequest({
+      text: String(input.text || '').trim(),
+      sessionId,
+    });
+    const task = await center.runObjective(String(input.text || '').trim(), {
+      sessionId,
+      requestId: request.requestId,
+      turnId: request.requestId,
+      route,
+    });
+    return this.finishWorkTask(input, sessionId, route, task, request);
   }
 
   private async finishWorkTask(
@@ -752,9 +751,19 @@ export class JarvisLabRuntime {
     sessionId: string,
     route: RouteDecision,
     task: Awaited<ReturnType<CommandCenterRuntime['runObjective']>>,
+    request = createJarvisRequest({
+      text: task.objective,
+      sessionId,
+      requestId: task.requestId,
+    }),
   ) {
     const synthesis = synthesizeTaskResponse(task);
-    const request = createJarvisRequest({ text: task.objective, sessionId });
+    this.workCenter()?.noteLatestRequest({
+      route,
+      objective: task.objective,
+      taskId: task.id,
+      requestId: request.requestId,
+    });
     const waiting = task.plan.find(step => step.status === 'waiting_permission');
     const result: JarvisCoreResult = {
       requestId: request.requestId,
@@ -891,6 +900,40 @@ export class JarvisLabRuntime {
         actionSource: input.actionSource,
       },
     };
+  }
+
+  private observeAskTurn(
+    input: JarvisLabAskInput,
+    sessionId: string,
+    route: RouteDecision,
+    output: StandaloneTextTurnOutput,
+  ): void {
+    const center = this.commandCenter;
+    if (!center) return;
+    const spec = center.runtimeSpecs.current();
+    center.recordTurnTrace({
+      requestId: output.request.requestId,
+      sessionId,
+      turnId: output.request.requestId,
+      route: route.route,
+      inputText: String(input.text || ''),
+      totalLatencyMs: output.timings.totalMs,
+      tokens: output.llm?.outputTokens,
+      tokensPerSec: output.llm?.tokensPerSec,
+      memoryRefs: output.result.memoryRefs?.map(item => item.canonicalId),
+      capabilities: traceCapabilitiesFromTurn({
+        actionResults: output.result.actionResults,
+        toolResults: output.result.toolResults,
+      }),
+      modelProfileId: spec.layers.intelligence.modelProfileId,
+      engine: spec.layers.engine.interactiveProfile,
+      success: !(output.result.actionResults ?? []).some(item => item.status === 'failed' || item.status === 'denied'),
+    });
+    center.noteLatestRequest({
+      route,
+      objective: String(input.text || ''),
+      requestId: output.request.requestId,
+    });
   }
 
   private rememberAfterTurn(

@@ -39,6 +39,22 @@ export function windowedEvents(events: JarvisOperationEvent[], limit = 80): Jarv
   return events.slice(-Math.max(1, Math.min(limit, 200)));
 }
 
+export function uniqueEventsBySeq<T extends { seq: number }>(events: T[]): T[] {
+  const seen = new Set<number>();
+  const out: T[] = [];
+  for (const event of events) {
+    if (seen.has(event.seq)) continue;
+    seen.add(event.seq);
+    out.push(event);
+  }
+  return out;
+}
+
+export function acceptSseSeq(lastSeq: number, incoming: number): number | null {
+  if (!Number.isFinite(incoming) || incoming <= lastSeq) return null;
+  return incoming;
+}
+
 export function capabilityBar(assessment: CapabilityAssessment): { label: string; text: string; pct: number | null } {
   if (assessment.confidence === null || assessment.recentTrend === 'insufficient_data') {
     return { label: assessment.capability, text: 'INSUFFICIENT DATA', pct: null };

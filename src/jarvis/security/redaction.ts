@@ -17,6 +17,11 @@ export function redactSecrets(value: string): string {
   return out.replace(SECRET_PATH_HINT, '[REDACTED_PATH]');
 }
 
+function isRedactedObjectKey(key: string): boolean {
+  if (/^(tokens|tokensPerSec)$/iu.test(key)) return false;
+  return /password|secret|token|cookie|authorization|api[_-]?key|\.env/iu.test(key);
+}
+
 export function redactDeep(value: unknown, depth = 0): unknown {
   if (depth > 8) return '[truncated]';
   if (typeof value === 'string') return redactSecrets(value);
@@ -24,7 +29,7 @@ export function redactDeep(value: unknown, depth = 0): unknown {
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if (/password|secret|token|cookie|authorization|api[_-]?key|\.env/iu.test(key)) {
+      if (isRedactedObjectKey(key)) {
         out[key] = '[REDACTED]';
         continue;
       }

@@ -246,7 +246,7 @@ export {
   applyTaskOutcome,
 } from './evolution';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
-export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, efficiencyFromTraces, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
 export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, realModelCertificationBlocked } from './models';
 export { ArtifactWorkflow } from './artifacts';
 export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';

@@ -10,6 +10,7 @@ import {
 import { BrowserMicrophoneInput } from './browserMicrophone';
 import JarvisCoreVisual from './JarvisCoreVisual';
 import CommandCenterPanels from './CommandCenterPanels';
+import { acceptSseSeq } from './operationsView';
 import { graphCategoriesOf, graphCategoryColor, type GraphSnapshot } from './graph/graphTypes';
 import { shortestGraphPath } from './graph/graphLayout';
 import {
@@ -449,8 +450,9 @@ export default function JarvisLabPage() {
         try {
           const payload = JSON.parse(event.data) as { seq?: number };
           if (typeof payload.seq === 'number') {
-            if (payload.seq <= lastSeq) return;
-            lastSeq = payload.seq;
+            const next = acceptSseSeq(lastSeq, payload.seq);
+            if (next === null) return;
+            lastSeq = next;
           }
         } catch {
           return;

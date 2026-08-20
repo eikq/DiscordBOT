@@ -3,40 +3,32 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — first physical-machine acceptance (LA-001 + LA-002 slice)
+## This turn — LA-001 / LA-002 close pass
 
-Labels: **LIVE_VERIFIED** for LA-001 `/api/jarvis/ask` on local Ollama.
-LA-002 agent-browser QA ran; **not OWNER_VERIFIED**. No merge to main. Not pushed.
+Labels: **LIVE_VERIFIED** for LA-001 and LA-002 agent-browser QA.
+LA-002 is **not OWNER_VERIFIED** (LA-013). No merge. Not pushed.
 Discord / Whonix / STT / RVC / uncensored / MoneyPrinterTurbo were not started.
 
-Starting cloud HEAD: `cursor/jarvis-research-addendum-4838` @ `4724cbf`.
-Local continuation: `local/jarvis-acceptance-2026-08-20` (no upstream).
+Branch: `local/jarvis-acceptance-2026-08-20` from `4724cbf`.
+Simulation OFF. Lab `JARVIS_STANDALONE=1` `http://127.0.0.1:3010`.
+Ollama `0.32.14` / `digital-me-qwen38:27b-ad-q4km`.
+`npx tsc --noEmit` PASS. `npm run test:cloud` **477/477**.
 
-Baseline on this machine: `npx tsc --noEmit` PASS; `npm run test:cloud` **468/468**.
+Close-pass defects fixed: requestId correlation through WorkAgent, capability
+trace collection, single latest-request writer, bounded Last task DAG,
+permission-wait grant/deny/cancel, usage `tokens` kept while confirm tokens
+stay redacted.
 
-Ollama `0.32.14` at `127.0.0.1:11434`. Only installed model:
-`digital-me-qwen38:27b-ad-q4km` (17 GB, loaded). Lab:
-`JARVIS_STANDALONE=1` `http://127.0.0.1:3010` (Discord client not started).
+Uncached research: marker `LA001-UNCACHED-2026-08-20-1787232948618`,
+`requestId=jarvis-1787232959132`, `task_693bb3aeb0ae`, `cached=false`,
+trace `tr_4430cb02f901` same requestId + `research.search` ok.
+Capability: `สถานะระบบ` `jarvis-1787232970933` / `tr_003c467ced03`.
+Hello after tokens-keep: `jarvis-1787233596801` / `tr_acc97921764e` tokens=10.
+Permission: wait/cancel `task_4ebf6826844b`; Grant once `task_f2fe0ec67647`.
 
-LA-001 live `/api/jarvis/ask` (session `la001-acceptance`):
-- `hello` → CONVERSATION, no WorkAgent, `jarvis-1787226985067`
-- `explain recursion` → INFORMATION, no WorkAgent, `jarvis-1787227003970`
-- research first failed `INVALID_ARGUMENT` (`task_f8ffa0146aa6`) because
-  WorkAgent forwarded owner `researchDepth` into `research.search` while
-  ActionGate allowed `depth` only on `research.current`. Fix: allow `depth`
-  on `research.search`. After restart: SUCCESS `task_b74988aeabe5`, 6 real
-  public sources, no invented citations.
-- `สถานะระบบ` → CAPABILITY `system.status`, `jarvis-1787227114017`
-
-ops.db traces `tr_ba10607df519` / `tr_dd8a20d15f1f` / `tr_183fc4becc46` /
-`tr_2c64ea49cbfa` / `tr_b84bed3e1b18`. Forbidden CoT keys absent.
-Analyzer `INSUFFICIENT_DATA`.
-
-LA-002: `/jarvis-lab` loaded with real model id. Dock conversation route is
-honest. Demos labeled SIMULATION. SSE reconnect + HTTP replay observed.
-Still blocked: completed-task DAG vanishes; ops `lastRequest` stale after
-conversation; ops panel covers Ask; no permission-wait exercise; owner
-sign-off not claimed.
+LA-002 visual: newest request follows CONVERSATION after research; Last task
+DAG inspectable; permission wait shown; SSE live/refresh/dedup with no
+console errors. Hidden-tab pause is product behavior. Do not start LA-003+.
 
 ## Previous — Jarvis research addendum (cloud delta before local acceptance)
 
