@@ -882,7 +882,9 @@ Ollama GPU, Whonix, mic, or CCTV.
 ## ADR-023 — Jarvis desktop presence uses a native-owned window, not Chrome HWND theft
 
 Date: 2026-08-20
-Status: **Proposed** (owner review required). Not installed.
+Status: **Phase 1 architecture APPROVED** for cloud-safe contracts and mocks
+(2026-08-20 Presenter/Desktop cloud pass). Native helper **not installed**.
+Live Windows helper remains **NEEDS_LOCAL_VERIFY**. Not LIVE_VERIFIED.
 
 ### Context
 
@@ -896,7 +898,7 @@ HWND would violate the Jarvis-window-only rule.
 Target UX: “อยู่จอไหน”, “ย้ายไปจอโน้ตบุ๊ก”, “Presenter เต็มจอที่จอหลัก”
 plus a later CONTROL + PRESENTER pair on one runtime/session.
 
-### Decision (pending owner)
+### Decision (Phase 1)
 
 1. Do **not** move arbitrary Chrome/Edge windows.
 2. Prefer a **minimal Windows-native helper** that owns Jarvis HWNDs and
@@ -918,8 +920,10 @@ plus a later CONTROL + PRESENTER pair on one runtime/session.
 
 - LA-027 stays **PARTIAL — NATIVE_SHELL_REQUIRED** until a helper exists
   and is live-verified.
-- Cloud may scaffold types/mocks only after owner approval.
+- Cloud implemented protocol v1, ownership registry, `FakeNativeJarvisHelper`,
+  and fail-closed `UNSUPPORTED_HOST`. Do not claim the helper is live.
 - ActionGate + Jarvis-window-only schema stay frozen.
+- CONTROL and PRESENTER are roles of one runtime/session.
 
 ---
 

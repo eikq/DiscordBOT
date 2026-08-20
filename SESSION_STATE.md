@@ -3,7 +3,25 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Presenter + desktop live acceptance
+## This turn — Presenter + Desktop cloud implementation
+
+Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
+LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
+No merge. Native helper **not installed**.
+
+Branch: `cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`
+Base: `8aba6b019c436b1e636f32274607015a4dc23e38`
+(`origin/local/jarvis-acceptance-2026-08-20`)
+
+Cloud-safe work: structured presentation facts, TTS-driven narration
+timeline, repeat/back, intersection display matching, native-helper
+contracts/mocks, comparison routing, Ollama `llm.model`.
+
+Verification (Cloud): targeted **48/48**; `npx tsc --noEmit` PASS;
+`npm run test:cloud` **517/517**. Handoff:
+`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+
+## Previous — Presenter + desktop live acceptance
 
 Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
 LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.

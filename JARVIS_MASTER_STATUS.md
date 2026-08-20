@@ -26,6 +26,14 @@ See `JARVIS_SECURITY_STATUS.md` for SEC/JF-014.5+ labels.
 
 Command-center SSE owner visual QA, Whonix/PRIVATE_BROWSER,
 mic, CCTV, Discord voice, live model certification, and real media pipelines
-remain **BLOCKED_LOCAL_ACCEPTANCE** (LA-002–LA-025). LA-001 local Ollama `/ask`
-(conversation, information, research via WorkAgent, bound capability) is
-**LIVE_VERIFIED** on 2026-08-20. Do not treat unit tests as live verified.
+remain **BLOCKED_LOCAL_ACCEPTANCE**. **LA-001** and **LA-002** stay **PARTIAL**
+(owner 2026-08-20). Do not mark them LIVE_VERIFIED. Cloud unit tests are not
+live QA.
+
+Presenter/Desktop cloud pass on
+`cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838` (base `8aba6b0`):
+structured briefing facts, TTS-driven narration timeline, repeat/back,
+intersection display matching, native-helper contracts/mocks, comparison
+routing. Evidence: `npx tsc --noEmit` PASS; targeted 48/48; `npm run test:cloud`
+**517/517**. Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). LA-026/LA-027 remain
+PARTIAL / NATIVE_SHELL_REQUIRED. Native helper is not installed.
