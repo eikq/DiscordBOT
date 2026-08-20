@@ -1,4 +1,5 @@
 export type LlmTurnMetrics = {
+  model?: string;
   promptChars?: number;
   promptTokens?: number;
   outputTokens?: number;
@@ -28,6 +29,7 @@ export function ollamaMetricsFromChat(payload: Record<string, unknown>, extras: 
   const promptTokens = numberOrUndef(payload.prompt_eval_count);
   const outputTokens = numberOrUndef(payload.eval_count);
   const metrics: LlmTurnMetrics = {
+    ...(typeof payload.model === 'string' && payload.model.trim() ? { model: payload.model } : {}),
     ...(typeof extras.promptChars === 'number' ? { promptChars: extras.promptChars } : {}),
     ...(typeof extras.ttftMs === 'number' ? { ttftMs: extras.ttftMs } : {}),
     ...(promptTokens !== undefined ? { promptTokens } : {}),

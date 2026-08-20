@@ -147,6 +147,7 @@ export {
 export type { PresentationEngine } from './presentation/PresentationEngine';
 export {
   applyBriefingFollowUp,
+  applySpokenDuration,
   buildMotionTimeline,
   estimateNarrationMs,
   FORBIDDEN_PRESENTATION_KEYS,
@@ -281,6 +282,9 @@ export {
   inferDesktopPresenceIntent,
   JarvisPresenceStore,
   sharedJarvisPresenceStore,
+  FakeNativeJarvisHelper,
+  parseNativeHelperRequest,
+  NATIVE_HELPER_PROTOCOL_VERSION,
 } from './desktop';
 export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
 export {
@@ -301,6 +305,7 @@ export {
   InteractionContextStore,
   routeJarvisRequest,
   shouldUseWorkAgent,
+  classifyComparisonIntent,
 } from './intent';
 export type { IntentResolution, InteractionContext, CompactCapability, RouteDecision, JarvisRequestRoute } from './intent';
 export type { ResearchResult, ResearchRuntime, ResearchSnapshot, SourceRecord } from './research';
