@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { applyOwnerDisplayNames, displayContaining, loadOwnerDisplayNames, resolveDisplaySelector } from './displayNames';
+import { applyOwnerDisplayNames, displayForWindow, loadOwnerDisplayNames, resolveDisplaySelector } from './displayNames';
 import type { JarvisPresenceStore } from './presenceStore';
 import type {
   DesktopHostKind,
@@ -9,17 +9,12 @@ import type {
   JarvisLayout,
   JarvisWindowInfo,
   ListDisplaysResult,
+  NativeJarvisWindowAdapter,
   OwnerDisplayName,
   WindowOpResult,
 } from './types';
 
-export type NativeJarvisWindowAdapter = {
-  listDisplays?: () => Promise<DisplayInfo[]>;
-  getWindow?: () => Promise<JarvisWindowInfo>;
-  setBounds?: (bounds: DisplayBounds) => Promise<WindowOpResult>;
-  focus?: () => Promise<WindowOpResult>;
-  setLayout?: (layout: Exclude<JarvisLayout, 'restore' | 'presenter'>, display?: DisplayInfo) => Promise<WindowOpResult>;
-};
+export type { NativeJarvisWindowAdapter, OwnedJarvisWindowRef } from './types';
 
 export type JarvisWindowHostOptions = {
   presence: JarvisPresenceStore;
@@ -41,7 +36,7 @@ export class JarvisWindowHost {
   }
 
   public canMoveNative(): boolean {
-    return Boolean(this.options.native?.setBounds);
+    return Boolean(this.options.native?.setBounds || this.options.native?.moveOwnedWindow);
   }
 
   public async listDisplays(): Promise<ListDisplaysResult> {
@@ -144,10 +139,15 @@ export class JarvisWindowHost {
       };
     }
     const listed = await this.listDisplays();
-    const display = displayContaining(listed.displays, {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    });
+    const display = displayForWindow(listed.displays, bounds);
+    if (!display) {
+      return {
+        status: 'failed',
+        reasonCode: 'UNKNOWN_DISPLAY',
+        message: 'Those bounds do not intersect a known display.',
+        hostKind: this.hostKind(),
+      };
+    }
     return this.applyBounds(bounds, display, 'resized', 'Updated Jarvis window bounds.');
   }
 
@@ -176,8 +176,13 @@ export class JarvisWindowHost {
     const resolved = selector
       ? resolveDisplaySelector(listed.displays, selector, current.window?.displayId)
       : current.window?.displayId
-        ? { ok: true as const, display: listed.displays.find(item => item.id === current.window?.displayId) || listed.displays[0] }
-        : { ok: true as const, display: listed.displays.find(item => item.primary) || listed.displays[0] };
+        ? (() => {
+          const hit = listed.displays.find(item => item.id === current.window?.displayId);
+          return hit
+            ? { ok: true as const, display: hit }
+            : { ok: false as const, reasonCode: 'DISPLAY_NOT_FOUND' as const, message: 'Current Jarvis display is unknown.' };
+        })()
+        : { ok: false as const, reasonCode: 'UNKNOWN_DISPLAY' as const, message: 'Jarvis window is not intersecting a known display.' };
     if (resolved.ok === false) {
       return {
         status: 'unavailable',
@@ -231,6 +236,22 @@ export class JarvisWindowHost {
           state: 'normal',
           source: 'native',
         },
+        message: moved.message || message,
+      };
+    }
+    const owned = this.options.native?.getOwnedWindows
+      ? (await this.options.native.getOwnedWindows())[0]
+      : undefined;
+    if (owned && this.options.native?.moveOwnedWindow) {
+      const moved = await this.options.native.moveOwnedWindow({
+        windowId: owned.windowId,
+        display,
+        bounds,
+      });
+      return {
+        ...moved,
+        status: moved.status === 'unavailable' ? 'unavailable' : status,
+        display,
         message: moved.message || message,
       };
     }

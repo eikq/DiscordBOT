@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DisplayInfo, DisplaySelector, OwnerDisplayName } from './types';
+import { displayIntersectingBounds, pointInDisplay } from './geometry';
+import type { DisplayBounds, DisplayInfo, DisplaySelector, OwnerDisplayName } from './types';
 
 export function loadOwnerDisplayNames(workspaceRoot = process.cwd()): OwnerDisplayName[] {
   const file = path.join(workspaceRoot, 'config', 'jarvis', 'displays.json');
@@ -68,8 +69,14 @@ export function resolveDisplaySelector(
     return { ok: true, display: hit };
   }
   if (selector.role === 'current') {
-    const hit = displays.find(item => item.id === currentDisplayId) || displays.find(item => item.primary) || displays[0];
-    return { ok: true, display: hit };
+    const hit = displays.find(item => item.id === currentDisplayId);
+    return hit
+      ? { ok: true, display: hit }
+      : {
+        ok: false,
+        reasonCode: 'DISPLAY_NOT_FOUND',
+        message: 'Current Jarvis display is unknown. Name the target display.',
+      };
   }
   if (selector.role === 'external') {
     const others = displays.filter(item => !item.primary);
@@ -91,16 +98,24 @@ export function resolveDisplaySelector(
       message: 'Notebook display is not owner-named. Add it to config/jarvis/displays.json.',
     };
   }
+  if (selector.role === 'main') {
+    const named = displays.find(item => item.ownerNamed && item.aliases.some(alias => /main|จอหลัก/iu.test(alias)));
+    if (named) return { ok: true, display: named };
+    return {
+      ok: false,
+      reasonCode: 'DISPLAY_NOT_FOUND',
+      message: 'Main display is not owner-named. Add it to config/jarvis/displays.json.',
+    };
+  }
   return { ok: false, reasonCode: 'DISPLAY_NOT_FOUND', message: 'Display selector was empty.' };
 }
 
 export function displayContaining(displays: DisplayInfo[], point: { x: number; y: number }): DisplayInfo | undefined {
-  return displays.find(item => (
-    point.x >= item.bounds.x
-    && point.y >= item.bounds.y
-    && point.x < item.bounds.x + item.bounds.width
-    && point.y < item.bounds.y + item.bounds.height
-  )) || displays.find(item => item.primary);
+  return displays.find(item => pointInDisplay(item, point));
+}
+
+export function displayForWindow(displays: DisplayInfo[], bounds: DisplayBounds): DisplayInfo | undefined {
+  return displayIntersectingBounds(displays, bounds);
 }
 
 function aliasesOf(item: OwnerDisplayName): string[] {

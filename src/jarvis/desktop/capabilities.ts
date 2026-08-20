@@ -170,7 +170,7 @@ function selectorFrom(input: Record<string, unknown>): DisplaySelector {
   if (typeof nested.displayId === 'string') selector.id = nested.displayId;
   if (typeof nested.name === 'string') selector.name = nested.name;
   if (typeof nested.displayName === 'string') selector.name = nested.displayName;
-  if (nested.role === 'primary' || nested.role === 'current' || nested.role === 'external' || nested.role === 'notebook') {
+  if (nested.role === 'primary' || nested.role === 'current' || nested.role === 'external' || nested.role === 'notebook' || nested.role === 'main') {
     selector.role = nested.role;
   }
   return selector;
