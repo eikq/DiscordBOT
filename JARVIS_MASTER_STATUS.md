@@ -18,10 +18,13 @@ This continuation added the security-first layer **on top of** those packs,
 then the cloud-safe work-agent / evolution / command-center layer,
 then a runtime-integration pass: CapabilityHost work-agent invocation,
 isolated SQLite task/evolution stores, and night-cycle consolidation.
-It did not restart the project or rewrite Discord.
+A later research-addendum pass added isolated `ops.db` traces, a versioned
+runtime spec, model trust tiers, fixture-only certification, and Command
+Center intelligence surfaces. It did not restart the project or rewrite Discord.
 
 See `JARVIS_SECURITY_STATUS.md` for SEC/JF-014.5+ labels.
 
 Command-center SSE browser QA, Ollama multi-step, Whonix/PRIVATE_BROWSER,
-mic, CCTV, and Discord voice remain **BLOCKED_LOCAL_ACCEPTANCE**. Do not
-treat unit tests as live verified.
+mic, CCTV, Discord voice, live model certification, and real media pipelines
+remain **BLOCKED_LOCAL_ACCEPTANCE** (LA-001–LA-025). Do not treat unit tests
+as live verified.

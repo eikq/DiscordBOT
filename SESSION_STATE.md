@@ -3,7 +3,32 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — cloud finalization wiring (memory, stream, depth, night resume, grant)
+## This turn — Jarvis research addendum (cloud delta before local acceptance)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware/Ollama/IME/video remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed. OpenClaude/MoneyPrinterTurbo/Qwen weights were not installed.
+
+Starting branch: `cursor/jarvis-cloud-finalization-4838` @ `f2f53dc`.
+Continuation branch: `cursor/jarvis-research-addendum-4838`.
+
+Prior WorkAgent / CapabilityHost / evolution / Command Center / typed ask router work was preserved, not rebuilt.
+
+- Trace: isolated `ops.db` `TraceStore` records observable facts only (request/session/turn/task/route/model/engine/refs/latency/tokens/retries/errors). Forbidden CoT keys stripped. `TraceAnalyzer` returns `INSUFFICIENT_DATA` rather than inventing p50/p95.
+- RuntimeSpec: versioned INTELLIGENCE/ENGINE/AGENT/TOOLS_MEMORY/LEARNING description of the existing runtime. Security/permissions/owner/trust/secrets/promotion are frozen.
+- Model profiles: STANDARD / EXPERIMENTAL / RESTRICTED. Uncensored Qwen exists as RESTRICTED with `securityAuthority: false`. No model is the permission system.
+- Certification: 10 fixture categories, `liveOllama: false`, status `FIXTURE_ONLY`. Real Ollama/Qwen = BLOCKED_LOCAL_ACCEPTANCE.
+- Efficiency: success/latency/tokens when measured. RAM/VRAM/CPU/GPU/energy/cost omitted unless probed.
+- Model routing: deterministic policy; RESTRICTED never auto-selected; night stronger model only if `hardware.idle === true`.
+- Spec optimization: BASELINE → HYPOTHESIS → isolated benchmark → REJECT/PROMOTION_CANDIDATE. `autoPromote()` is always false.
+- Thai: combining-mark fixture round-trips HTTP `parseObjective`, `createJarvisRequest`, task objective, SQLite fact, trace, JSON, Command Center. Windows IME remains BLOCKED_LOCAL_ACCEPTANCE.
+- Artifacts + media: stage/manifest/validate simulator. MoneyPrinterTurbo `installed: false`. Publish never auto.
+- Memory: lexical + semantic fusion keeps SQLite canonical; Qdrant index-only orphans dropped.
+- Scheduler: audited reminders / night / monitor only. Jobs are not permissions. No fourth scheduler.
+- Command Center: Intelligence panel on the existing lab UI. Empty analyzer shows INSUFFICIENT_DATA.
+- Night Cycle: consumes traces for owner-review spec candidates. `autoPromoted: false`. No training.
+
+Verification: targeted addendum+related **49/49**; `npx tsc --noEmit` PASS; `npm run test:cloud` **468/468**. Browser visual QA not run.
+
+## Previous — cloud finalization wiring (memory, stream, depth, night resume, grant)
 
 Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware/browser/Ollama remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed.
 
