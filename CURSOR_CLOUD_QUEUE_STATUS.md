@@ -24,6 +24,8 @@ Work landed first on
 `cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838` and is now the
 starting HEAD of the dedicated evolution branch.
 
+Queue 01 HEAD: `1c5181f12740bf198fa43093ba8da5b480ed5422`
+
 Cloud evidence: `npx tsc --noEmit` PASS; targeted Presenter/Desktop
 48/48; `npm run test:cloud` **517/517**.
 

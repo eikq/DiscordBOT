@@ -18,9 +18,9 @@ Cloud-safe work: structured presentation facts, TTS-driven narration
 timeline, repeat/back, intersection display matching, native-helper
 contracts/mocks, comparison routing, Ollama `llm.model`.
 
-Verification (Cloud): targeted **48/48**; `npx tsc --noEmit` PASS;
-`npm run test:cloud` **517/517**. Handoff:
-`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+Verification (Cloud, re-run on evolution branch): targeted **48/48**;
+`npx tsc --noEmit` PASS; `npm run test:cloud` **517/517**. Handoff:
+`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`. HEAD: `1c5181f`.
 
 ## Previous — Presenter + desktop live acceptance
 

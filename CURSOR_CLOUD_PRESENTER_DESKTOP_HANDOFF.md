@@ -35,11 +35,12 @@ Do not merge. Do not push `main` or rewrite the local acceptance branch.
 
 ## C. Final cloud HEAD
 
-Queue 01 software HEAD before this queue-status pin:
+Queue 01 HEAD:
 
-`36a6b98f83df4b7652d126b28e231faa14566a14`
+`1c5181f12740bf198fa43093ba8da5b480ed5422`
 
-Confirm after push with `git rev-parse origin/cursor/jarvis-cloud-evolution-2026-08-20`.
+Software commits end at `36a6b98`. Confirm with
+`git rev-parse origin/cursor/jarvis-cloud-evolution-2026-08-20`.
 
 ## D. Commits (this pass only)
 
