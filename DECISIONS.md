@@ -839,4 +839,45 @@ dependencies.
   first-boot is owner-acknowledged.
 - VirtualBox may be slower while VBS/HVCI stay on.
 
+---
+
+## ADR-022 — Fail-closed work agent and evolution stay simulated until owner live-QA
+
+Date: 2026-08-20
+Status: Accepted for standalone v1 cloud-safe layer
+
+### Context
+
+The Jarvis-first roadmap asked for JF-014.6 telemetry, JF-015 multi-step
+work, EVO-001–010, and Command Center UX. Cloud agents cannot run Discord,
+Ollama GPU, Whonix, mic, or CCTV.
+
+### Decision
+
+- Work-agent plans are acyclic DAGs with bounded retries, cancel, pause,
+  and owner permission waits. Terminal state wins races.
+- Evolution may record, reflect, and propose candidates. It must not
+  auto-promote, write production, or treat failure as a trusted skill.
+- LoRA remains a registry (`trained: false`) until an explicit training
+  task.
+- Affect can change style, never authorization.
+- Owner autonomy 0–5: Jarvis cannot raise max or current autonomy.
+- Vision `see` is not click/type/submit. Device VIEW is not CONTROL.
+- Simulated Command Center demos must be tagged `simulated: true` and
+  shown with a SIMULATION banner.
+- SSE is real operations only, with seq replay and secret redaction.
+
+### Alternatives considered
+
+- Auto-promote passing candidates overnight — rejected.
+- Live hardware tests in cloud — rejected; mark BLOCKED_LOCAL_ACCEPTANCE.
+- Rewrite Discord or the Digital Me dashboard — rejected (Jarvis-first).
+
+### Consequences
+
+- Cloud verification is unit/offline only.
+- Host live-QA remains required for SSE-in-browser, Ollama multi-step,
+  Whonix, mic, screen capture, and CCTV.
+
+
 

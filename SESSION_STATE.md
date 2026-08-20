@@ -1,7 +1,20 @@
 ﻿# Cursor Session State
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
+
+## This turn — cloud-safe Jarvis roadmap (JF-014.6 / JF-015 / EVO / Command Center)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware paths are **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed.
+
+The previous cloud pass wrote work-agent / evolution / ops libraries and then stopped before SSE APIs, lab UI wiring, docs, commit, and PR. This turn finished that wiring.
+
+- JF-014.6: event `id`/`seq`, bounded buffer, SSE `id:` + `after=`/`Last-Event-ID` replay, heartbeat comments, visual-state mapping. `/jarvis-lab` EventSource reconnects. Browser SSE QA not run in cloud.
+- JF-015: DAG work agent with cancel/pause/resume, permission wait, stale-terminal write guard, simulated demos via `CommandCenterRuntime`.
+- EVO-001–010: claims, retrieval rank, structured reflection (failure cannot mint trusted skills), skill lifecycle, failure ledger, self-model `INSUFFICIENT DATA` until n≥3, growth planner cap 3, practice/benchmarks, night cycle pause on `realtime_voice`, affect cannot authorize, identity overlay, journal, candidate manager (no auto-promote), LoRA registry only (`trained: false`).
+- JF-016/017/018: simulated vision (see ≠ click/type/submit), proactive monitor, VIEW-only devices, owner autonomy 0–5 (Jarvis cannot raise max).
+- Lab: `/api/jarvis/command-center` GET + demo/control/cancel/grant POSTs (loopback + mutation guard). Simulation banner, live ops steps, evolution rail, source graph, devices.
+- Local acceptance queue (do not mark live): Whonix/Tor PRIVATE_BROWSER, Ollama multi-step, Discord voice, mic/STT on host, screen capture, CCTV, Command Center SSE in a real browser, UI-R9 owner visual sign-off.
 
 ## This turn — cloud-safe Jarvis checkpoint for Cursor Cloud Agents
 
