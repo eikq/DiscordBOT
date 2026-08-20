@@ -11,6 +11,7 @@ Cloud certification is FIXTURE_ONLY. No model downloads. No live hardware
 benchmarks. SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `d0f333660a40c6f828778bf21cb5a9927d399aad`
 Implementation: `e38f27281841dc8938eeaf07890a8617d396b6c0`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 ADR: ADR-027.

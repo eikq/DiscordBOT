@@ -124,6 +124,7 @@ Handoff: ADR-026, `tests/jarvis_skills_v2.test.ts`.
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 
 Implementation: `e38f27281841dc8938eeaf07890a8617d396b6c0`
+Queue 05 HEAD: `d0f333660a40c6f828778bf21cb5a9927d399aad`
 
 Trust tiers remain STANDARD / EXPERIMENTAL / RESTRICTED.
 RESTRICTED models are never auto-selected and are never security
