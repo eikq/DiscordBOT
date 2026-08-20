@@ -70,7 +70,7 @@ function fact(localId: string, key: string, value: string, subjectId?: string): 
 }
 
 function episode(localId: string, summary: string): EpisodeRecord {
-  const now = 3_000;
+  const now = Date.now();
   return {
     id: canonicalMemoryId('episode', localId),
     kind: 'episode',

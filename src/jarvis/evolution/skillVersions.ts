@@ -1,31 +1,54 @@
+import type { PrivilegeActor } from '../security/types';
 import type { JsonCollection } from './persistTypes';
 import type { ProceduralSkillVersion } from './types';
+import { normalizeSkill, skillRecordId, type ProposeSkillInput } from './skillNormalize';
+import { retrieveRelevantSkills } from './skillRetrieval';
+import {
+  assertOwnerSkillTrust,
+  autoPromoteSkill,
+  canTransitionTrust,
+  isAutoSelectableSkill,
+  jarvisMaySelfApproveSkill,
+  productionSkillPromotionAllowed,
+} from './skillTrust';
 
 export class SkillVersionRegistry {
   private readonly versions = new Map<string, ProceduralSkillVersion[]>();
   private readonly knownGood = new Map<string, number>();
 
   constructor(private readonly persist?: JsonCollection<ProceduralSkillVersion>) {
-    for (const skill of persist?.load() ?? []) {
+    for (const raw of persist?.load() ?? []) {
+      const skill = normalizeSkill({
+        ...raw,
+        version: raw.version,
+        knownGood: raw.knownGood,
+        scriptsAllowed: false,
+      });
       const existing = this.versions.get(skill.skillId) ?? [];
       this.versions.set(skill.skillId, [...existing, skill]);
       if (skill.knownGood) this.knownGood.set(skill.skillId, skill.version);
     }
   }
 
-  public propose(skill: Omit<ProceduralSkillVersion, 'version' | 'knownGood' | 'status' | 'scriptsAllowed'> & {
-    status?: ProceduralSkillVersion['status'];
-    parentVersion?: number;
-  }): ProceduralSkillVersion {
+  public propose(skill: ProposeSkillInput): ProceduralSkillVersion {
     const existing = this.versions.get(skill.skillId) ?? [];
-    const next: ProceduralSkillVersion = {
+    const evidence = skill.evidence ?? [];
+    const duplicate = [...existing].reverse().find(item => (
+      item.trustStatus !== 'REJECTED'
+      && item.trustStatus !== 'DEPRECATED'
+      && evidence.some(id => item.evidence.includes(id))
+    ));
+    if (duplicate) return { ...duplicate };
+
+    const next = normalizeSkill({
       ...skill,
       version: (existing.at(-1)?.version ?? 0) + 1,
       knownGood: false,
-      status: skill.status ?? 'CANDIDATE',
+      status: 'CANDIDATE',
+      trustStatus: 'DRAFT',
       scriptsAllowed: false,
       parentVersion: skill.parentVersion ?? existing.at(-1)?.version,
-    };
+    });
     this.versions.set(skill.skillId, [...existing, next]);
     this.flush();
     return { ...next };
@@ -33,7 +56,14 @@ export class SkillVersionRegistry {
 
   public markTested(skillId: string, version: number, passed: boolean): ProceduralSkillVersion {
     const skill = this.require(skillId, version);
-    skill.status = passed ? 'TESTED' : 'REJECTED';
+    if (skill.trustStatus === 'TRUSTED') return { ...skill };
+    if (passed) {
+      skill.status = 'TESTED';
+      skill.trustStatus = 'REVIEW_REQUIRED';
+    } else {
+      skill.status = 'REJECTED';
+      skill.trustStatus = 'REJECTED';
+    }
     this.flush();
     return { ...skill };
   }
@@ -44,7 +74,16 @@ export class SkillVersionRegistry {
       throw Object.assign(new Error('Cannot reject the only known-good skill without rollback.'), { reasonCode: 'CANDIDATE_REJECTED' });
     }
     skill.status = 'REJECTED';
+    skill.trustStatus = 'REJECTED';
     skill.evidence = [...skill.evidence, `rejected:${reason}`];
+    this.flush();
+    return { ...skill };
+  }
+
+  public deprecate(skillId: string, version: number): ProceduralSkillVersion {
+    const skill = this.require(skillId, version);
+    skill.status = 'DEPRECATED';
+    skill.trustStatus = 'DEPRECATED';
     this.flush();
     return { ...skill };
   }
@@ -63,6 +102,24 @@ export class SkillVersionRegistry {
     }
     this.knownGood.set(skillId, version);
     skill.status = 'ACTIVE';
+    if (skill.trustStatus === 'DRAFT') skill.trustStatus = 'REVIEW_REQUIRED';
+    this.flush();
+    return { ...skill };
+  }
+
+  public trust(skillId: string, version: number, actor: PrivilegeActor): ProceduralSkillVersion {
+    assertOwnerSkillTrust(actor);
+    const skill = this.require(skillId, version);
+    if (!canTransitionTrust(skill.trustStatus, 'TRUSTED', actor)) {
+      throw Object.assign(
+        new Error('Skill must pass isolated review before owner trust.'),
+        { reasonCode: 'REVIEW_REQUIRED' },
+      );
+    }
+    skill.trustStatus = 'TRUSTED';
+    skill.status = 'TRUSTED_INSTRUCTION';
+    skill.knownGood = true;
+    this.knownGood.set(skillId, version);
     this.flush();
     return { ...skill };
   }
@@ -92,16 +149,28 @@ export class SkillVersionRegistry {
   }
 
   public retrieveTrusted(query: string): ProceduralSkillVersion[] {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return [];
-    return this.list().filter(skill => {
-      if (!skill.knownGood && skill.status !== 'ACTIVE' && skill.status !== 'TRUSTED_INSTRUCTION') {
-        return false;
-      }
-      return skill.trigger.toLowerCase().includes(needle.slice(0, 48))
-        || skill.purpose.toLowerCase().includes(needle.slice(0, 48))
-        || needle.includes(skill.skillId.toLowerCase());
-    });
+    return retrieveRelevantSkills(this.list().filter(isAutoSelectableSkill), query)
+      .map(hit => hit.skill);
+  }
+
+  public retrieveForTask(query: string): ProceduralSkillVersion[] {
+    return this.retrieveTrusted(query);
+  }
+
+  public autoPromote(): false {
+    return autoPromoteSkill();
+  }
+
+  public productionPromotionAllowed(): false {
+    return productionSkillPromotionAllowed();
+  }
+
+  public selfApprove(): false {
+    return jarvisMaySelfApproveSkill();
+  }
+
+  public recordId(skillId: string, version: number): string {
+    return skillRecordId(skillId, version);
   }
 
   private require(skillId: string, version: number): ProceduralSkillVersion {

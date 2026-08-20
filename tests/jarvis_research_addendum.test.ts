@@ -208,6 +208,7 @@ test('scheduler audit does not add a competing scheduler and jobs are not permis
   const audit = auditSchedulers();
   assert.equal(audit.competingSchedulerAdded, false);
   assert.equal(audit.jobIsPermanentPermission, false);
+  assert.equal(audit.coordinatorIsScheduler, false);
   assert.equal(scheduledJobIsNotPermission(), false);
   assert.equal(audit.schedulers.length, 3);
   const denied = authorizeAtExecution({ capabilityId: 'desktop.openApplication', grantPresent: false, leaseValid: false });

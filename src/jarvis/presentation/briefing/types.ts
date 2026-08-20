@@ -16,7 +16,8 @@ export type PresentationTargetType =
   | 'card'
   | 'graph-node'
   | 'recommendation'
-  | 'source';
+  | 'source'
+  | 'metric';
 
 export type PresentationTarget = {
   type: PresentationTargetType;
@@ -36,7 +37,7 @@ export type PresentationCard = {
 export type PresentationSection = {
   id: string;
   title: string;
-  kind: 'summary' | 'findings' | 'evidence' | 'risks' | 'actions' | 'followups' | 'comparison';
+  kind: 'summary' | 'findings' | 'evidence' | 'risks' | 'actions' | 'followups' | 'comparison' | 'quality' | 'timeline';
   body: string;
   cards?: string[];
 };
@@ -55,7 +56,30 @@ export type PresentationTable = {
   rows: string[][];
 };
 
-export type NarrationSegmentKind = 'summary' | 'section' | 'extended';
+export type NarrationSegmentKind = 'summary' | 'section' | 'extended' | 'finish';
+
+export const NARRATION_PLAYBACK_STATES = [
+  'idle',
+  'playing',
+  'completed',
+  'cancelled',
+  'pause_unsupported',
+] as const;
+
+export type NarrationPlaybackStatus = (typeof NARRATION_PLAYBACK_STATES)[number];
+
+export type NarrationPlaybackState = {
+  presentationId: string;
+  segmentId: string;
+  segmentIndex: number;
+  spokenAtMs: number;
+  estimatedDurationMs: number;
+  actualSpeechDurationMs?: number;
+  playbackState: NarrationPlaybackStatus;
+  targetId: string;
+  motionCue?: MotionCueAction;
+  pauseSupported: false;
+};
 
 export type NarrationSegment = {
   id: string;
@@ -119,6 +143,7 @@ export type PresentationModel = {
   followUpSuggestions: PresentationFollowUp[];
   narrationSegments: NarrationSegment[];
   motionTimeline: MotionCue[];
+  playback: NarrationPlaybackState;
 };
 
 export type PlainPresentation = {
@@ -126,6 +151,17 @@ export type PlainPresentation = {
 };
 
 export type PlannedPresentation = PresentationModel | PlainPresentation;
+
+export type MemoryProvenanceItem = {
+  canonicalId: string;
+  text: string;
+  status?: string;
+  sourceSystem?: string;
+  sourceRefs?: string[];
+  memoryClass?: string;
+  ownerTrusted?: boolean;
+  derived?: boolean;
+};
 
 export type PresentationInput = {
   text: string;
@@ -142,21 +178,38 @@ export type PresentationInput = {
   research?: {
     query?: string;
     synthesis?: string;
-    sources?: Array<{ sourceId: string; title: string; url: string; domain?: string }>;
+    sources?: Array<{ sourceId: string; title: string; url: string; domain?: string; trustClass?: string; recency?: string; publishedAt?: string | null }>;
     evidence?: Array<{ evidenceId: string; claim: string; sourceId: string }>;
     uncertainty?: string[];
     disagreements?: Array<{ topic: string }>;
+    cache?: { cached?: boolean; cacheAgeMs?: number | null; freshRetrieval?: boolean; providerHit?: boolean };
+    claims?: Array<{ text: string; supportingSourceIds?: string[]; conflictingSourceIds?: string[]; confidence?: number }>;
+    sourceQuality?: Array<{ sourceId: string; trustClass?: string; recency?: string }>;
+    timeline?: Array<{ sourceId: string; publishedAt?: string | null; label?: string }>;
+    qualityLabel?: string;
+    conflictingEvidence?: string[];
+    recommendedFollowUps?: string[];
+    limitations?: string[];
   };
   systemSnapshot?: {
     summary?: string;
     parts?: string[];
+    cpu?: { usagePct: number; cores: number };
+    ram?: { usedPct: number; freeMb?: number; totalMb?: number };
+    disk?: { usedPct?: number; freeGb?: number; totalGb?: number };
+    gpu?: { name: string; utilizationPct?: number; vramUsedMb?: number; vramTotalMb?: number };
   };
   displays?: {
     count?: number;
+    ids?: string[];
+    names?: string[];
     currentName?: string;
+    currentId?: string;
     hostKind?: string;
     reason?: string;
   };
+  showMemoryProvenance?: boolean;
+  memoryProvenance?: MemoryProvenanceItem[];
 };
 
 export const FORBIDDEN_PRESENTATION_KEYS = [

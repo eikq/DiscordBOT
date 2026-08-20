@@ -1,3 +1,4 @@
+import { backPlayback, createPlayback, repeatPlayback } from './playback';
 import type { PresentationFollowUp, PresentationFollowUpId, PresentationModel } from './types';
 
 export function defaultFollowUps(model: Pick<PresentationModel, 'mode' | 'evidence' | 'recommendedActions' | 'sections'>): PresentationFollowUp[] {
@@ -26,13 +27,15 @@ export function applyBriefingFollowUp(
   targetId?: string,
 ): PresentationModel {
   if (action === 'shorten') {
+    const narrationSegments = model.narrationSegments.filter(item => item.kind === 'summary');
     return {
       ...model,
       density: 'rich',
       subtitle: model.subtitle || 'Shorter summary',
       sections: model.sections.filter(section => section.kind === 'summary' || section.kind === 'actions'),
-      narrationSegments: model.narrationSegments.filter(item => item.kind === 'summary'),
+      narrationSegments,
       motionTimeline: model.motionTimeline.filter(item => item.segmentId === 'narr-summary'),
+      playback: createPlayback(model.id, narrationSegments, { playbackState: model.playback.playbackState }),
     };
   }
   if (action === 'expand' || action === 'explain') {
@@ -103,6 +106,12 @@ export function applyBriefingFollowUp(
         },
       ],
     };
+  }
+  if (action === 'repeat') {
+    return repeatPlayback(model);
+  }
+  if (action === 'back') {
+    return backPlayback(model);
   }
   return model;
 }

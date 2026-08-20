@@ -130,6 +130,30 @@ Evidence:
 - Seeded `architecture.memory_backend = SQLite` reaches Core `memoryRefs`; no LLM wording asserted
 - Not live Ollama verified
 
+## JF-004C — Canonical Memory Intelligence V2
+Depends on JF-004 / JF-004B
+Status: DONE (cloud-safe software). Not LIVE_VERIFIED.
+
+Goal:
+Improve memory quality, retrieval, contradiction handling, importance,
+and safe learning without replacing SQLite.
+
+Acceptance:
+- SQLite remains canonical; vector index is derived-only; no Qdrant service started
+- Record quality fields + ACTIVE/SUPERSEDED/FORGOTTEN/EXPIRED
+- No silent overwrite; owner changes supersede
+- Hybrid fusion drops orphan vector hits
+- Query-aware class retrieval; bounded context; transparent scores
+- Episode → candidate → validate; research is never owner-trusted
+- Owner correction: จำอันนี้ / อันนี้ไม่ใช่ / เปลี่ยนเป็น / ลืมเรื่องนี้
+- Optional Presenter provenance: "Jarvis remembered this because..."
+
+Evidence:
+- Schema `003_memory_intelligence_v2.sql`; `JARVIS_MEMORY_SCHEMA_VERSION = 3`
+- `tests/jarvis_memory_v2.test.ts`
+- `npx tsc --noEmit` PASS; `npm run test:cloud` **541/541**
+- ADR-025
+
 ## JF-005 — Tool/Capability registry
 Status: DONE
 
@@ -183,6 +207,10 @@ Evidence:
 - Existing Digital Me dashboard (`src/App.tsx`) is unchanged
 - Local APIs: `GET /api/jarvis/status`, `POST /api/jarvis/ask`, `POST /api/jarvis/presentation` (localhost-restricted)
 - UI-R1–R8 command center: ribbon / memory rail / CSS/SVG core / tools rail / timeline / dock (`JARVIS_UI_REDESIGN_TASKS.md`)
+- Queue 09 Command Center V2: six operational modes, one primary body at a time; global REAL/SIMULATION/DEGRADED/OFFLINE chip; Presenter fullscreen-ready; owner memory corrections via Ask (`tests/jarvis_command_center_v2.test.ts`, ADR-031)
+- Queue 10 Security Hardening: untrusted content stays data; SSRF includes IPv4-mapped IPv6; native helper forged/replay/impersonation fail-closed; no self-trust of memory/skills (`tests/jarvis_security_hardening.test.ts`, ADR-032)
+- Queue 11 Full-System Cloud Integration: 14 offline fixtures; independent correlation ids; distinct failure codes not collapsed (`tests/jarvis_cloud_integration.test.ts`, ADR-033). CLOUD_VERIFIED (unit); not LIVE_VERIFIED.
+- Queue 12 Cloud stop-line: remaining work classified; host tests in `CURSOR_LOCAL_ACCEPTANCE_NEXT.md` (ADR-034). No further Cloud feature queues automatically.
 - `createJarvisLabRuntime({ attachDefaultMemory: true })` on the server; tests pass `attachDefaultMemory: false` so they never open `data/jarvis/jarvis.db`
 - Live lab UI verified 2026-08-19 on `:3010` with `JARVIS_STANDALONE=1`; not Discord; speech inactive
 
@@ -396,7 +424,7 @@ Acceptance:
 
 ## JF-013 — Safe web research + source intelligence
 Depends on JF-005 / JF-010
-Status: IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (2026-08-19). Not the historical proactive-events item.
+Status: IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (2026-08-19 public GET). Research Intelligence V2 (Queue 02): IMPLEMENTED + CLOUD_VERIFIED (unit). Live V2 quality and Whonix/Tor remain NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED. Not a LIVE_VERIFIED upgrade of V2.
 
 Goal:
 Allow Jarvis to research current PUBLIC web information, inspect multiple
@@ -497,11 +525,11 @@ Status: INTEGRATED + UNIT_VERIFIED. `/api/jarvis/ask` now routes CONVERSATION/IN
 
 ## EVO-001–010 — Evolution runtime (fail-closed)
 Depends on JF-015
-Status: INTEGRATED + UNIT_VERIFIED lifecycle and durable `evolution.db`. One experience per task (`exp_task_<id>`). Canonical SQLite episodes are written with provenance; research text stays untrusted. Night cycle includes BENCHMARK, persists reflections, and proposes success-only skill candidates. No autonomous production writes. Failure cannot mint trusted skills. Candidates never auto-promote. LoRA is registry-only (`trained: false`). Affect cannot authorize. Night cycle pauses on `realtime_voice`. Live night/Ollama **BLOCKED_LOCAL_ACCEPTANCE**.
+Status: INTEGRATED + UNIT_VERIFIED + Queue 04 Procedural Skills V2 **IMPLEMENTED + CLOUD_VERIFIED (unit)**. Queue 05 Model Registry / routing / certification V2 **IMPLEMENTED + CLOUD_VERIFIED (unit)**: STANDARD/EXPERIMENTAL/RESTRICTED; RESTRICTED never auto-selected and never a security authority; unknown abilities stay unverified; night stronger models require measured idle; fallback reasons are traced; Cloud certification is FIXTURE_ONLY (never LIVE_VERIFIED). Queue 06 Realtime Voice Interaction **IMPLEMENTED + UNIT_VERIFIED** (explicit turn FSM, barge-in kinds, one Presenter playback clock, `realtime_voice` > owner task > background evolution; mutating WorkAgent apply is never blindly cancelled; persona independent from voice; not live mic/STT/TTS/RVC). Queue 08 Proactive Runtime / Night Agent V2 **IMPLEMENTED + UNIT_VERIFIED**: five-level resource priority; coordinator over reminders/monitor/NightCycle (no fourth scheduler); Night yields rather than competing; mapped V2 pipeline; `autoPromoted: false`; mutating apply is not blindly retried. One experience per task (`exp_task_<id>`). Canonical SQLite episodes are written with provenance; research text stays untrusted. Night cycle includes BENCHMARK, persists reflections, and proposes success-only DRAFT skill candidates. Isolated benchmarks may move a candidate to REVIEW_REQUIRED. Only owner-trusted skills are auto-selected. No autonomous production writes. Failure cannot mint trusted skills. Candidates never auto-promote. Jarvis cannot self-approve. LoRA is registry-only (`trained: false`). Affect cannot authorize. Night cycle yields on higher resource priority. Live night/Ollama **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## JF-016 / JF-017 / JF-018 — Vision, monitor, devices
 Depends on JF-015
-Status: IMPLEMENTED + UNIT_VERIFIED architecture (simulated vision fixtures, proactive monitor, VIEW-only devices, owner autonomy 0–5). Live screen capture / CCTV / host sensors **BLOCKED_LOCAL_ACCEPTANCE**.
+Status: IMPLEMENTED + UNIT_VERIFIED architecture (simulated vision fixtures, proactive monitor, VIEW-only devices, owner autonomy 0–5). Queue 07 unified Perception layer **IMPLEMENTED + UNIT_VERIFIED** (typed PerceptualEvent, mock screen/CCTV/device registry, untrusted vision, bounded perceptual memory candidates, anomaly cooldown, no physical auto-act; Command Center labeled SIMULATION). Queue 08 ProactiveMonitor extensions **IMPLEMENTED + UNIT_VERIFIED** (importance, suppress, owner acknowledgement; notice/suggest only). Live screen capture / CCTV / host sensors **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## JF-013-PROACTIVE — Proactive events / automation (historical id)
 Depends on permissions/tools/memory
@@ -523,7 +551,7 @@ Not a prerequisite for Jarvis Core v1 unless owner chooses.
 
 ## JF-019 — Presentation Mode + desktop presence
 Depends on JF-009 / JF-010 / UI-R9
-Status: IMPLEMENTED + UNIT_VERIFIED. Live: LA-026 PARTIAL; LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. Native helper Proposed (ADR-023). Cloud: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+Status: IMPLEMENTED + CLOUD_VERIFIED (unit). Live: LA-026 PARTIAL; LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. ADR-023 Phase 1 contracts scaffolded; helper not installed. Queue 01 complete on `cursor/jarvis-cloud-evolution-2026-08-20`. Cloud: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
 
 Goal:
 Present rich results in the existing `/jarvis-lab` command center and report honest desktop/window presence. Jarvis may only move its own window.
@@ -532,7 +560,7 @@ Evidence:
 - `src/jarvis/presentation/briefing/` pipeline (plain | rich | briefing)
 - `src/jarvis/desktop/` capabilities through ActionGate
 - Presenter camera + briefing panel on `/jarvis-lab`
-- Tests: `tests/jarvis_presentation_briefing.test.ts`, `tests/jarvis_desktop_presence.test.ts`
+- Tests: `tests/jarvis_presentation_briefing.test.ts`, `tests/jarvis_desktop_presence.test.ts`, `tests/jarvis_presenter_desktop_cloud.test.ts`
 
 ## DEFERRED — Discord integration
 

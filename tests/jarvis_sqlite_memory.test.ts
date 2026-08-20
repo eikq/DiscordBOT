@@ -104,7 +104,7 @@ test('fresh database initializes to the current schema version', () => {
   const store = new SqliteJarvisMemoryStore(dbPath);
   try {
     assert.equal(store.schemaVersion(), JARVIS_MEMORY_SCHEMA_VERSION);
-    assert.equal(store.schemaVersion(), 2);
+    assert.equal(store.schemaVersion(), 3);
     assert.ok(fs.existsSync(dbPath));
   } finally {
     store.close();
@@ -127,7 +127,7 @@ test('schema versioning upgrades an existing v1 database without deleting it', (
   const before = fs.statSync(dbPath).size;
   const store = new SqliteJarvisMemoryStore(dbPath);
   try {
-    assert.equal(store.schemaVersion(), 2);
+    assert.equal(store.schemaVersion(), 3);
     assert.ok(fs.existsSync(dbPath));
     assert.ok(fs.statSync(dbPath).size >= before);
   } finally {

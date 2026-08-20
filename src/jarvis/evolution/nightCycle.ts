@@ -1,6 +1,7 @@
 import type { JarvisEventBus } from '../security/eventBus';
 import { mergeBudgets } from '../ops/budgets';
 import type { JarvisBudgets, ResourcePriority } from '../ops/types';
+import { shouldYieldBackground } from '../ops/resourcePriority';
 import { ANALYZER_INSUFFICIENT, TraceAnalyzer } from '../ops/traceAnalyzer';
 import type { JarvisTraceRecord } from '../ops/traceTypes';
 import type { ExperienceStore } from './experienceStore';
@@ -26,11 +27,27 @@ export const NIGHT_STAGES = [
 
 export type NightStage = (typeof NIGHT_STAGES)[number];
 
-export type NightCycleStatus = 'idle' | 'running' | 'paused' | 'cancelled' | 'completed';
+export const NIGHT_V2_PIPELINE = [
+  'maintenance',
+  'trace_analysis',
+  'benchmark',
+  'memory_review',
+  'skill_review',
+  'runtime_spec_candidate',
+  'report',
+] as const;
+
+export type NightV2Stage = (typeof NIGHT_V2_PIPELINE)[number];
+
+export type NightCycleStatus = 'idle' | 'running' | 'paused' | 'yielded' | 'waiting' | 'cancelled' | 'completed';
+
+export type NightPauseReason = 'yielded' | 'budget' | 'permission' | 'owner';
 
 export type NightCycleReport = {
   status: NightCycleStatus;
   stage: NightStage | null;
+  v2Stage: NightV2Stage | null;
+  v2Pipeline: typeof NIGHT_V2_PIPELINE;
   experiencesProcessed: number;
   memoriesMerged: number;
   contradictionsResolved: number;
@@ -45,6 +62,7 @@ export type NightCycleReport = {
   traceEvidence: 'INSUFFICIENT_DATA' | 'consumed';
   specCandidatesReviewed: number;
   autoPromoted: false;
+  pauseReason?: NightPauseReason;
 };
 
 export type NightCycleOptions = {
@@ -83,19 +101,30 @@ export class NightCycle {
   }
 
   public snapshot(): NightCycleReport {
-    return { ...this.report, status: this.status, stage: this.stage };
+    return {
+      ...this.report,
+      status: this.status,
+      stage: this.stage,
+      v2Stage: this.status === 'completed' ? 'report' : mapNightStageToV2(this.stage),
+      v2Pipeline: NIGHT_V2_PIPELINE,
+      autoPromoted: false,
+    };
   }
 
   public pause(): NightCycleReport {
     if (this.status === 'running') this.status = 'paused';
     this.report.status = this.status;
     this.report.pausedFor = this.options.resource?.();
+    this.report.pauseReason = this.report.pauseReason ?? 'owner';
     return this.snapshot();
   }
 
   public resume(): NightCycleReport {
-    if (this.status === 'paused') this.status = 'running';
+    if (this.status === 'paused' || this.status === 'yielded' || this.status === 'waiting') {
+      this.status = 'running';
+    }
     this.report.pausedFor = undefined;
+    this.report.pauseReason = undefined;
     this.report.status = this.status;
     return this.snapshot();
   }
@@ -113,17 +142,23 @@ export class NightCycle {
 
   public run(): NightCycleReport {
     this.cancelRequested = false;
-    const continuing = this.status === 'paused' || this.status === 'running';
+    const continuing = this.status === 'paused'
+      || this.status === 'yielded'
+      || this.status === 'waiting'
+      || this.status === 'running';
     if (!continuing) {
       this.nextStageIndex = 0;
       this.runStarted = this.now();
       Object.assign(this.report, emptyReport(this.options.simulated));
+      this.report.pausedFor = undefined;
+      this.report.pauseReason = undefined;
       this.options.events?.emit('NIGHT_CYCLE', 'Night consolidation started', {}, 'info', {
         visualState: 'EVOLVING',
         simulated: this.options.simulated,
       });
     } else {
       this.report.pausedFor = undefined;
+      this.report.pauseReason = undefined;
       this.runStarted = this.now();
     }
     this.status = 'running';
@@ -132,10 +167,11 @@ export class NightCycle {
       const stage = NIGHT_STAGES[i];
       if (this.cancelRequested) break;
       const pressure = this.options.resource?.() ?? 'background_evolution';
-      if (pressure === 'realtime_voice' || pressure === 'owner_task') {
-        this.status = 'paused';
+      if (shouldYieldBackground(pressure, 'background_evolution')) {
+        this.status = 'yielded';
         this.report.pausedFor = pressure;
-        this.report.status = 'paused';
+        this.report.pauseReason = 'yielded';
+        this.report.status = 'yielded';
         this.stage = stage;
         this.nextStageIndex = i;
         return this.snapshot();
@@ -143,6 +179,7 @@ export class NightCycle {
       if (this.now() - this.runStarted > this.budgets.nightCycleRuntimeMs) {
         this.status = 'paused';
         this.report.pausedFor = 'background_evolution';
+        this.report.pauseReason = 'budget';
         this.report.status = 'paused';
         this.stage = stage;
         this.nextStageIndex = i;
@@ -192,15 +229,23 @@ export class NightCycle {
         if (existing.has(experience.id)) continue;
         this.options.skills?.propose({
           skillId: `night_${(experience.domain || 'task').replace(/[^a-z0-9]+/giu, '_').slice(0, 32)}`,
+          name: experience.goal,
           purpose: experience.goal,
+          goal: experience.goal,
           trigger: experience.situation,
+          triggerConditions: [experience.situation],
+          requiredCapabilities: experience.tools.filter(Boolean),
           prerequisites: [],
           workflow: experience.actions,
+          steps: experience.actions,
           failureModes: experience.cause ? [experience.cause] : [],
           recovery: ['Retry with structured verification'],
-          safetyConstraints: ['scriptsAllowed=false', 'no production promotion'],
+          safetyConstraints: ['scriptsAllowed=false', 'no production promotion', 'no auto-promote'],
+          securityScope: 'instruction-only plan; CapabilityHost/ActionGate remain authority',
           verification: ['structured_check'],
           evidence: [experience.id],
+          trustStatus: 'DRAFT',
+          status: 'CANDIDATE',
         });
         existing.add(experience.id);
         proposed += 1;
@@ -276,10 +321,25 @@ export class NightCycle {
   }
 }
 
+export function mapNightStageToV2(stage: NightStage | null): NightV2Stage | null {
+  if (!stage) return null;
+  if (stage === 'DIGEST' || stage === 'DEDUPLICATE' || stage === 'CONSOLIDATE' || stage === 'CLEANUP') {
+    return 'maintenance';
+  }
+  if (stage === 'REFLECT' || stage === 'UPDATE_SELF_MODEL' || stage === 'SELECT_GROWTH_GOALS') {
+    return 'memory_review';
+  }
+  if (stage === 'DISTILL_SKILLS') return 'skill_review';
+  if (stage === 'BENCHMARK') return 'benchmark';
+  return 'maintenance';
+}
+
 function emptyReport(simulated?: boolean): NightCycleReport {
   return {
     status: 'idle',
     stage: null,
+    v2Stage: null,
+    v2Pipeline: NIGHT_V2_PIPELINE,
     experiencesProcessed: 0,
     memoriesMerged: 0,
     contradictionsResolved: 0,

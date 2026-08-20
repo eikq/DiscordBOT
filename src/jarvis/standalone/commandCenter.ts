@@ -8,10 +8,12 @@ import { synthesizeTaskResponse } from '../agent/synthesize';
 import { ArtifactWorkflow, type ArtifactTask } from '../artifacts';
 import { routeJarvisRequest, type RouteDecision } from '../intent/requestRouter';
 import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
-import { writeExperienceEpisode } from '../memory/experienceBridge';
-import { CapabilityCertificationBank, ModelProfileRegistry } from '../models';
+import { CapabilityCertificationBank, ModelProfileRegistry, routeModelProfile } from '../models';
+import type { ModelRouteDecision } from '../models/modelRouter';
+import { workloadFromRoute } from '../models/workload';
 import type { CertificationRun, ModelProfile } from '../models/types';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
+import { createCorrelationIds } from '../ops/correlation';
 import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
 import { SimulatedDeviceProvider, type DeviceRecord } from '../devices';
@@ -41,7 +43,7 @@ import {
 } from '../evolution';
 import { RuntimeSpecOptimizer, type RuntimeSpecCandidate } from '../evolution/runtimeSpecOptimizer';
 import { defaultRuntimeRoot } from '../storage/operationalDb';
-import { ProactiveMonitor, type MonitorSignal } from '../monitor';
+import { ProactiveMonitor } from '../monitor';
 import { efficiencyFromTraces, type EfficiencySnapshot } from '../ops/efficiencyMetrics';
 import { OpsPersistence } from '../ops/opsPersistence';
 import { auditSchedulers, type SchedulerAuditSnapshot } from '../ops/schedulerAudit';
@@ -50,7 +52,7 @@ import { TraceStore } from '../ops/traceStore';
 import { traceCapabilitiesFromWork } from '../ops/traceCapabilities';
 import type { JarvisTraceRecord } from '../ops/traceTypes';
 import { visualStateFromEvents } from '../ops/visualState';
-import type { JarvisVisualState } from '../ops/types';
+import type { JarvisVisualState, ResourcePriority } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
 import { redactDeep } from '../security/redaction';
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
@@ -58,6 +60,12 @@ import type { JarvisOperationEvent } from '../security/types';
 import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
 import { RuntimeSpecRegistry, type JarvisRuntimeSpec } from './runtimeSpec';
+import { VoiceInteractionRuntime } from '../realtime';
+import { PerceptionRuntime } from '../perception';
+import type { PerceptionSnapshot } from '../perception';
+import { ProactiveRuntime, combineResourcePriority } from '../proactive';
+import type { ProactiveRuntimeSnapshot } from '../proactive';
+import { monitorDedupKey, type MonitorSignal } from '../monitor';
 
 export type CommandCenterSnapshot = {
   simulationMode: boolean;
@@ -98,6 +106,8 @@ export type CommandCenterSnapshot = {
   control: OwnerControlState;
   notifications: MonitorSignal[];
   intelligence: IntelligenceSnapshot;
+  perception: PerceptionSnapshot;
+  proactive: ProactiveRuntimeSnapshot;
 };
 
 export type IntelligenceSnapshot = {
@@ -112,6 +122,10 @@ export type IntelligenceSnapshot = {
       inputText?: string;
       simulated?: boolean;
       success?: boolean;
+      modelProfileId?: string;
+      workload?: string;
+      fallbackFrom?: string;
+      fallbackReason?: string;
     }>;
   };
   analyzer: ReturnType<TraceAnalyzer['summarize']>;
@@ -168,6 +182,9 @@ export class CommandCenterRuntime {
   public readonly models: ModelProfileRegistry;
   public readonly certifications: CapabilityCertificationBank;
   public readonly artifacts: ArtifactWorkflow;
+  public readonly voice: VoiceInteractionRuntime;
+  public readonly perception: PerceptionRuntime;
+  public readonly proactive: ProactiveRuntime;
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
@@ -224,6 +241,12 @@ export class CommandCenterRuntime {
       simulated,
       onTerminal: task => this.recordTaskExperience(task),
     });
+    this.voice = new VoiceInteractionRuntime({ agent: this.agent, simulated });
+    this.perception = new PerceptionRuntime({
+      devices: this.devices,
+      monitor: this.monitor,
+      simulated,
+    });
     this.night = new NightCycle({
       experiences: this.experiences,
       skills: this.skills,
@@ -235,10 +258,22 @@ export class CommandCenterRuntime {
       events: this.events,
       now: options.now,
       simulated,
+      resource: () => this.currentResourcePriority(),
       runBenchmarks: () => runCloudBenchmarkBank(this.benchmarks, now).length,
       traces: this.traces,
       analyzer: this.analyzer,
       specOptimizer: this.specOptimizer,
+    });
+    this.proactive = new ProactiveRuntime({
+      currentPriority: () => this.currentResourcePriority(),
+      night: () => this.night,
+      monitor: () => this.monitor,
+      ownerTask: () => {
+        const task = this.agent.store.active()[0];
+        if (!task) return null;
+        return { id: task.id, objective: task.objective, status: task.status };
+      },
+      simulated: true,
     });
   }
 
@@ -307,6 +342,8 @@ export class CommandCenterRuntime {
       control: this.control.snapshot(),
       notifications: [...this.notifications],
       intelligence: this.intelligenceSnapshot(),
+      perception: this.perception.snapshot(),
+      proactive: this.proactive.snapshot(),
     };
   }
 
@@ -324,7 +361,7 @@ export class CommandCenterRuntime {
   }
 
   public recordTaskExperience(task: WorkTask): void {
-    const result = applyTaskOutcome(task, {
+    applyTaskOutcome(task, {
       experiences: this.experiences,
       reflections: this.reflectionLedger,
       failures: this.failures,
@@ -333,10 +370,9 @@ export class CommandCenterRuntime {
       growth: this.growth,
       affect: this.affect,
       events: this.events,
+      memoryStore: this.memoryStore,
+      benchmarks: this.benchmarks,
     });
-    if (result.experience && !result.duplicate && this.memoryStore) {
-      writeExperienceEpisode(this.memoryStore, result.experience, task);
-    }
   }
 
   public async runObjective(objective: string, options: {
@@ -361,12 +397,17 @@ export class CommandCenterRuntime {
       this.failures,
       trustedSkills,
     );
-    const requestId = options.requestId?.trim() || `jarvis-${started}`;
-    const turnId = options.turnId?.trim() || requestId;
+    const ids = createCorrelationIds({
+      sessionId: options.sessionId,
+      requestId: options.requestId?.trim() || `jarvis-${started}`,
+      turnId: options.turnId,
+    });
+    const requestId = ids.requestId;
+    const turnId = ids.turnId;
     const task = this.agent.receive(objective, plan, {
       simulated,
       requestId,
-      sessionId: options.sessionId,
+      sessionId: ids.sessionId,
       turnId,
     });
     this.noteLatestRequest({
@@ -404,6 +445,26 @@ export class CommandCenterRuntime {
     return this.traces.record(input);
   }
 
+  public routeModel(input: {
+    route: string;
+    objective?: string;
+    idle?: boolean;
+    idleSource?: 'runtime' | 'assumed';
+  }): ModelRouteDecision {
+    const spec = this.runtimeSpecs.current();
+    const idle = input.idle === true;
+    return routeModelProfile({
+      intent: workloadFromRoute(input.route, input.objective ?? ''),
+      profiles: this.models,
+      certifications: this.certifications,
+      hardware: {
+        idle,
+        idleSource: input.idleSource ?? (idle ? 'runtime' : 'assumed'),
+        preferredModelId: spec.layers.intelligence.modelProfileId,
+      },
+    });
+  }
+
   private recordTaskTrace(task: WorkTask, meta: {
     sessionId?: string;
     requestId?: string;
@@ -412,11 +473,19 @@ export class CommandCenterRuntime {
     started: number;
   }): void {
     const retries = task.plan.reduce((acc, step) => acc + (step.retryPolicy?.attempted ?? 0), 0);
+    const routed = this.routeModel({ route: meta.route, objective: task.objective });
+    const activeStep = task.plan.find(step => (
+      step.status === 'running'
+      || step.status === 'waiting_permission'
+      || step.status === 'failed'
+      || step.status === 'blocked'
+    )) ?? [...task.plan].reverse().find(step => step.status === 'done');
     this.traces.record({
       requestId: meta.requestId || task.requestId,
       sessionId: meta.sessionId || task.sessionId,
       turnId: meta.turnId || task.turnId,
       taskId: task.id,
+      ...(activeStep ? { stepId: activeStep.id } : {}),
       route: meta.route,
       inputText: task.objective,
       capabilities: traceCapabilitiesFromWork(task.toolResults),
@@ -433,8 +502,11 @@ export class CommandCenterRuntime {
       experienceId: `exp_task_${task.id}`,
       simulated: task.simulated,
       success: task.status === 'COMPLETED',
-      modelProfileId: this.runtimeSpecs.current().layers.intelligence.modelProfileId,
+      modelProfileId: routed.modelProfileId,
+      workload: routed.workload,
       engine: this.runtimeSpecs.current().layers.engine.interactiveProfile,
+      ...(routed.fallbackFrom ? { fallbackFrom: routed.fallbackFrom } : {}),
+      ...(routed.fallbackReason ? { fallbackReason: routed.fallbackReason } : {}),
     });
   }
 
@@ -452,6 +524,10 @@ export class CommandCenterRuntime {
           inputText: item.inputText,
           simulated: item.simulated,
           success: item.success,
+          modelProfileId: item.modelProfileId,
+          workload: item.workload,
+          fallbackFrom: item.fallbackFrom,
+          fallbackReason: item.fallbackReason,
         })),
       },
       analyzer: this.analyzer.summarize(this.traces.list(80), 'route'),
@@ -497,6 +573,7 @@ export class CommandCenterRuntime {
   public async simulateVision(fixtureId = 'settings_panel'): Promise<VisualContext> {
     const captured = await this.visionCapture.capture(fixtureId);
     this.vision = await this.visionAnalyzer.analyze(captured.imageId);
+    this.perception.interpret(this.vision);
     this.events.emit('VISION', `Vision fixture ${fixtureId}`, { fixtureId, simulated: true }, 'info', {
       simulated: true,
       visualState: 'UNDERSTANDING',
@@ -537,6 +614,18 @@ export class CommandCenterRuntime {
       this.selfModel.observe('practice', 'success');
     }
     return { goalId, isolated: result.isolated, destructive: result.destructive, passed: result.passed };
+  }
+
+  public currentResourcePriority(): ResourcePriority {
+    const voice = this.voice.resourcePriority();
+    const task = this.agent.store.active()[0];
+    return combineResourcePriority(voice, Boolean(task));
+  }
+
+  public acknowledgeAlert(signal: MonitorSignal): void {
+    this.monitor.acknowledge(signal);
+    const key = monitorDedupKey(signal);
+    this.notifications = this.notifications.filter(item => item.id !== signal.id && monitorDedupKey(item) !== key);
   }
 
   public notify(signal: MonitorSignal): ReturnType<ProactiveMonitor['ingest']> {

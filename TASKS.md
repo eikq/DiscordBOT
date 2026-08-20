@@ -16,25 +16,26 @@ Current priority: standalone Jarvis first (`JARVIS_FIRST_TASKS.md`). Discord fea
 - `JF-003` / MEMORY-002 canonical SQLite store — DONE (unit-tested; temp DBs only; not live user-data migrated)
 - `JF-004` generic memory retrieval — DONE (unit-tested; no Qdrant)
 - `JF-004B` Core consumes `JarvisMemoryService` — DONE (unit-tested; temp DBs only)
+- `JF-004C` Canonical Memory Intelligence V2 — DONE (unit-tested + cloud 541/541; SQLite remains canonical; Qdrant not started; not live owner-memory verified)
 - `JF-005` generic capability registry + world-intel adapter — DONE (unit-tested; not live world-intel verified)
 - `JF-006` isolated `/jarvis-lab` shell — DONE (unit-tested; command-center UI UI-R1–R8 live-verified 2026-08-19)
 - `JF-007` standalone presentation profile runtime — DONE (unit-tested; speech not active)
 - `UI-R1`–`UI-R8` `/jarvis-lab` command center — DONE (CSS/SVG; live lab UI verified)
 - `JF-008` standalone microphone/STT — DONE (unit-tested + live lab mic verified 2026-08-19; not speech-output)
 - `JF-008B` standalone conversation latency + STT hardening — DONE (unit-tested + live typed-turn timings 2026-08-19)
-- `JF-009` standalone local speech — DONE (unit-tested + live typed native Edge-TTS 2026-08-19; clone live speech not verified; browser speaker start not measured)
+- `JF-009` standalone local speech — DONE (unit-tested + live typed native Edge-TTS 2026-08-19; clone live speech not verified; browser speaker start not measured). Queue 06 realtime turn FSM / barge-in / playback clock: IMPLEMENTED + UNIT_VERIFIED (mocks only; not live mic/STT/TTS/RVC)
 - `JF-010` permission/action policy — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (safe lab A–F). Owner product sign-off still optional.
 - `JF-011` runtime + system capability pack — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–J; stop/restart confirmed-only, ollama not stopped). Owner product sign-off still optional.
-- `JF-012` reminders + scheduler — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–G + lab HTTP/UI; 45–70s real timers). Owner product sign-off still optional.
-- `JF-013` safe web research — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (lab HTTP + public sources + SSRF). Owner product sign-off still optional. Historical “proactive events” id is `JF-013-PROACTIVE`.
+- `JF-012` reminders + scheduler — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–G + lab HTTP/UI; 45–70s real timers). Queue 08 coordinates reminders with monitor/NightCycle via `ProactiveRuntime` (not a fourth scheduler). Owner product sign-off still optional.
+- `JF-013` safe web research — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (lab HTTP + public sources + SSRF). Research Intelligence V2 (Queue 02): IMPLEMENTED + CLOUD_VERIFIED (unit). Live V2 quality / Whonix remain NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED. Owner product sign-off still optional. Historical “proactive events” id is `JF-013-PROACTIVE`.
 - `JF-013.5` natural intent resolution + conversational recovery — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–J). Owner product sign-off still optional.
 - `JF-014` safe local workspace intelligence — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process jarvis-project search/symbol/retrieve/compare; HTTP Command Center not separately live-QA'd this turn). Historical CCTV id is `JF-014-CCTV`. Owner product sign-off still optional.
 - `JF-014.6` realtime operations telemetry — IMPLEMENTED + UNIT_VERIFIED (SSE replay + lab EventSource). Browser SSE live-QA **BLOCKED_LOCAL_ACCEPTANCE**.
 - `JF-015` multi-step work agent — IMPLEMENTED + UNIT_VERIFIED (DAG + simulated demos). Live Ollama/tool runs **BLOCKED_LOCAL_ACCEPTANCE**.
-- `EVO-001`–`EVO-010` evolution runtime — IMPLEMENTED + UNIT_VERIFIED fail-closed (no auto-promote; LoRA registry only). Live night cycle **BLOCKED_LOCAL_ACCEPTANCE**.
-- `JF-016`/`JF-017`/`JF-018` vision / monitor / devices — IMPLEMENTED + UNIT_VERIFIED simulated architecture. Live capture/CCTV **BLOCKED_LOCAL_ACCEPTANCE**.
+- `EVO-001`–`EVO-010` evolution runtime — IMPLEMENTED + UNIT_VERIFIED fail-closed. Queue 04 Procedural Skills V2: reviewable candidates, trusted-only retrieval, no self-approval, no auto-promote. Queue 05 Model Registry V2: evidence-based routing, RESTRICTED never auto-selected, FIXTURE_ONLY certification. Queue 08 Night Agent V2: mapped pipeline over existing NightCycle stages, yield/resume, `autoPromoted: false`, no fourth scheduler. Live night/Ollama/model quality **BLOCKED_LOCAL_ACCEPTANCE**.
+- `JF-016`/`JF-017`/`JF-018` vision / monitor / devices — IMPLEMENTED + UNIT_VERIFIED simulated architecture. Queue 07 unified perception layer: typed events, mock screen capture, untrusted vision, CCTV view/search default, bounded perceptual candidates, anomaly cooldown without physical auto-act. Queue 08 ProactiveMonitor: importance, suppression, owner acknowledgement; notice/suggest only (no auto-act / process kill). Live capture/CCTV **BLOCKED_LOCAL_ACCEPTANCE**.
 - Next READY after this layer: owner product sign-off, browser Command Center QA, or a later write-boundary / open-document task. No generic process/shell, no scheduled CapabilityHost execution, no unattended web monitoring, no Qdrant-as-canonical.
-- Still blocked: Qdrant / MEMORY-003; Discord JARVIS-006+; rewriting the Digital Me dashboard; UI-R9 WebGL until asked
+- Still blocked: live Qdrant / MEMORY-003 as a running index; Discord JARVIS-006+; rewriting the Digital Me dashboard; UI-R9 WebGL until asked
 
 ---
 
@@ -300,11 +301,14 @@ Safe first pieces after baseline:
 - `MEMORY-001` interfaces/schema — DONE
 - `MEMORY-002` / `JF-003` SQLite adapter — DONE (optional dual-write; JSON/JSONL still live)
 - `JF-004B` Core memory integration — DONE
-- `JF-006` isolated `/jarvis-lab` shell — DONE (command-center UI; Digital Me dashboard unchanged)
+- `JF-006` isolated `/jarvis-lab` shell — DONE (command-center UI; Digital Me dashboard unchanged). Queue 09 Command Center V2 modes **IMPLEMENTED + UNIT_VERIFIED** (cloud); not LIVE_VERIFIED. Queue 10 privilege-boundary hardening **IMPLEMENTED + UNIT_VERIFIED** (`tests/jarvis_security_hardening.test.ts`, ADR-032); not LIVE_VERIFIED. Queue 11 full-system cloud integration **IMPLEMENTED + CLOUD_VERIFIED** (unit, `tests/jarvis_cloud_integration.test.ts`, ADR-033); not LIVE_VERIFIED. Queue 12 physical-machine handoff: `CURSOR_LOCAL_ACCEPTANCE_NEXT.md` (ADR-034). Cloud feature queues stop.
 - `UI-R1`–`UI-R8` CSS/SVG command center — DONE (live lab UI verified 2026-08-19)
 - `UI-001` / `UI-R9` WebGL/3D core — not started; keep 2D fallback if ever started
 
-Keep `MEMORY-003+` (Qdrant/hybrid retrieval quality) and a Digital Me dashboard rewrite blocked until reviewed.
+Keep `MEMORY-003+` (live Qdrant service / Qdrant-as-canonical) blocked.
+Canonical Memory Intelligence V2 (JF-004C) adds hybrid *fusion when
+semantic hits are supplied*, query-aware classes, candidates, and owner
+correction. SQLite stays canonical. Do not start Qdrant from Cloud.
 
 ---
 
@@ -323,7 +327,7 @@ Safe completed pieces:
 - `JARVIS-003` wrap `ResponseGenerator` behind PresentationEngine — DONE
 - `JARVIS-004` independent `selectVoice` / `selectPersona`; live `/voice` and `/persona` still set both — DONE (unit-tested)
 - `JARVIS-005` `DiscordJarvisAdapter` after SocialBrain, Unavailable Core falls back to `generate()` — DONE (unit-tested)
-- Presentation briefing + desktop presence layer (2026-08-20) — implemented on `/jarvis-lab` Presenter Mode. Live pass: LA-026 PARTIAL, LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. Cloud handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`. Do not install a desktop shell until owner review.
+- Presentation briefing + desktop presence layer (2026-08-20) — implemented on `/jarvis-lab` Presenter Mode. Live: LA-026 PARTIAL, LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. Cloud pass: structured facts, TTS narration, repeat/back, intersection matching, native-helper mocks. Helper not installed. Handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
 
 Do not start without review:
 

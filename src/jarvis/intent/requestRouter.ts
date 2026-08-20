@@ -1,5 +1,6 @@
 import { isActionGateConfirmCapability } from '../capabilities/actions/constants';
 import { classifyActionability } from './classify';
+import { classifyComparisonIntent } from './comparison';
 import type { ActionabilityClass, IntentKind } from './types';
 
 export const JARVIS_REQUEST_ROUTES = [
@@ -84,6 +85,25 @@ export function routeJarvisRequest(input: {
       agentic: true,
       reason: 'research_request',
       confidence: 0.86,
+    };
+  }
+  const comparison = classifyComparisonIntent(text);
+  if (comparison === 'needs_external_facts') {
+    return {
+      route: 'RESEARCH',
+      socialAction: 'SPEAK',
+      agentic: true,
+      reason: 'compare_needs_external_facts',
+      confidence: 0.78,
+    };
+  }
+  if (comparison === 'supplied_data') {
+    return {
+      route: 'INFORMATION',
+      socialAction: 'SPEAK',
+      agentic: false,
+      reason: 'compare_supplied_data',
+      confidence: 0.74,
     };
   }
   if (WORK.test(text)) {

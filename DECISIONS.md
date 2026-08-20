@@ -882,7 +882,9 @@ Ollama GPU, Whonix, mic, or CCTV.
 ## ADR-023 — Jarvis desktop presence uses a native-owned window, not Chrome HWND theft
 
 Date: 2026-08-20
-Status: **Proposed** (owner review required). Not installed.
+Status: **Phase 1 architecture APPROVED** for cloud-safe contracts and mocks
+(2026-08-20 Presenter/Desktop cloud pass). Native helper **not installed**.
+Live Windows helper remains **NEEDS_LOCAL_VERIFY**. Not LIVE_VERIFIED.
 
 ### Context
 
@@ -896,7 +898,7 @@ HWND would violate the Jarvis-window-only rule.
 Target UX: “อยู่จอไหน”, “ย้ายไปจอโน้ตบุ๊ก”, “Presenter เต็มจอที่จอหลัก”
 plus a later CONTROL + PRESENTER pair on one runtime/session.
 
-### Decision (pending owner)
+### Decision (Phase 1)
 
 1. Do **not** move arbitrary Chrome/Edge windows.
 2. Prefer a **minimal Windows-native helper** that owns Jarvis HWNDs and
@@ -918,9 +920,606 @@ plus a later CONTROL + PRESENTER pair on one runtime/session.
 
 - LA-027 stays **PARTIAL — NATIVE_SHELL_REQUIRED** until a helper exists
   and is live-verified.
-- Cloud may scaffold types/mocks only after owner approval.
+- Cloud implemented protocol v1, ownership registry, `FakeNativeJarvisHelper`,
+  and fail-closed `UNSUPPORTED_HOST`. Do not claim the helper is live.
 - ActionGate + Jarvis-window-only schema stay frozen.
+- CONTROL and PRESENTER are roles of one runtime/session.
 
 ---
+
+## ADR-024 — Research Intelligence V2 is an evidence engine, not a snippet dump
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live provider quality and Whonix/Tor remain **LOCAL_VERIFY_REQUIRED**.
+
+### Context
+
+JF-013 already retrieved public pages, ranked sources, and cited URLs.
+Queue 02 needed structured query planning, source quality, claim/evidence
+links, contradiction reporting, and cache honesty without weakening
+CapabilityHost or treating web text as authority.
+
+### Decision
+
+- Keep the existing GET research runtime and CapabilityHost path.
+- Add a bounded query planner (primary / alternate / entity / recency /
+  documentation / opposing / verification) behind depth budgets.
+- NONE must not call providers. Quick uses one provider and no follow-up.
+- Attach `trustClass`, recency, duplicate groups, claims, cache metadata,
+  and observable traces on `ResearchResult`.
+- Presenter maps summary, findings, source quality, timeline, conflicts,
+  limitations, and follow-ups. Motion may focus the cited source.
+- PRIVATE_BROWSER remains fail-closed. No host Playwright fallback.
+  Cloud must not claim Whonix/Tor live verification.
+
+### Alternatives considered
+
+- Recursive open-ended search — rejected (unbounded).
+- Treating `trustClass` as ground truth — rejected (metadata only).
+- Inventing citations to fill a briefing — rejected.
+- Direct-host browser fallback — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit).
+- Live search quality, Edge-TTS research briefings, and Whonix:
+  NEEDS_LOCAL_VERIFY / LOCAL_VERIFY_REQUIRED.
+
+## ADR-025 — Canonical Memory Intelligence V2 keeps SQLite as truth
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live Qdrant, live owner-memory QA, and Discord memory migration remain
+out of scope.
+
+### Context
+
+Queue 03 needed better memory quality, retrieval, contradiction
+handling, importance, and safe learning without replacing the canonical
+SQLite store or starting Qdrant as a source of truth.
+
+### Decision
+
+- SQLite is canonical truth. Vector/Qdrant is a derived index only.
+  Obsidian/view layers are presentation only.
+- Preserve product classes: working, episodic, semantic, procedural,
+  social, identity, perceptual. Storage kinds stay fact/episode/…
+- Important records carry canonical id, type, content, provenance,
+  created/updated, confidence, importance, status, supersedes/
+  supersededBy, expiry, ownerTrusted, derived, memoryRefs.
+- Never silently overwrite contradictory facts. Owner preference
+  changes insert a new fact and mark the previous SUPERSEDED. Forgotten
+  and expired rows are retained but not retrieved by default.
+- Hybrid fusion ranks lexical/FTS, optional semantic hits, recency,
+  importance, active status, and query class. Semantic hits without a
+  SQLite canonical record are dropped. Canonical text always comes from
+  SQLite.
+- Query-aware retrieval: conversation → identity/social/episodic;
+  technical work → procedural/semantic; device tasks → perceptual/
+  procedural. Do not dump all owner memory into every prompt.
+- Turn context stays bounded (default 8, max 12). Scores are visible
+  debug metadata, not hidden reasoning.
+- Completed tasks may emit semantic *candidates*. Promotion requires an
+  explicit accept path and a trust rule. Research/web claims cannot
+  become owner-trusted facts.
+- Owner correction understands จำอันนี้ / อันนี้ไม่ใช่ / เปลี่ยนเป็น /
+  ลืมเรื่องนี้ (and English equivalents) and uses canonical status
+  transitions plus `memory_feedback`.
+- Presenter may optionally show "Jarvis remembered this because..." with
+  refs/provenance. Presentation still does not retrieve.
+
+### Alternatives considered
+
+- Making Qdrant canonical — rejected.
+- Auto-promoting every episode to trusted semantic memory — rejected.
+- Silently overwriting owner preferences — rejected.
+- Dumping all memory classes into every prompt — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit). Schema version is 3.
+- Live embedding/Qdrant index and owner-memory quality:
+  NEEDS_LOCAL_VERIFY. Do not start Qdrant from Cloud.
+
+## ADR-026 — Procedural Skills V2 are reviewable plans, not authority
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live night-cycle skill quality remains BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 04 needed safer learning from completed work: turn successful
+workflows into reviewable procedural skill candidates without
+uncontrolled self-modification or self-approved privilege expansion.
+
+### Decision
+
+- Keep SQLite canonical memory. Evolution stays in isolated
+  `evolution.db`. Do not start Qdrant. Do not replace SQLite.
+- One idempotent lifecycle per task:
+  task → experience → outcome verification → classification →
+  structured reflection → memory candidate → skill candidate →
+  isolated benchmark candidate.
+- Skill candidates carry id, name, goal, trigger conditions, required
+  capabilities, steps, preconditions, verification, failure modes,
+  security scope, evidence, version, and trust status.
+- Trust states: DRAFT, REVIEW_REQUIRED, TRUSTED, REJECTED, DEPRECATED.
+  `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE`.
+- Only TRUSTED skills may be automatically selected. Retrieved skill
+  text is a plan (`authority: plan_only`) and cannot override
+  CapabilityHost / ActionGate.
+- Failures store structured knowledge (capability unavailable, provider
+  timeout, unsupported host, known bad plan, owner denied, verification
+  failed). Future plans may avoid known failures without gaining new
+  authority.
+- Reflection is structured observable analysis. No chain-of-thought.
+- Isolated benchmarks and regression checks can move a candidate to
+  REVIEW_REQUIRED. They never set TRUSTED. `autoPromote=false`.
+  Jarvis, model, and skill actors cannot trust a skill.
+- Failed or unverified tasks do not mint skill candidates.
+
+### Alternatives considered
+
+- Auto-promoting successful tasks to TRUSTED production skills —
+  rejected.
+- Letting Jarvis trust its own candidates — rejected.
+- Using retrieved skill text as execution authority — rejected.
+- Recursive self-modification to escape failures — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit). `npm run test:cloud` **553/553**.
+- Owner must still explicitly trust REVIEW_REQUIRED skills.
+- Live night/Ollama skill quality: BLOCKED_LOCAL_ACCEPTANCE.
+
+## ADR-027 — Model routing is evidence-and-policy, never RESTRICTED auto-select
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live Ollama/model quality and hardware benchmarks remain
+BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 05 needed Jarvis to choose models from evidence instead of
+assuming a single local LLM is always correct. Cloud must not download
+models, invent tok/s, or mark certification LIVE_VERIFIED.
+
+### Decision
+
+- Keep trust tiers STANDARD, EXPERIMENTAL, RESTRICTED.
+- RESTRICTED specialists are never auto-selected, including via owner
+  preference, and `securityAuthority` stays false. Models are not the
+  permission system.
+- Unknown abilities stay `unverified`. Do not invent RAM/VRAM/energy.
+- Workloads: casual, information, deep_reasoning, research, coding,
+  voice_realtime, night_background, vision.
+- Router obeys trust, certification, availability, latency, context,
+  and owner preference. If the selected model is unavailable, fall back
+  only to a compatible trusted model and record `fallbackFrom` /
+  `fallbackReason` on the trace.
+- Night may use a stronger/slower EXPERIMENTAL model only when runtime
+  reports `idle === true`. Assumed idle does not count.
+- Cloud fixture certification status is FIXTURE_ONLY (CLOUD_VERIFIED is
+  reserved). Never LIVE_VERIFIED.
+
+### Alternatives considered
+
+- Auto-selecting the uncensored specialist when the owner prefers it —
+  rejected.
+- Treating unverified Qwen abilities as certified — rejected.
+- Assuming the machine is idle at night — rejected.
+- Recording RAM/VRAM/energy without a probe — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit). `npm run test:cloud` **562/562**.
+- Live Ollama discovery, real latency, and GPU metrics:
+  BLOCKED_LOCAL_ACCEPTANCE / NEEDS_LOCAL_VERIFY.
+
+## ADR-028 — Interruptible voice turns with one playback clock
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live microphone, STT, TTS, and RVC remain BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 06 needed a transport-agnostic path for natural barge-in:
+
+listen → detect speech → STT → route → think/work → begin response →
+TTS → owner interruption → cancel/adjust → continue.
+
+Existing lab speech used JF-008 `SpeechTurnController` (busy=`reject`)
+and a Presenter estimate interval that already yielded to
+`audio.ontimeupdate` while speaking. There was no explicit turn FSM,
+no interruption kind, and NightCycle on Command Center had no resource
+callback, so background evolution did not pause for lab voice.
+
+### Decision
+
+- Voice turns are an explicit state machine: IDLE, LISTENING,
+  TRANSCRIBING, THINKING, WORKING, SPEAKING, INTERRUPTED,
+  WAITING_OWNER, ERROR. Illegal transitions throw `PLAN_INVALID`.
+- Barge-in classifies the owner utterance as question, correction,
+  stop, or new_command. Playback may cancel. Task state is preserved.
+- Mutating WorkAgent work (running/retrying `apply` with
+  `riskLevel !== 'LOW'`) is never paused or cancelled by barge-in.
+  `WorkAgent.pause` aborts the task controller; that is unsafe for
+  in-flight mutating apply.
+- Conversation/information may begin presenting before every UI detail
+  is complete. Agentic actions must not set `claimSuccess` until the
+  task is COMPLETED, outcome success, and verification passed.
+- Presenter narration and TTS share one `PlaybackClock`. Speech elapsed
+  is authoritative while speaking. Estimated duration is bootstrap only.
+- Scheduler signal only: `realtime_voice` > `owner_task` >
+  `background_evolution`. Command Center NightCycle reads
+  `voice.resourcePriority()`. No OS/process priority changes.
+- Persona and voice remain independent selections. Presentation style
+  cannot grant capability authority.
+- Cloud STT/TTS ports are mocks. Do not persist raw audio. Do not claim
+  microphone/STT/TTS/RVC live verification.
+
+### Alternatives considered
+
+- Blindly cancelling the active WorkAgent task on barge-in — rejected
+  (mutating apply must keep running).
+- Overlapping STT while the JF-008 pipeline is busy — rejected (busy
+  policy stays `reject`; barge-in is a higher-level session concern).
+- Independent Presenter estimate timer while speaking — rejected
+  (one authoritative timeline).
+- Changing OS niceness / process priority — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_realtime_voice.test.ts`
+  13/13; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
+- Live mic/STT/TTS/RVC and speech↔motion: BLOCKED_LOCAL_ACCEPTANCE /
+  NEEDS_LOCAL_VERIFY (LA-026 stays PARTIAL).
+
+## ADR-029 — Perception observes; it does not authorize
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live cameras, screen capture, CCTV hardware, and device control remain
+BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 07 needed a unified perception layer for future screen, camera,
+CCTV, phone, and sensor sources. Existing simulated vision, VIEW-only
+devices, and ProactiveMonitor already encoded SEE != CLICK. They were
+not one typed event pipeline with privacy, retention, CCTV action
+split, or Command Center perception state.
+
+### Decision
+
+- SEE != CLICK, VIEW != CONTROL, CONTROL != ADMIN. Observation never
+  grants CapabilityHost / ActionGate authority.
+- PerceptualEvent is the typed observation: source, timestamp,
+  observation, confidence, region/object refs, privacy classification,
+  simulation flag, evidence refs.
+- Screen providers may capture display, Jarvis window, or a selected
+  region. They do not click, type, or move windows. Cloud is mock-only.
+- Image-model output is untrusted data (`authoritative: false`). It
+  cannot authorize click/submit/control.
+- CCTV actions are `cctv.view`, `cctv.searchEvents`, `cctv.control`,
+  `cctv.configure`, `cctv.admin`. Default Jarvis grant is view +
+  searchEvents.
+- Perceptual observations may become memory *candidates* only, with
+  bounded retention (sensitive 24h, secret session). They do not auto-
+  write canonical SQLite.
+- Anomaly path: observe → normalize → rule/threshold → candidate →
+  cooldown → owner notification candidate. Never auto-act physically.
+- Device identity includes trust and lastSeen. Traces must not carry
+  tokens, cookies, passwords, or API keys.
+- Command Center surfaces are labeled SIMULATION. `liveCamera: false`.
+
+### Alternatives considered
+
+- Treating a vision-model description as an authorized click target —
+  rejected.
+- Defaulting CCTV CONTROL because VIEW is granted — rejected.
+- Auto-writing camera frames or events into canonical memory —
+  rejected.
+- Auto-actuating PTZ or locks from an anomaly candidate — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_perception.test.ts`
+  8/8; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
+- Live capture/CCTV/sensors: BLOCKED_LOCAL_ACCEPTANCE.
+
+## ADR-030 — Proactive runtime coordinates; it is not a fourth scheduler
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live timers, GPU sensors, and unattended Night coding remain
+BLOCKED_LOCAL_ACCEPTANCE / host-only.
+
+### Context
+
+Queue 08 needed unified proactive work around reminders, monitoring, and
+Night Agent, with five-level resource priority, cooldowns, and a bounded
+Night pipeline. The repository already had three schedulers:
+ReminderScheduler, NightCycle (manual/budgeted), and ProactiveMonitor
+(ingest/filter, not cron). A competing generic job runner would violate
+the existing scheduler audit.
+
+### Decision
+
+- Do not add a fourth scheduler. `ProactiveRuntime` coordinates the three
+  existing ones. It does not arm timers or cron.
+  `auditSchedulers().competingSchedulerAdded === false`.
+  `proactiveRuntimeIsScheduler() === false`.
+- Resource priority, highest first: `realtime_voice`, `owner_task`,
+  `scheduled_action`, `monitoring`, `background_evolution`. Background
+  work yields when a strictly higher priority appears. No OS niceness.
+- Jarvis may notice and suggest (for example, GPU load remaining high).
+  It must not auto-act, kill processes, or take physical action.
+- Monitor keeps quiet hours, cooldown, and dedup, and adds importance,
+  notification suppression, and owner acknowledgement.
+- Night V2 is a mapped owner-facing pipeline over existing `NIGHT_STAGES`:
+  maintenance, trace analysis, benchmark, memory review, skill review,
+  RuntimeSpec candidate, report. Skills stay DRAFT. `autoPromoted: false`.
+  No automatic privileged actions. No auto-promote.
+- Higher-priority pressure sets Night status to `yielded` and resume
+  continues from `nextStageIndex`. Budget exhaustion stays `paused`.
+- Interrupted mutating WorkAgent `apply` with risk above LOW fails closed
+  and is not blindly retried.
+- Command Center shows job states scheduled / running / paused / yielded /
+  waiting / completed. No hidden chain-of-thought.
+
+### Alternatives considered
+
+- Adding a generic cron/job runner as a fourth scheduler — rejected.
+- Mapping Night yield back to `paused` only — rejected; yielded is a
+  distinct observable state.
+- Auto-killing processes on high GPU load — rejected.
+- Auto-promoting RuntimeSpec or skill candidates from Night — rejected.
+- Changing OS process priority — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_proactive_runtime.test.ts`
+  9/9; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
+- Live reminder timers, GPU sensors, and unattended Night coding: host-only /
+  BLOCKED_LOCAL_ACCEPTANCE. NIGHT-BUILD-010 scheduler is still not installed.
+
+## ADR-031 — Command Center V2 is a mode shell, not a backend rewrite
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live `/jarvis-lab` visual QA and native-shell layouts remain
+BLOCKED_LOCAL_ACCEPTANCE / host-only.
+
+### Context
+
+Queue 09 needed a unified operational interface for `/jarvis-lab` and a
+future native shell: Assistant, Presenter, Operations, Memory,
+Intelligence, and Devices. The lab already dumped memory, live ops,
+evolution, intelligence, devices, sources, workspace, and health at
+once. Camera `core` / `graph` / `presenter` is a visual stage, not this
+mode list. CommandCenterRuntime, Core, schedulers, and the Digital Me
+dashboard were not in scope.
+
+### Decision
+
+- Do not rebuild backend architecture. V2 is a presentation shell over
+  `presentCommandCenter`, lab status, Ask memory refs, and the existing
+  Presenter briefing pipeline.
+- Exactly six operational modes. Default is Assistant. Only one mode
+  body is primary at a time. Camera Core/Graph stay stage controls.
+- Global presence is `REAL` | `SIMULATION` | `DEGRADED` | `OFFLINE`.
+  `simulationMode` or a simulated task forces SIMULATION. Perception
+  being fixture-simulated does not by itself relabel the whole shell
+  REAL→SIMULATION; device rows still say SIMULATION / VIEW only.
+  REAL never claims live hardware (`hardwareClaim: 'none'`).
+- Operations shows request, route, DAG, active step, capabilities,
+  permission wait, verification, and bounded recent tasks (5).
+- Memory shows provenance and ACTIVE/SUPERSEDED/FORGOTTEN/EXPIRED.
+  Owner corrections reuse Ask phrases (`remember` / `forget` /
+  `change` / `that is not right`). No hidden reasoning. No new
+  mutating memory HTTP API.
+- Intelligence shows model selection, runtime spec, traces,
+  certifications, benchmarks, and candidates. Missing evidence is
+  `INSUFFICIENT_DATA`.
+- Devices stay honest: online/offline, VIEW not CONTROL, SIMULATION
+  vs LIVE, SEE != CLICK.
+- Presenter reuses `PresenterBriefing` with a fullscreen-ready layout.
+- Motion is limited to request path, narration target, new alert, and
+  permission wait, and is skipped when reduced motion is set.
+- Layouts cover desktop widescreen, notebook, and Presenter display.
+  A dedicated phone layout is not required.
+
+### Alternatives considered
+
+- A new CommandCenterRuntime or fourth scheduler — rejected.
+- Boolean `isOps` / `isMemory` soup on one mega-panel — rejected;
+  explicit mode variants.
+- Treating always-on perception fixtures as global SIMULATION, which
+  would make REAL unreachable in the lab — rejected for the chip;
+  device honesty stays on the device rows.
+- New owner-correction HTTP endpoint — rejected; Ask already parses
+  those phrases.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED
+  (`tests/jarvis_command_center_v2.test.ts`; `npx tsc --noEmit` PASS).
+  Not LIVE_VERIFIED.
+- Live visual QA of the mode shell, Presenter fullscreen on a real
+  display, and native-shell hosting: host-only / LA-026–027 remain
+  PARTIAL. Do not mark LIVE_VERIFIED from Cloud.
+
+## ADR-032 — Privilege boundaries stay fail-closed under untrusted content
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live Whonix/Tor, native helper, and host browser remain
+BLOCKED_LOCAL_ACCEPTANCE / host-only.
+
+### Context
+
+Queue 10 needed a defensive review of the expanded Jarvis architecture
+after Presenter, Research V2, Memory V2, Skills V2, models, voice,
+perception, proactive runtime, and Command Center V2. Untrusted
+research, model output, vision text, and code comments must not become
+authority. LLM output is not execution.
+
+### Decision
+
+- `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE` stays code, not
+  prompt policy. Skill `propose()` always stores `DRAFT` / `CANDIDATE`
+  even if untrusted text asks for `TRUSTED`.
+- Jarvis cannot approve, renew, or expand its own privilege. WorkAgent
+  grants require `actor === 'owner'`. Webpage/model actors are
+  `UNTRUSTED_ACTOR`.
+- Webpage / research / model / vision / skill sources cannot write
+  `ownerTrusted` memory even if they request it.
+- Research SSRF policy blocks localhost, `127.0.0.0/8`, RFC1918,
+  link-local, CGNAT, multicast/broadcast, metadata (including Azure
+  `168.63.129.16`), IPv4-mapped IPv6 (`::ffff:7f00:1` after Node
+  canonicalization), decimal/hex/short IPv4 forms, and IP-prefix
+  hostnames such as `127.0.0.1.nip.io`. Redirect hops are re-checked.
+  PRIVATE_BROWSER does not fall back to host Playwright.
+- Native helper IPC is fail-closed: protocol mismatch, HWND/PID
+  injection, forged token, runtime impersonation, replayed nonce, and
+  unowned window ids are rejected. Tokens are never logged.
+- Traces omit CoT, scratchpads, confirmation tokens, credentials,
+  cookies, `.env`, and voice/RVC secrets.
+- Gitignore and Night denylist cover runtime DBs under `data/jarvis/`,
+  owner display aliases, model weights, and credentials.
+
+### Alternatives considered
+
+- Treating Node's IPv4-mapped IPv6 canonical form as public because it
+  is not dotted-quad — rejected (SSRF bypass).
+- Honoring `trustStatus: TRUSTED` on skill propose so tests stay
+  simple — rejected.
+- Weakening existing PRIVATE_BROWSER / lease tests to keep a looser
+  helper contract — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_security_hardening.test.ts`
+  plus existing `tests/jarvis_security.test.ts`; `npx tsc --noEmit` PASS;
+  `npm run test:cloud` **614/614**).
+  Not LIVE_VERIFIED.
+- Live Tor, native helper install, and host browser: host-only.
+  LA-026/027 remain PARTIAL. Do not mark LIVE_VERIFIED from Cloud.
+
+## ADR-033 — Cloud integration keeps distinct failures and independent correlation ids
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Host native helper, live mic/STT/TTS, cameras, and Whonix remain
+host-only / BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 11 is a full-system Cloud integration pass over Queues 01–10.
+It must not start a Command Center rewrite, Qdrant, native-helper
+install, model downloads, or a fourth scheduler. The audit found one
+real semantic drift: lab/Command Center traces had started treating
+`turnId` as an alias of `requestId`. Speech turns may seed
+`requestId` from a mic `turnId`; typed asks must keep independent
+fields.
+
+### Decision
+
+- Operational failure codes stay distinct. Do not collapse
+  `UNSUPPORTED_HOST`, `PERMISSION_REQUIRED`, `DENIED`, `TIMEOUT`,
+  `PROVIDER_UNAVAILABLE`, `INSUFFICIENT_DATA`, `UNKNOWN_DISPLAY`, or
+  `VERIFICATION_FAILED` into `STEP_FAILED`.
+- Keep `CAPABILITY_DENIED` and `RESEARCH_TIMEOUT` as additional
+  codes. `PERMISSION_REQUIRED` means a grant is still needed;
+  `DENIED` means a reject/self-approval; `CAPABILITY_DENIED` means
+  host/policy block. Research capability timeouts stay
+  `RESEARCH_TIMEOUT`; other capability timeouts are `TIMEOUT`.
+- `classifyFailureKnowledge()` may map several operational codes onto
+  coarser Night/evolution kinds (`owner_denied`, `provider_timeout`,
+  `unsupported_host`). That mapping is for learning, not UI/ops.
+- Correlation ids are `sessionId`, `turnId`, `requestId`, `taskId`,
+  `stepId`, `traceId`, `presentationId`. Default `turnId` is minted,
+  not copied from `requestId`. `createSpeechJarvisRequest` may still
+  set `requestId` from a mic `turnId`.
+- Fourteen offline/simulated fixtures cover casual conversation,
+  informational ask, deep research, system diagnostic, safe
+  capability, permission-gated WorkAgent, Presenter briefing,
+  memory-assisted turn, skill-assisted task, mock voice interruption,
+  simulated screen/device observation, Night benchmark/review, native
+  helper unavailable, and restricted-model non-selection.
+- Simulation is never LIVE. Discord 004/005 adapters stay compiling.
+  SQLite stays canonical.
+
+### Alternatives considered
+
+- Restoring `turnId = requestId` so the local-acceptance assertion
+  passed unchanged — rejected. The test name requires request
+  correlation, not aliased ids.
+- Collapsing `DENIED` into `PERMISSION_REQUIRED` — rejected.
+- Collapsing `TIMEOUT` into `RESEARCH_TIMEOUT` — rejected.
+- Deleting unused Discord adapters as dead code — rejected
+  (Jarvis-first: keep compiling, do not delete).
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit)
+  (`tests/jarvis_cloud_integration.test.ts`; local-acceptance
+  research-trace correlation; `npx tsc --noEmit` PASS;
+  `npm run test:cloud` **633/633**).
+  Not LIVE_VERIFIED.
+- LA-001/002 remain PARTIAL. LA-026 remains PARTIAL.
+  LA-027 remains PARTIAL — NATIVE_SHELL_REQUIRED.
+
+## ADR-034 — Cloud sequential queue ends; physical-machine acceptance is next
+
+Date: 2026-08-20
+Status: **APPROVED** as the Cloud stop-line. Not LIVE_VERIFIED.
+
+### Context
+
+Queues 01–11 delivered cloud-safe software on
+`cursor/jarvis-cloud-evolution-2026-08-20` from base
+`8aba6b019c436b1e636f32274607015a4dc23e38`. Queue 12 is a final audit
+and handoff. Cloud Linux cannot verify Windows displays, native HWND,
+Ollama/GPU, mic/STT/TTS/RVC, Discord, Whonix/Tor, cameras, or phones.
+
+### Decision
+
+- Do not start another Cloud feature queue automatically.
+- Classify remaining work as CLOUD_COMPLETE, LOCAL_VERIFY_REQUIRED,
+  LOCAL_IMPLEMENTATION_REQUIRED, OWNER_DECISION_REQUIRED, or
+  BLOCKED_EXTERNAL. Never promote LIVE_VERIFIED without host evidence.
+- Native helper: contracts only. Build/install only after owner approval.
+- Ordered host tests live in `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
+- Do not merge to `main`. Push only the dedicated Cloud branch.
+
+### Alternatives considered
+
+- Continuing Cloud with more architecture (Command Center rewrite,
+  Qdrant, helper binary, model downloads) — rejected.
+- Marking LA-001/002/026/027 LIVE_VERIFIED from unit tests or older
+  agent-browser notes — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit) for Queues 01–11 software.
+  Queue 12 is documentation/handoff only.
+- Host: LA-001/002 PARTIAL; LA-026 PARTIAL; LA-027 PARTIAL —
+  NATIVE_SHELL_REQUIRED. Whonix/Tor, Discord, live voice, cameras remain
+  LOCAL_VERIFY_REQUIRED or BLOCKED_EXTERNAL.
+
+
+
+
+
+
+
+
+
 
 

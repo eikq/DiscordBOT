@@ -16,6 +16,8 @@ export type EfficiencySnapshot = {
   tokensPerSec?: number;
   toolCalls?: number;
   retries?: number;
+  /** Alias of success when a rate could actually be computed. */
+  successRate?: number;
   ramBytes?: number;
   vramBytes?: number;
   cpuPct?: number;
@@ -50,6 +52,7 @@ export function efficiencyFromTraces(
   const snapshot: EfficiencySnapshot = { status: 'ok', sampleCount: traces.length };
   if (decided.length >= 3) {
     snapshot.success = decided.filter(item => item.success).length / decided.length;
+    snapshot.successRate = snapshot.success;
   }
   if (latencies.length > 0) {
     snapshot.latencyMs = latencies.reduce((acc, value) => acc + value, 0) / latencies.length;
@@ -77,6 +80,14 @@ export function efficiencyFromTraces(
     };
   }
   return snapshot;
+}
+
+export function efficiencyForModel(
+  traces: JarvisTraceRecord[],
+  modelId: string,
+  hardware?: MeasuredHardware,
+): EfficiencySnapshot {
+  return efficiencyFromTraces(traces.filter(item => item.modelProfileId === modelId), hardware);
 }
 
 export function analyzerHasMetrics(report: AnalyzerReport): boolean {

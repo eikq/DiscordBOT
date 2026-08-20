@@ -169,3 +169,28 @@ All `READ_ONLY`. Forbidden args include `method`, `headers`, `body`, `cookie`,
 Thai and English research intents use `includes()`, not ASCII `\b`.
 `research.current` is an action-only fast path so “ข้อมูลล่าสุด” does not
 answer from Qwen parametric memory.
+
+## Research Intelligence V2 (Queue 02)
+
+Cloud-safe upgrade of the same GET research runtime. Not LIVE_VERIFIED.
+
+Pipeline (bounded, not recursive):
+
+```
+Objective → intent → query plan → provider selection → retrieval
+→ normalize/dedup → source quality → contradictions → synthesis
+→ citation pack → verification → observable trace
+```
+
+Depths `none | quick | standard | deep | forensic` differ in query
+breadth, fetch/round budgets, follow-up, cross-check, contradiction
+analysis, and verification. **NONE never accesses web/research providers.**
+
+Source `trustClass` is evidence metadata, not truth:
+`OFFICIAL | PRIMARY | ACADEMIC | REPUTABLE_SECONDARY | COMMUNITY | UNKNOWN`.
+
+Citations must match retrieved public URLs. Cached evidence is labeled
+and is not presented as a fresh retrieval. Webpage text remains
+untrusted data. PRIVATE_BROWSER stays fail-closed with no host
+Playwright fallback. Live Whonix/Tor: LOCAL_VERIFY_REQUIRED.
+

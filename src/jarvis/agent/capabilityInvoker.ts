@@ -1,4 +1,5 @@
 import type { CapabilityHost, CapabilityResult } from '../capabilities/types';
+import { capabilityPresentationFacts } from '../capabilities/capabilityFacts';
 import { classifyFailure } from '../ops/errors';
 import type { JarvisErrorCode } from '../ops/types';
 import { RESEARCH_CURRENT, RESEARCH_SEARCH } from '../research/constants';
@@ -134,11 +135,15 @@ function structuredVerify(task: WorkTask): WorkStepResult {
 function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
   const summary = result.content?.trim() || result.error || result.status;
   const risk = typeof result.structured?.risk === 'string' ? String(result.structured.risk) : undefined;
+  const facts = capabilityPresentationFacts(result.capabilityId, result.structured, result.content);
   const toolResult = {
     capability: result.capabilityId,
     status: result.status,
     summary: result.untrustedOutput && result.status === 'ok' ? 'untrusted external data' : summary.slice(0, 240),
     ...(risk ? { risk } : {}),
+    ...(facts?.systemSnapshot || facts?.displays
+      ? { facts: { ...(facts.systemSnapshot ? { systemSnapshot: facts.systemSnapshot } : {}), ...(facts.displays ? { displays: facts.displays } : {}) } }
+      : {}),
   };
   const evidence = [
     ...result.sourceUrls.slice(0, 6),
@@ -181,7 +186,9 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
     return {
       ok: false,
       summary: result.error || `Capability ${result.capabilityId} is ${result.status}.`,
-      errorCode: result.status === 'timeout' ? 'RESEARCH_TIMEOUT' : 'PROVIDER_UNAVAILABLE',
+      errorCode: result.status === 'timeout'
+        ? (result.capabilityId.startsWith('research.') ? 'RESEARCH_TIMEOUT' : 'TIMEOUT')
+        : 'PROVIDER_UNAVAILABLE',
       toolResult,
     };
   }

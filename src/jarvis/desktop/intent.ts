@@ -19,7 +19,7 @@ export type DesktopPresenceIntent =
   }
   | { kind: 'clarify'; question: string; reasonCode: string };
 
-const MOVE = /ย้ายตัว|ย้ายไปจอ|ย้ายหน้าต่าง|move yourself|move (the )?(jarvis )?window to|move to (the )?(main|external|notebook|primary|monitor|display|จอ)/iu;
+const MOVE = /ย้ายตัว|ย้ายไปจอ|ไปจอหลัก|ไปจอโน้ต|ย้ายหน้าต่าง|move yourself|move (the )?(jarvis )?window to|move to (the )?(main|external|notebook|primary|monitor|display|จอ)/iu;
 const LIST = /how many (monitors|displays)|กี่จอ|list displays|มีกี่จอ/iu;
 const CURRENT = /which (monitor|display)|อยู่จอไหน|what display|current display\??$/iu;
 const FOCUS = /focus (your|the)? ?window|โฟกัสหน้าต่าง/iu;
@@ -73,7 +73,8 @@ export function inferDesktopPresenceIntent(text: string): DesktopPresenceIntent 
 export function parseDisplaySelector(text: string): DisplaySelector | undefined {
   const numbered = text.match(/(?:monitor|display|จอ)\s*(\d+)/iu);
   if (numbered) return { index: Number(numbered[1]) };
-  if (/main monitor|primary|จอหลัก/iu.test(text)) return { role: 'primary' };
+  if (/primary( display| monitor)?|จอหลักของระบบ/iu.test(text)) return { role: 'primary' };
+  if (/main monitor|จอหลัก|\bmain\b/iu.test(text)) return { role: 'main' };
   if (/notebook|laptop|จอโน้ต/iu.test(text)) return { role: 'notebook' };
   if (/external|จอสอง|จอภายนอก|second (monitor|display)/iu.test(text)) return { role: 'external' };
   if (/current display|จอปัจจุบัน/iu.test(text)) return { role: 'current' };

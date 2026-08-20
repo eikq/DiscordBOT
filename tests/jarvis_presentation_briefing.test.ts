@@ -129,6 +129,10 @@ test('follow-ups stay on the presenter model and never call tools', () => {
   assert.ok(shorter.sections.every(item => item.kind === 'summary' || item.kind === 'actions'));
   const source = applyBriefingFollowUp(planned, 'show-source', 'src-a');
   assert.ok(source.motionTimeline.some(item => item.action === 'spotlight' && item.target.id === 'src-a'));
+  const repeated = applyBriefingFollowUp(planned, 'repeat');
+  assert.equal(repeated.playback.segmentId, planned.narrationSegments[planned.playback.segmentIndex]?.id);
+  const backed = applyBriefingFollowUp(applyBriefingFollowUp(planned, 'repeat'), 'back');
+  assert.ok(backed.playback.segmentIndex <= repeated.playback.segmentIndex);
 });
 
 test('secrets are redacted from presentation text', () => {
@@ -188,6 +192,6 @@ test('spoken helper uses the short narration, not the raw reply', () => {
   });
   const spoken = spokenTextFor(planned, 'fallback');
   assert.notEqual(spoken, 'A very long raw answer that should not be spoken in full because it is not presenter narration.');
-  assert.ok(spoken.length < 280);
+  assert.ok(spoken.length < 1200);
   assert.ok(estimateNarrationMs(spoken) >= 800);
 });

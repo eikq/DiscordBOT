@@ -3,6 +3,12 @@
 Authoritative local-machine queue for work that Cursor Cloud cannot complete.
 Cloud may prepare interfaces, diagnostics, UI states, and fail-closed mocks only.
 
+**Queue 12 ordered return-to-host plan:** `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
+Use that file for classification (CLOUD_COMPLETE / LOCAL_VERIFY_REQUIRED /
+LOCAL_IMPLEMENTATION_REQUIRED / OWNER_DECISION_REQUIRED / BLOCKED_EXTERNAL)
+and the dependency-ordered Windows tests. This file keeps per-item scripts
+and historical local notes. Do not mark LIVE_VERIFIED from Cloud.
+
 Labels: **BLOCKED_LOCAL_ACCEPTANCE**. Do not mark these LIVE_VERIFIED until the owner
 runs them on the physical Windows machine.
 
@@ -161,7 +167,9 @@ LA-023 → LA-024 → LA-025.
 - Purpose: PRIVATE_BROWSER live path through Whonix.
 - Preconditions: LA-003/004 pass; Playwright worker only in Workstation.
 - Exact verification: lab `/api/jarvis/private-research` stays fail-closed on
-  host; guest worker fetch of a public page; no host Chrome/Edge.
+  host; guest worker fetch of a public page; no host Chrome/Edge. Queue 02
+  added cloud-safe fail-closed contracts; do not treat those as Whonix live
+  proof. Research Intelligence V2 live source quality is NEEDS_LOCAL_VERIFY.
 - Expected: `available=true` only when Tor + worker are live.
 - Failure evidence: `reasonCode`, route health, worker log. Host must stay
   fail-closed if Workstation is down.
@@ -358,12 +366,12 @@ LA-023 → LA-024 → LA-025.
 ## LA-026 Presenter Mode briefing on `/jarvis-lab`
 
 - Status: **PARTIAL** 2026-08-20 local live pass. Not LIVE_VERIFIED.
-  Rich/plain selection, real Edge-TTS spoken summary, research untrusted
-  sources, and client follow-ups were observed. Speech↔segment motion sync
-  is not proven. Diagnostic briefings lack per-metric sections, so “focus
-  GPU while GPU is spoken” cannot be demonstrated. `repeat` / `back` are
-  no-ops. First live pack was contaminated by leftover research until the
-  isolation fix.
+  Cloud Queue 01 on `cursor/jarvis-cloud-evolution-2026-08-20` implemented
+  structured diagnostic cards, sequential narration, TTS-driven
+  `spokenAtMs`, and Repeat/Back as presenter-local seeks (CLOUD_VERIFIED
+  unit). Live speech↔segment motion remains
+  NEEDS_LOCAL_VERIFY. First live pack was contaminated by leftover research
+  until the isolation fix at `8aba6b0` (preserved).
 - Purpose: Prove rich results render as a Presenter briefing with spoken
   summary, focus cues, follow-ups, and reduced-motion behavior. Do not start
   LA-003+ (Whonix / private browser) for this item.
@@ -403,9 +411,11 @@ LA-023 → LA-024 → LA-025.
 ## LA-027 Desktop presence and Jarvis-window move
 
 - Status: **PARTIAL — NATIVE_SHELL_REQUIRED** 2026-08-20. Display
-  enumeration is real after raising capability timeouts. Browser host
-  cannot own/move the Chrome/Edge HWND. Window movement is **not**
-  LIVE_VERIFIED. Classification: `BROWSER_HOST_LIMITATION`.
+  enumeration is real after raising capability timeouts. Cloud 2026-08-20
+  Queue 01 implemented intersection matching (gap → `UNKNOWN_DISPLAY`)
+  and native-helper contracts/mocks (CLOUD_VERIFIED unit). Browser host cannot
+  own/move the Chrome/Edge HWND. Helper is not installed. Window movement
+  is **not** LIVE_VERIFIED. Classification: `BROWSER_HOST_LIMITATION`.
 - Purpose: Honest multi-monitor awareness and Jarvis-window-only movement.
 - Preconditions: Windows host; `/jarvis-lab` open; optional
   `config/jarvis/displays.json` copied from `displays.example.json` for

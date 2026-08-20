@@ -54,6 +54,14 @@ export function sanitizePlannedPresentation(planned: PlannedPresentation): Plann
       ...segment,
       text: sanitizePresentationText(segment.text),
     })),
+    playback: redacted.playback
+      ? {
+        ...redacted.playback,
+        presentationId: sanitizePresentationText(redacted.playback.presentationId),
+        segmentId: sanitizePresentationText(redacted.playback.segmentId),
+        targetId: sanitizePresentationText(redacted.playback.targetId),
+      }
+      : redacted.playback,
   };
 }
 

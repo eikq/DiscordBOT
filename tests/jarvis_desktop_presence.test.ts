@@ -114,7 +114,17 @@ test('intents map monitor phrases to Jarvis-window capabilities only', () => {
   const main = inferDesktopPresenceIntent('move to the main monitor');
   assert.equal(main.kind, 'action');
   if (main.kind === 'action') {
-    assert.deepEqual(main.arguments.displaySelector, { role: 'primary' });
+    assert.deepEqual(main.arguments.displaySelector, { role: 'main' });
+  }
+  const thaiMain = inferDesktopPresenceIntent('ไปจอหลัก');
+  assert.equal(thaiMain.kind, 'action');
+  if (thaiMain.kind === 'action') {
+    assert.deepEqual(thaiMain.arguments.displaySelector, { role: 'main' });
+  }
+  const thaiNotebook = inferDesktopPresenceIntent('ย้ายไปจอโน้ตบุ๊ก');
+  assert.equal(thaiNotebook.kind, 'action');
+  if (thaiNotebook.kind === 'action') {
+    assert.deepEqual(thaiNotebook.arguments.displaySelector, { role: 'notebook' });
   }
   const notebook = inferDesktopPresenceIntent('move to the notebook display');
   assert.equal(notebook.kind, 'action');

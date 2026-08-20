@@ -235,8 +235,23 @@ export class WorkAgent {
     }
     const denied = denyPermissionStep(step);
     Object.assign(step, denied);
-    this.emit(task, 'PRIVILEGE_DENIED', 'Owner denied task permission', { visualState: 'WAITING_PERMISSION' });
-    return this.finish(this.store.save(task), 'BLOCKED', 'blocked', 'Owner denied permission.');
+    this.emit(task, 'PRIVILEGE_DENIED', 'Owner denied task permission', {
+      visualState: 'WAITING_PERMISSION',
+      errorCode: 'DENIED',
+    });
+    const saved = this.store.save({
+      ...task,
+      errors: [
+        ...task.errors,
+        {
+          at: new Date().toISOString(),
+          code: 'DENIED',
+          message: 'Owner denied permission.',
+          stepId: step.id,
+        },
+      ],
+    });
+    return this.finish(saved, 'BLOCKED', 'blocked', 'Owner denied permission.', 'DENIED');
   }
 
   private async executeStep(task: WorkTask, step: PlanStep, signal: AbortSignal): Promise<void> {

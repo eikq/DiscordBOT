@@ -16,7 +16,7 @@ export function spokenSummaryFrom(summary: string, mode: PresentationModel['mode
   return clipped;
 }
 
-export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | 'summary' | 'sections' | 'recommendedActions' | 'density'>): NarrationSegment[] {
+export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | 'summary' | 'sections' | 'recommendedActions' | 'density' | 'evidence' | 'cards'>): NarrationSegment[] {
   const spoken = spokenSummaryFrom(model.summary, model.mode);
   const segments: NarrationSegment[] = [{
     id: 'narr-summary',
@@ -27,15 +27,24 @@ export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | '
     estimatedMs: estimateNarrationMs(spoken),
   }];
 
-  const narratable = model.sections.filter(section => section.id !== 'sec-summary' && section.body);
+  const narratable = model.sections.filter(section => (
+    section.id !== 'sec-summary'
+    && section.kind !== 'followups'
+    && section.body
+  )).slice(0, 4);
   for (const [index, section] of narratable.entries()) {
     const text = sectionNarration(section);
+    const sourceId = sourceIdForSection(section, model);
     segments.push({
       id: `narr-${section.id}`,
       order: index + 1,
       text,
       kind: 'section',
-      target: { type: 'section', id: section.id },
+      target: sourceId
+        ? { type: 'source', id: sourceId }
+        : section.cards?.[0]
+        ? { type: section.cards[0].startsWith('system.') ? 'metric' : 'card', id: section.cards[0] }
+        : { type: 'section', id: section.id },
       estimatedMs: estimateNarrationMs(text),
     });
   }
@@ -52,6 +61,16 @@ export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | '
     });
   }
 
+  const finish = 'That is the briefing. Ask if you want a section repeated.';
+  segments.push({
+    id: 'narr-finish',
+    order: segments.length,
+    text: finish,
+    kind: 'finish',
+    target: { type: 'section', id: 'sec-followups' },
+    estimatedMs: estimateNarrationMs(finish),
+  });
+
   return segments;
 }
 
@@ -62,15 +81,42 @@ export function scaleNarrationToSpeech(
   if (!spokenMs || spokenMs < 200 || segments.length === 0) return segments;
   const estimated = segments.reduce((sum, item) => sum + item.estimatedMs, 0);
   if (estimated <= 0) return segments;
-  const factor = spokenMs / estimated;
-  return segments.map(item => ({
+  const rounded = segments.map(item => Math.max(1, Math.round((item.estimatedMs / estimated) * spokenMs)));
+  rounded[rounded.length - 1] += spokenMs - rounded.reduce((sum, item) => sum + item, 0);
+  if (rounded[rounded.length - 1] < 1) {
+    let need = 1 - rounded[rounded.length - 1];
+    rounded[rounded.length - 1] = 1;
+    for (let i = 0; i < rounded.length - 1 && need > 0; i += 1) {
+      const take = Math.min(Math.max(0, rounded[i] - 1), need);
+      rounded[i] -= take;
+      need -= take;
+    }
+  }
+  return segments.map((item, index) => ({
     ...item,
-    estimatedMs: Math.max(400, Math.round(item.estimatedMs * factor)),
+    estimatedMs: rounded[index] ?? item.estimatedMs,
   }));
 }
 
+function sourceIdForSection(
+  section: PresentationSection,
+  model: Pick<PresentationModel, 'evidence' | 'cards'>,
+): string | undefined {
+  if (section.id === 'sec-conflicts') {
+    return model.evidence?.[1]?.id || model.evidence?.[0]?.id;
+  }
+  if (section.id === 'sec-quality' || section.id === 'sec-timeline' || section.id === 'sec-evidence') {
+    const match = model.evidence?.find(item =>
+      section.body.includes(item.label) || section.body.includes(item.id),
+    );
+    return match?.id || model.evidence?.[0]?.id;
+  }
+  const card = model.cards?.find(item => section.cards?.includes(item.id));
+  return card?.refs?.[0];
+}
+
 function sectionNarration(section: PresentationSection): string {
-  return clipSentence(`${section.title}. ${section.body}`, 240);
+  return clipSentence(`${section.title}. ${section.body}`, 120);
 }
 
 function clipSentence(text: string, max: number): string {

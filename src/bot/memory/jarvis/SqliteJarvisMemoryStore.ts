@@ -2,14 +2,17 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { canonicalMemoryId, isCanonicalMemoryId, parseCanonicalMemoryId } from './ids';
 import { currentSchemaVersion, defaultJarvisDbPath, openMigratedDatabase } from './migrate';
+import { inferMemoryClass, storageFactMemoryType } from './memoryClass';
 import { applyForget, applySupersession, canSupersede, defaultRetention } from './semantics';
 import type { JarvisMemoryStore, MemoryListFilter } from './store';
+import { isUntrustedMemorySource, ownerTrustedForWrite } from './trust';
 import {
   AliasRecord,
   ArtifactRecord,
   EntityRecord,
   EpisodeRecord,
   IdentitySettingRecord,
+  MemoryClass,
   MemoryConflictError,
   MemoryFeedbackRecord,
   MemoryKind,
@@ -19,6 +22,7 @@ import {
   PrivacyClass,
   RelationshipRecord,
   RetentionClass,
+  SemanticCandidate,
   SemanticFactRecord,
 } from './types';
 
@@ -218,6 +222,11 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
       clauses.push(`status IN (${statuses.map(() => '?').join(', ')})`);
       params.push(...statuses);
     }
+    const classes = asMemoryClasses(filter.memoryClass);
+    if (classes) {
+      clauses.push(`memory_class IN (${classes.map(() => '?').join(', ')})`);
+      params.push(...classes);
+    }
     let ids: string[] | undefined;
     if (filter.query?.trim()) {
       ids = this.searchFactIds(filter.query.trim());
@@ -242,11 +251,11 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
     }
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.insertFact({ ...next, status: 'active' });
+      this.insertFact({ ...next, status: 'active', supersedes: previous.id });
       const marked = applySupersession(previous, next.id);
       this.db.prepare(
-        'UPDATE facts SET status = ?, superseded_by = ?, confidence = ? WHERE id = ?',
-      ).run(marked.status, marked.supersededBy ?? next.id, marked.confidence, previous.id);
+        'UPDATE facts SET status = ?, superseded_by = ?, confidence = ?, updated_at = ? WHERE id = ?',
+      ).run(marked.status, marked.supersededBy ?? next.id, marked.confidence, Date.now(), previous.id);
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -256,22 +265,26 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
   }
 
   public putEpisode(record: EpisodeRecord): EpisodeRecord {
+    const quality = qualityFlags(record, 'episodic');
     this.db.prepare(`
       INSERT INTO episodes (
         id, occurred_at, source, summary, event_type, payload_json, confidence, importance,
         privacy_class, status, superseded_by, expires_at, retention_class, deletion_policy,
-        source_system, source_record_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source_system, source_record_id, owner_trusted, derived, memory_class, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         summary = excluded.summary,
         payload_json = excluded.payload_json,
         confidence = excluded.confidence,
-        importance = excluded.importance
+        importance = excluded.importance,
+        updated_at = excluded.updated_at,
+        memory_class = excluded.memory_class
     `).run(
       record.id, record.occurredAt, record.source, record.summary, record.eventType, json(record.payload),
       record.confidence, record.importance, record.privacyClass, record.status, record.supersededBy ?? null,
       record.retention.expiresAt ?? null, record.retention.retentionClass, record.retention.deletionPolicy,
       record.provenance.sourceSystem, record.provenance.sourceRecordId ?? null,
+      quality.ownerTrusted, quality.derived, quality.memoryClass, quality.createdAt, quality.updatedAt,
     );
     return this.getEpisode(record.id)!;
   }
@@ -288,6 +301,11 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
     if (statuses) {
       clauses.push(`status IN (${statuses.map(() => '?').join(', ')})`);
       params.push(...statuses);
+    }
+    const classes = asMemoryClasses(filter.memoryClass);
+    if (classes) {
+      clauses.push(`memory_class IN (${classes.map(() => '?').join(', ')})`);
+      params.push(...classes);
     }
     if (filter.query?.trim()) {
       const ids = this.searchEpisodeIds(filter.query.trim());
@@ -330,8 +348,11 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
     const id = canonicalMemoryId('identity', key);
     const now = Date.now();
     this.db.prepare(`
-      INSERT INTO identity_settings (id, setting_key, setting_value_json, updated_at, source_system, status, privacy_class)
-      VALUES (?, ?, ?, ?, ?, 'active', 'private')
+      INSERT INTO identity_settings (
+        id, setting_key, setting_value_json, updated_at, source_system, status, privacy_class,
+        owner_trusted, memory_class
+      )
+      VALUES (?, ?, ?, ?, ?, 'active', 'private', 1, 'identity')
       ON CONFLICT(setting_key) DO UPDATE SET
         setting_value_json = excluded.setting_value_json,
         updated_at = excluded.updated_at,
@@ -414,6 +435,7 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
       const row = this.db.prepare('SELECT * FROM memory_links WHERE id = ?').get(id);
       return row ? mapLink(row) : null;
     }
+    if (kind === 'candidate') return this.getCandidate(id);
     return null;
   }
 
@@ -443,13 +465,141 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
     return changed;
   }
 
+  public putCandidate(record: SemanticCandidate): SemanticCandidate {
+    const now = Date.now();
+    const ownerTrusted = ownerTrustedForWrite(record.sourceSystem, record.ownerTrusted) ? 1 : 0;
+    const derived = isUntrustedMemorySource(record.sourceSystem) || record.derived !== false ? 1 : 0;
+    this.db.prepare(`
+      INSERT INTO semantic_candidates (
+        id, episode_id, fact_key, value, significance, status, reason, owner_trusted, derived,
+        source_system, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        value = excluded.value,
+        significance = excluded.significance,
+        status = excluded.status,
+        reason = excluded.reason,
+        updated_at = excluded.updated_at
+    `).run(
+      record.id,
+      record.episodeId ?? null,
+      record.factKey,
+      record.value,
+      record.significance,
+      record.status,
+      record.reason,
+      ownerTrusted,
+      derived,
+      record.sourceSystem,
+      record.createdAt || now,
+      record.updatedAt || now,
+    );
+    return this.getCandidate(record.id)!;
+  }
+
+  public getCandidate(id: string): SemanticCandidate | null {
+    const row = this.db.prepare('SELECT * FROM semantic_candidates WHERE id = ?').get(id);
+    return row ? mapCandidate(row) : null;
+  }
+
+  public listCandidates(filter: {
+    status?: SemanticCandidate['status'] | SemanticCandidate['status'][];
+    episodeId?: string;
+    limit?: number;
+  } = {}): SemanticCandidate[] {
+    const statuses = filter.status
+      ? (Array.isArray(filter.status) ? filter.status : [filter.status])
+      : undefined;
+    const clauses = ['1 = 1'];
+    const params: Array<string | number> = [];
+    if (statuses) {
+      clauses.push(`status IN (${statuses.map(() => '?').join(', ')})`);
+      params.push(...statuses);
+    }
+    if (filter.episodeId) {
+      clauses.push('episode_id = ?');
+      params.push(filter.episodeId);
+    }
+    params.push(filter.limit ?? 50);
+    return this.db.prepare(
+      `SELECT * FROM semantic_candidates WHERE ${clauses.join(' AND ')} ORDER BY significance DESC, updated_at DESC LIMIT ?`,
+    ).all(...params).map(mapCandidate);
+  }
+
+  public acceptCandidate(id: string, options: { actor?: string } = {}): { candidate: SemanticCandidate; fact: SemanticFactRecord } {
+    const candidate = this.getCandidate(id);
+    if (!candidate) throw new Error(`Candidate ${id} does not exist.`);
+    if (candidate.status !== 'candidate') throw new Error(`Candidate ${id} is ${candidate.status}.`);
+    if (isUntrustedMemorySource(candidate.sourceSystem)) {
+      this.rejectCandidate(id, 'untrusted_research');
+      throw new Error('Research claims cannot become owner-trusted semantic memory.');
+    }
+    const now = Date.now();
+    const factId = canonicalMemoryId('fact', `learned_${parseCanonicalMemoryId(candidate.id).localId}`);
+    let fact: SemanticFactRecord;
+    try {
+      fact = this.putFact({
+        id: factId,
+        kind: 'fact',
+        subjectEntityId: undefined,
+        predicate: candidate.factKey,
+        objectValue: candidate.value,
+        factKey: candidate.factKey,
+        polarity: 'statement',
+        status: 'active',
+        privacyClass: 'private',
+        confidence: Math.min(0.7, Math.max(0.35, candidate.significance)),
+        importance: Math.min(0.7, candidate.significance),
+        provenance: {
+          sourceSystem: candidate.sourceSystem,
+          sourceRecordId: candidate.id,
+          evidenceIds: candidate.episodeId ? [candidate.episodeId] : [],
+          firstSeen: now,
+          lastConfirmed: now,
+          confirmations: 1,
+        },
+        retention: defaultRetention('long_lived', now),
+        ownerTrusted: false,
+        derived: true,
+        memoryClass: inferMemoryClass({ kind: 'fact', factKey: candidate.factKey }),
+      });
+    } catch (error) {
+      if (error instanceof MemoryConflictError) {
+        this.rejectCandidate(id, 'contradiction_requires_supersession');
+      }
+      throw error;
+    }
+    this.db.prepare(
+      "UPDATE semantic_candidates SET status = 'accepted', reason = ?, updated_at = ? WHERE id = ?",
+    ).run(`accepted_by_${options.actor || 'owner'}`, now, id);
+    if (candidate.episodeId) this.link(candidate.episodeId, fact.id, 'learned_from');
+    this.putFeedback(fact.id, 'remember', `accepted candidate ${id}`, options.actor || 'owner');
+    return { candidate: this.getCandidate(id)!, fact };
+  }
+
+  public rejectCandidate(id: string, reason = 'rejected'): SemanticCandidate {
+    const candidate = this.getCandidate(id);
+    if (!candidate) throw new Error(`Candidate ${id} does not exist.`);
+    this.db.prepare(
+      "UPDATE semantic_candidates SET status = 'rejected', reason = ?, updated_at = ? WHERE id = ?",
+    ).run(reason, Date.now(), id);
+    return this.getCandidate(id)!;
+  }
+
   private insertFact(record: SemanticFactRecord): void {
+    const quality = qualityFlags(record, inferMemoryClass({
+      kind: 'fact',
+      factKey: record.factKey,
+      memoryClass: record.memoryClass,
+      retentionClass: record.retention.retentionClass,
+    }));
     this.db.prepare(`
       INSERT INTO facts (
         id, memory_type, subject_entity_id, predicate, object_value, fact_key, polarity, confidence,
         importance, confirmations, first_seen, last_confirmed, status, superseded_by, evidence_json,
-        privacy_class, retention_class, expires_at, deletion_policy, source_system, source_record_id
-      ) VALUES (?, 'semantic', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        privacy_class, retention_class, expires_at, deletion_policy, source_system, source_record_id,
+        owner_trusted, derived, memory_class, created_at, updated_at, supersedes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         object_value = excluded.object_value,
         polarity = excluded.polarity,
@@ -459,14 +609,21 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
         last_confirmed = excluded.last_confirmed,
         status = excluded.status,
         superseded_by = excluded.superseded_by,
-        evidence_json = excluded.evidence_json
+        evidence_json = excluded.evidence_json,
+        owner_trusted = excluded.owner_trusted,
+        derived = excluded.derived,
+        memory_class = excluded.memory_class,
+        updated_at = excluded.updated_at,
+        supersedes = excluded.supersedes
     `).run(
-      record.id, record.subjectEntityId ?? null, record.predicate, record.objectValue, record.factKey,
-      record.polarity, record.confidence, record.importance, record.provenance.confirmations,
-      record.provenance.firstSeen, record.provenance.lastConfirmed, record.status,
-      record.supersededBy ?? null, json(record.provenance.evidenceIds), record.privacyClass,
+      record.id, storageFactMemoryType(quality.memoryClass), record.subjectEntityId ?? null, record.predicate,
+      record.objectValue, record.factKey, record.polarity, record.confidence, record.importance,
+      record.provenance.confirmations, record.provenance.firstSeen, record.provenance.lastConfirmed,
+      record.status, record.supersededBy ?? null, json(record.provenance.evidenceIds), record.privacyClass,
       record.retention.retentionClass, record.retention.expiresAt ?? null, record.retention.deletionPolicy,
       record.provenance.sourceSystem, record.provenance.sourceRecordId ?? null,
+      quality.ownerTrusted, quality.derived, quality.memoryClass, quality.createdAt, quality.updatedAt,
+      record.supersedes ?? null,
     );
   }
 
@@ -477,13 +634,15 @@ export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
         confirmations = ?,
         confidence = ?,
         last_confirmed = ?,
-        evidence_json = ?
+        evidence_json = ?,
+        updated_at = ?
       WHERE id = ?
     `).run(
       existing.provenance.confirmations + 1,
       Math.min(0.98, Math.max(existing.confidence, incoming.confidence)),
       Math.max(existing.provenance.lastConfirmed, incoming.provenance.lastConfirmed),
       json(evidence),
+      Date.now(),
       existing.id,
     );
     return this.getFact(existing.id)!;
@@ -547,6 +706,43 @@ function unique(values: string[]): string[] {
 function asStatuses(status?: MemoryStatus | MemoryStatus[]): MemoryStatus[] | undefined {
   if (!status) return ['active'];
   return Array.isArray(status) ? status : [status];
+}
+
+function asMemoryClasses(value?: MemoryClass | MemoryClass[]): MemoryClass[] | undefined {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value : [value];
+}
+
+function qualityFlags(
+  record: {
+    kind?: string;
+    factKey?: string;
+    memoryClass?: MemoryClass;
+    ownerTrusted?: boolean;
+    derived?: boolean;
+    createdAt?: number;
+    updatedAt?: number;
+    provenance: { sourceSystem: string; firstSeen: number; lastConfirmed: number };
+    retention?: { retentionClass?: string };
+  },
+  fallbackClass: MemoryClass,
+): { ownerTrusted: number; derived: number; memoryClass: MemoryClass; createdAt: number; updatedAt: number } {
+  const memoryClass = inferMemoryClass({
+    kind: record.kind,
+    factKey: record.factKey,
+    memoryClass: record.memoryClass || fallbackClass,
+    retentionClass: record.retention?.retentionClass,
+  });
+  const untrusted = isUntrustedMemorySource(record.provenance.sourceSystem);
+  const ownerTrusted = ownerTrustedForWrite(record.provenance.sourceSystem, record.ownerTrusted) ? 1 : 0;
+  const derived = untrusted || record.derived === true || ownerTrusted === 0 ? 1 : 0;
+  return {
+    ownerTrusted: untrusted ? 0 : ownerTrusted,
+    derived,
+    memoryClass,
+    createdAt: record.createdAt ?? record.provenance.firstSeen,
+    updatedAt: record.updatedAt ?? record.provenance.lastConfirmed,
+  };
 }
 
 function safeFts(query: string): string {
@@ -684,6 +880,18 @@ function mapObservation(row: Record<string, unknown>): ObservationRecord {
 }
 
 function mapFact(row: Record<string, unknown>): SemanticFactRecord {
+  const evidenceIds = parseJsonArray(row.evidence_json);
+  const supersededBy = row.superseded_by == null ? undefined : String(row.superseded_by);
+  const supersedes = row.supersedes == null ? undefined : String(row.supersedes);
+  const createdAt = Number(row.created_at ?? row.first_seen);
+  const updatedAt = Number(row.updated_at ?? row.last_confirmed);
+  const memoryClass = inferMemoryClass({
+    kind: 'fact',
+    factKey: String(row.fact_key),
+    memoryClass: row.memory_class == null ? undefined : String(row.memory_class),
+    memoryType: row.memory_type == null ? undefined : String(row.memory_type),
+    retentionClass: row.retention_class == null ? undefined : String(row.retention_class),
+  });
   return {
     id: String(row.id),
     kind: 'fact',
@@ -696,11 +904,18 @@ function mapFact(row: Record<string, unknown>): SemanticFactRecord {
     privacyClass: row.privacy_class as PrivacyClass,
     confidence: Number(row.confidence),
     importance: Number(row.importance),
-    supersededBy: row.superseded_by == null ? undefined : String(row.superseded_by),
+    supersededBy,
+    supersedes,
+    createdAt,
+    updatedAt,
+    ownerTrusted: Boolean(Number(row.owner_trusted ?? 0)),
+    derived: Boolean(Number(row.derived ?? 0)),
+    memoryClass,
+    memoryRefs: unique([...evidenceIds, ...supersededBy ? [supersededBy] : [], ...supersedes ? [supersedes] : []]),
     provenance: {
       sourceSystem: String(row.source_system),
       sourceRecordId: row.source_record_id == null ? undefined : String(row.source_record_id),
-      evidenceIds: parseJsonArray(row.evidence_json),
+      evidenceIds,
       firstSeen: Number(row.first_seen),
       lastConfirmed: Number(row.last_confirmed),
       confirmations: Number(row.confirmations),
@@ -714,6 +929,8 @@ function mapFact(row: Record<string, unknown>): SemanticFactRecord {
 }
 
 function mapEpisode(row: Record<string, unknown>): EpisodeRecord {
+  const createdAt = Number(row.created_at ?? row.occurred_at);
+  const updatedAt = Number(row.updated_at ?? row.occurred_at);
   return {
     id: String(row.id),
     kind: 'episode',
@@ -727,6 +944,15 @@ function mapEpisode(row: Record<string, unknown>): EpisodeRecord {
     confidence: Number(row.confidence),
     importance: Number(row.importance),
     supersededBy: row.superseded_by == null ? undefined : String(row.superseded_by),
+    createdAt,
+    updatedAt,
+    ownerTrusted: Boolean(Number(row.owner_trusted ?? 0)),
+    derived: Boolean(Number(row.derived ?? 0)),
+    memoryClass: inferMemoryClass({
+      kind: 'episode',
+      memoryClass: row.memory_class == null ? undefined : String(row.memory_class),
+      eventType: String(row.event_type),
+    }),
     provenance: {
       sourceSystem: String(row.source_system),
       sourceRecordId: row.source_record_id == null ? undefined : String(row.source_record_id),
@@ -779,6 +1005,28 @@ function mapIdentity(row: Record<string, unknown>): IdentitySettingRecord {
     updatedAt: Number(row.updated_at),
     sourceSystem: String(row.source_system),
     status: (row.status as MemoryStatus) || 'active',
+    ownerTrusted: Boolean(Number(row.owner_trusted ?? 1)),
+    memoryClass: inferMemoryClass({
+      kind: 'identity',
+      memoryClass: row.memory_class == null ? undefined : String(row.memory_class),
+    }),
+  };
+}
+
+function mapCandidate(row: Record<string, unknown>): SemanticCandidate {
+  return {
+    id: String(row.id),
+    episodeId: row.episode_id == null ? undefined : String(row.episode_id),
+    factKey: String(row.fact_key),
+    value: String(row.value),
+    significance: Number(row.significance),
+    status: row.status as SemanticCandidate['status'],
+    reason: String(row.reason || ''),
+    ownerTrusted: Boolean(Number(row.owner_trusted ?? 0)),
+    derived: Boolean(Number(row.derived ?? 1)),
+    sourceSystem: String(row.source_system),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
   };
 }
 

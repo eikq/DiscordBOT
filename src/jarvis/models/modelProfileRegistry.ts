@@ -1,87 +1,92 @@
 import type { JsonCollection } from '../evolution/persistTypes';
+import { normalizeProfile, type ModelProfileSeed } from './profileNormalize';
 import type { ModelProfile } from './types';
 
+function abilities(state: ModelProfile['vision']): Pick<ModelProfile,
+  'vision' | 'toolCalling' | 'reasoning' | 'structuredOutput' | 'thai' | 'coding' | 'agent' | 'research' | 'recovery' | 'contextCapability'
+> {
+  return {
+    vision: state,
+    toolCalling: state,
+    reasoning: state,
+    structuredOutput: state,
+    thai: state,
+    coding: state,
+    agent: state,
+    research: state,
+    recovery: state,
+    contextCapability: state,
+  };
+}
+
 export function catalogModelProfiles(): ModelProfile[] {
-  return [
+  const seeds: ModelProfileSeed[] = [
     {
       id: 'local-env-llm',
       family: 'unknown',
+      provider: 'unknown',
+      engine: 'ollama-compatible',
       engineCompatibility: ['ollama-compatible'],
       local: true,
       cloud: false,
-      vision: 'unverified',
-      toolCalling: 'unverified',
-      reasoning: 'unverified',
-      structuredOutput: 'unverified',
-      thai: 'unverified',
-      coding: 'unverified',
-      agent: 'unverified',
+      ...abilities('unverified'),
       resourceRequirements: 'host-dependent; not measured in cloud',
       trustTier: 'STANDARD',
       alignmentStatus: 'unknown',
       lastLocallyVerified: null,
-      securityAuthority: false,
+      certificationState: 'UNVERIFIED',
     },
     {
       id: 'qwen38-27b-aligned',
       family: 'qwen3.8',
+      provider: 'ollama',
+      engine: 'ollama-compatible',
       engineCompatibility: ['ollama-compatible'],
       local: true,
       cloud: false,
       quantization: 'unknown-until-local-discovery',
       contextTokens: undefined,
-      vision: 'unverified',
-      toolCalling: 'unverified',
-      reasoning: 'unverified',
-      structuredOutput: 'unverified',
-      thai: 'unverified',
-      coding: 'unverified',
-      agent: 'unverified',
+      ...abilities('unverified'),
       resourceRequirements: 'large local GPU; BLOCKED_LOCAL_ACCEPTANCE',
       trustTier: 'EXPERIMENTAL',
       alignmentStatus: 'aligned_unverified',
       lastLocallyVerified: null,
-      securityAuthority: false,
+      certificationState: 'BLOCKED_LOCAL_ACCEPTANCE',
     },
     {
       id: 'qwen38-27b-uncensored',
       family: 'qwen3.8',
+      provider: 'ollama',
+      engine: 'ollama-compatible',
       engineCompatibility: ['ollama-compatible'],
       local: true,
       cloud: false,
-      vision: 'unverified',
-      toolCalling: 'unverified',
-      reasoning: 'unverified',
-      structuredOutput: 'unverified',
-      thai: 'unverified',
-      coding: 'unverified',
-      agent: 'unverified',
+      ...abilities('unverified'),
       resourceRequirements: 'large local GPU; BLOCKED_LOCAL_ACCEPTANCE',
       trustTier: 'RESTRICTED',
       alignmentStatus: 'abliterated_unverified',
       lastLocallyVerified: null,
-      securityAuthority: false,
+      certificationState: 'BLOCKED_LOCAL_ACCEPTANCE',
     },
     {
       id: 'cloud-fixture-chat',
       family: 'fixture',
+      provider: 'fixture',
+      engine: 'in-process-fixture',
       engineCompatibility: ['in-process-fixture'],
       local: false,
       cloud: false,
-      vision: 'fixture_only',
-      toolCalling: 'fixture_only',
-      reasoning: 'fixture_only',
-      structuredOutput: 'fixture_only',
-      thai: 'fixture_only',
-      coding: 'fixture_only',
-      agent: 'fixture_only',
+      ...abilities('fixture_only'),
+      latencyEvidence: { source: 'fixture_only' },
+      throughputEvidence: { source: 'unverified' },
       resourceRequirements: 'none',
       trustTier: 'STANDARD',
       alignmentStatus: 'unknown',
       lastLocallyVerified: null,
-      securityAuthority: false,
+      certificationState: 'FIXTURE_ONLY',
     },
   ];
+  return seeds.map(seed => normalizeProfile(seed));
 }
 
 export function modelMayNotAuthorize(_profile: ModelProfile): true {
@@ -89,7 +94,11 @@ export function modelMayNotAuthorize(_profile: ModelProfile): true {
 }
 
 export function restrictedHasNoSecurityAuthority(profile: ModelProfile): boolean {
-  return profile.securityAuthority === false && (profile.trustTier !== 'RESTRICTED' || profile.securityAuthority === false);
+  return profile.securityAuthority === false;
+}
+
+export function neverAutoSelectRestricted(profile: ModelProfile): boolean {
+  return profile.trustTier === 'RESTRICTED';
 }
 
 export class ModelProfileRegistry {
@@ -113,8 +122,15 @@ export class ModelProfileRegistry {
   public restricted(): ModelProfile[] {
     return this.list().filter(item => item.trustTier === 'RESTRICTED');
   }
+
+  public setAvailable(id: string, available: boolean): ModelProfile | undefined {
+    const item = this.items.get(id);
+    if (!item) return undefined;
+    item.available = available;
+    return { ...item };
+  }
 }
 
-function freezeProfile(profile: ModelProfile): ModelProfile {
-  return { ...profile, securityAuthority: false };
+function freezeProfile(profile: ModelProfileSeed | ModelProfile): ModelProfile {
+  return { ...normalizeProfile(profile), securityAuthority: false };
 }

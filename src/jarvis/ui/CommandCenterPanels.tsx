@@ -1,6 +1,7 @@
 import { sourceGraphLayout } from './operationsView';
 import type { CommandCenterClientSnapshot } from '../standalone/commandCenterView';
 import type { DemoScenarioId } from '../standalone/commandCenterHttp';
+import { boundedRecentTasks, presentDevices, presentIntelligence } from './commandCenterV2';
 
 const DEMOS: Array<{ id: DemoScenarioId; label: string }> = [
   { id: 'research', label: 'Research' },
@@ -9,7 +10,7 @@ const DEMOS: Array<{ id: DemoScenarioId; label: string }> = [
   { id: 'monitoring', label: 'Monitor' },
 ];
 
-type Props = {
+export type CommandCenterPanelProps = {
   snapshot: CommandCenterClientSnapshot | null;
   domains: string[];
   busy: boolean;
@@ -21,21 +22,20 @@ type Props = {
   onNight: () => void;
 };
 
-export default function CommandCenterPanels({
+export function OperationsPanel({
   snapshot,
-  domains,
   busy,
   onDemo,
   onCancel,
   onGrant,
-  onSimulation,
   onRunTask,
   onNight,
-}: Props) {
-  const graph = sourceGraphLayout(domains);
+}: Omit<CommandCenterPanelProps, 'domains' | 'onSimulation'>) {
   const simulation = Boolean(snapshot?.simulationMode || snapshot?.task?.simulated);
   const inspect = snapshot?.task ?? snapshot?.lastTask ?? null;
   const liveTask = Boolean(snapshot?.task);
+  const recent = boundedRecentTasks(snapshot?.recentTasks);
+  const active = inspect?.steps.find(step => step.state === 'active' || step.state === 'waiting');
   return (
     <>
       <section className="jcc-block">
@@ -62,7 +62,14 @@ export default function CommandCenterPanels({
               {` · ${inspect.id}`}
               {inspect.verification ? ` · ${inspect.verification}` : inspect.outcome ? ` · ${inspect.outcome}` : ''}
             </p>
-            <ol className="jcc-ops">
+            {active ? (
+              <p className="jcc-hint">
+                Active step {active.index} {active.title}
+                {active.capability ? ` · ${active.capability}` : ''}
+              </p>
+            ) : null}
+            <h3 className="jcc-subhead">DAG</h3>
+            <ol className="jcc-ops" aria-label="Task DAG">
               {inspect.steps.map(step => (
                 <li key={step.id} className={`jcc-ops__step is-${step.state}`}>
                   <em>{step.index}</em>
@@ -128,116 +135,83 @@ export default function CommandCenterPanels({
       </section>
 
       <section className="jcc-block">
-        <h2>Evolution</h2>
-        <dl className="jcc-kv">
-          <div><dt>Experiences</dt><dd>{snapshot?.evolution.experiences ?? 0}</dd></div>
-          <div><dt>Reflections</dt><dd>{snapshot?.evolution.reflections ?? 0}</dd></div>
-          <div><dt>Skills</dt><dd>{snapshot?.evolution.skills ?? 0}</dd></div>
-          <div><dt>Failures</dt><dd>{snapshot?.evolution.failures ?? 0}</dd></div>
-        </dl>
-        <p className="jcc-hint">
-          Night {snapshot?.evolution.night.status || 'idle'}
-          {snapshot?.evolution.night.stage ? ` · ${snapshot.evolution.night.stage}` : ''}
-          {snapshot?.evolution.night.pausedFor ? ` · paused for ${snapshot.evolution.night.pausedFor}` : ''}
-          {snapshot?.evolution.night.experiencesProcessed
-            ? ` · ${snapshot.evolution.night.experiencesProcessed} digested`
-            : ''}
-        </p>
-        <p>
-          <button type="button" className="jcc-ghost" disabled={busy} onClick={onNight}>Night cycle</button>
-        </p>
-        {(snapshot?.evolution.selfModel.length ?? 0) === 0 ? (
-          <p className="jcc-empty">INSUFFICIENT DATA — no capability trend yet.</p>
+        <h2>Recent completed tasks</h2>
+        {recent.length === 0 ? (
+          <p className="jcc-empty">No recent tasks in this bounded window.</p>
         ) : (
-          <ul className="jcc-meters">
-            {snapshot?.evolution.selfModel.map(item => (
-              <li key={item.label}>
-                <span>{item.label}</span>
-                <div className="jcc-meter">{item.pct === null ? null : <i style={{ width: `${item.pct}%` }} />}</div>
-                <em>{item.text}</em>
-              </li>
-            ))}
-          </ul>
-        )}
-        {snapshot?.evolution.goals[0] ? <p className="jcc-hint">Goal: {snapshot.evolution.goals[0]}</p> : null}
-        {snapshot?.evolution.lessons[0] ? <p className="jcc-hint">Lesson: {snapshot.evolution.lessons[0]}</p> : null}
-        <p className="jcc-hint">
-          Model adaptation registry-only
-          {snapshot?.evolution.modelAdaptation
-            ? ` · ${snapshot.evolution.modelAdaptation.candidates} candidates · trained=${snapshot.evolution.modelAdaptation.trained}`
-            : ' · no LoRA training'}
-        </p>
-        {snapshot?.evolution.graph.empty ? (
-          <p className="jcc-empty">Fluctlight is empty until a real experience is recorded.</p>
-        ) : (
-          <p className="jcc-hint">
-            Fluctlight {snapshot?.evolution.graph.nodes ?? 0} nodes · {snapshot?.evolution.graph.edges ?? 0} edges
-          </p>
-        )}
-        {(snapshot?.evolution.benchmarks.length ?? 0) > 0 ? (
-          <p className="jcc-hint">
-            Benchmarks {snapshot?.evolution.benchmarks.filter(item => item.passed).length}/{snapshot?.evolution.benchmarks.length} passed
-          </p>
-        ) : (
-          <p className="jcc-empty">No benchmark runs yet.</p>
-        )}
-        {(snapshot?.evolution.candidates.length ?? 0) > 0 ? (
           <ul className="jcc-evidence">
-            {snapshot?.evolution.candidates.map(item => (
+            {recent.map(item => (
               <li key={item.id}>
                 <code>{item.status}</code>
-                <span>{item.hypothesis}</span>
+                <span>{item.objective}</span>
                 {item.simulated ? <small>SIMULATION</small> : null}
               </li>
             ))}
           </ul>
-        ) : null}
-        <p className="jcc-hint">Production promotion is owner-gated and currently denied.</p>
+        )}
+        <p className="jcc-hint">History is bounded to the last {recent.length || 5} tasks.</p>
       </section>
 
       <section className="jcc-block">
+        <h2>Night cycle</h2>
+        <p className="jcc-hint">
+          Night {snapshot?.evolution.night.status || 'idle'}
+          {snapshot?.evolution.night.v2Stage ? ` · ${snapshot.evolution.night.v2Stage}` : ''}
+          {snapshot?.evolution.night.stage ? ` · ${snapshot.evolution.night.stage}` : ''}
+          {snapshot?.evolution.night.pausedFor ? ` · ${snapshot.evolution.night.pauseReason === 'yielded' ? 'yielded' : 'paused'} for ${snapshot.evolution.night.pausedFor}` : ''}
+        </p>
+        <p>
+          <button type="button" className="jcc-ghost" disabled={busy} onClick={onNight}>Night cycle</button>
+        </p>
+      </section>
+    </>
+  );
+}
+
+export function IntelligencePanel({ snapshot }: Pick<CommandCenterPanelProps, 'snapshot'>) {
+  const intel = presentIntelligence(snapshot);
+  return (
+    <>
+      <section className="jcc-block">
         <h2>Intelligence</h2>
         <dl className="jcc-kv">
-          <div><dt>Traces</dt><dd>{snapshot?.intelligence?.traces.count ?? 0}</dd></div>
-          <div><dt>Spec</dt><dd>{snapshot?.intelligence?.runtimeSpec.id ?? 'spec_baseline_v1'}</dd></div>
+          <div><dt>Traces</dt><dd>{intel.traces.count}</dd></div>
+          <div><dt>Spec</dt><dd>{intel.runtimeSpec?.id ?? 'spec_baseline_v1'}</dd></div>
           <div>
             <dt>Analyzer</dt>
             <dd>{snapshot?.intelligence?.analyzer.status ?? 'INSUFFICIENT_DATA'}</dd>
           </div>
         </dl>
-        {snapshot?.intelligence?.traces.lastRoute ? (
+        {intel.traces.lastRoute ? (
           <p className="jcc-hint">
-            Last route {snapshot.intelligence.traces.lastRoute}
-            {snapshot.intelligence.traces.lastInput ? ` · ${snapshot.intelligence.traces.lastInput}` : ''}
+            Last route {intel.traces.lastRoute}
+            {intel.traces.lastInput ? ` · ${intel.traces.lastInput}` : ''}
+            {intel.traces.lastModelProfileId ? ` · ${intel.traces.lastModelProfileId}` : ''}
           </p>
         ) : (
           <p className="jcc-empty">No operational traces yet.</p>
         )}
-        {snapshot?.intelligence?.analyzer.status === 'INSUFFICIENT_DATA' ? (
-          <p className="jcc-empty">{snapshot.intelligence?.analyzer.reason || 'INSUFFICIENT_DATA'}</p>
+        {intel.insufficientData ? (
+          <p className="jcc-empty">{intel.insufficientLabel}</p>
         ) : (
           <p className="jcc-hint">
-            Efficiency {snapshot?.intelligence?.efficiency.status}
-            {snapshot?.intelligence?.efficiency.p50Ms != null ? ` · p50 ${Math.round(snapshot.intelligence.efficiency.p50Ms)}ms` : ''}
-            {snapshot?.intelligence?.efficiency.p95Ms != null ? ` · p95 ${Math.round(snapshot.intelligence.efficiency.p95Ms)}ms` : ''}
+            Efficiency {intel.efficiency.status}
+            {intel.efficiency.p50Ms != null ? ` · p50 ${Math.round(intel.efficiency.p50Ms)}ms` : ''}
+            {intel.efficiency.p95Ms != null ? ` · p95 ${Math.round(intel.efficiency.p95Ms)}ms` : ''}
           </p>
         )}
         <p className="jcc-hint">
-          Models {(snapshot?.intelligence?.models ?? []).map(item => `${item.id}:${item.trustTier}`).join(' · ') || 'none'}
+          Models {intel.models.map(item => `${item.id}:${item.trustTier}`).join(' · ') || 'none'}
         </p>
         <p className="jcc-hint">RESTRICTED models have no security authority.</p>
-        {(snapshot?.intelligence?.certifications.length ?? 0) > 0 ? (
-          <p className="jcc-hint">
-            Certification {snapshot?.intelligence?.certifications[0]?.status}
-            {' · '}
-            {snapshot?.intelligence?.certifications[0]?.passed}/{snapshot?.intelligence?.certifications[0]?.total}
-          </p>
+        {intel.certifications.length > 0 ? (
+          <p className="jcc-hint">Certification {intel.certificationLabel}</p>
         ) : (
-          <p className="jcc-empty">Model certification is fixture-only until local acceptance.</p>
+          <p className="jcc-empty">INSUFFICIENT_DATA — model certification is fixture-only until local acceptance.</p>
         )}
-        {(snapshot?.intelligence?.specCandidates.length ?? 0) > 0 ? (
+        {intel.candidates.length > 0 ? (
           <ul className="jcc-evidence">
-            {snapshot?.intelligence?.specCandidates.map(item => (
+            {intel.candidates.map(item => (
               <li key={item.id}>
                 <code>{item.status}</code>
                 <span>{item.hypothesis}</span>
@@ -261,39 +235,76 @@ export default function CommandCenterPanels({
           <p className="jcc-empty">No artifact tasks. Media provider is simulated; publish stays owner-gated.</p>
         )}
         <p className="jcc-hint">
+          Benchmarks {intel.benchmarkLabel}
+        </p>
+        <p className="jcc-hint">
           Schedulers: reminders, night cycle, monitor. Jobs are not permissions.
         </p>
+        {snapshot?.proactive ? (
+          <p className="jcc-hint">
+            Proactive {snapshot.proactive.currentPriority}
+            {snapshot.proactive.jobs.length > 0
+              ? ` · ${snapshot.proactive.jobs.map(job => `${job.kind}:${job.state}`).join(' · ')}`
+              : ''}
+            {' · notice only'}
+          </p>
+        ) : null}
       </section>
 
       <section className="jcc-block">
-        <h2>Source graph</h2>
-        {graph.length === 0 ? (
-          <p className="jcc-empty">No research domains this session.</p>
+        <h2>Evolution</h2>
+        <dl className="jcc-kv">
+          <div><dt>Experiences</dt><dd>{snapshot?.evolution.experiences ?? 0}</dd></div>
+          <div><dt>Reflections</dt><dd>{snapshot?.evolution.reflections ?? 0}</dd></div>
+          <div><dt>Skills</dt><dd>{snapshot?.evolution.skills ?? 0}</dd></div>
+          <div><dt>Failures</dt><dd>{snapshot?.evolution.failures ?? 0}</dd></div>
+        </dl>
+        {(snapshot?.evolution.selfModel.length ?? 0) === 0 ? (
+          <p className="jcc-empty">INSUFFICIENT DATA — no capability trend yet.</p>
         ) : (
-          <svg className="jcc-source-graph" viewBox="0 0 100 100" role="img" aria-label="Research source domains">
-            <circle cx="50" cy="50" r="4" className="jcc-source-graph__core" />
-            {graph.map(node => (
-              <g key={node.domain}>
-                <line x1="50" y1="50" x2={node.x} y2={node.y} className="jcc-source-graph__edge" />
-                <circle cx={node.x} cy={node.y} r="3.2" className="jcc-source-graph__node" />
-                <text x={node.x} y={node.y + 7} textAnchor="middle">{node.domain}</text>
-              </g>
+          <ul className="jcc-meters">
+            {snapshot?.evolution.selfModel.map(item => (
+              <li key={item.label}>
+                <span>{item.label}</span>
+                <div className="jcc-meter">{item.pct === null ? null : <i style={{ width: `${item.pct}%` }} />}</div>
+                <em>{item.text}</em>
+              </li>
             ))}
-          </svg>
+          </ul>
         )}
+        {snapshot?.evolution.goals[0] ? <p className="jcc-hint">Goal: {snapshot.evolution.goals[0]}</p> : null}
+        {snapshot?.evolution.lessons[0] ? <p className="jcc-hint">Lesson: {snapshot.evolution.lessons[0]}</p> : null}
+        <p className="jcc-hint">Production promotion is owner-gated and currently denied.</p>
       </section>
+    </>
+  );
+}
 
+export function DevicesPanel({
+  snapshot,
+  busy,
+  onSimulation,
+}: Pick<CommandCenterPanelProps, 'snapshot' | 'busy' | 'onSimulation'>) {
+  const devices = presentDevices(snapshot);
+  return (
+    <>
       <section className="jcc-block">
         <h2>Devices</h2>
-        {(snapshot?.devices.length ?? 0) === 0 ? (
+        {devices.empty ? (
           <p className="jcc-empty">No device providers attached.</p>
         ) : (
           <ul className="jcc-evidence">
-            {snapshot?.devices.map(device => (
+            {devices.items.map(device => (
               <li key={device.id}>
                 <code>{device.node}</code>
-                <span>{device.label} · {device.kind}</span>
-                <small>{device.simulated ? 'SIMULATION · VIEW only' : device.status}</small>
+                <span>{device.label} · {device.kind} · {device.connectivity}</span>
+                <small>
+                  {device.runtime}
+                  {' · '}
+                  {device.access} only
+                  {' · '}
+                  {device.permissionBoundary}
+                </small>
               </li>
             ))}
           </ul>
@@ -315,6 +326,15 @@ export default function CommandCenterPanels({
             {snapshot.vision.simulated ? ' · SIMULATION' : ''}
           </p>
         ) : null}
+        {snapshot?.perception ? (
+          <p className="jcc-hint">
+            Perception {snapshot.perception.label} · {snapshot.perception.devices} devices
+            {snapshot.perception.liveCamera ? '' : ' · no live camera'}
+            {snapshot.perception.visionAuthoritative ? '' : ' · vision untrusted'}
+            {snapshot.perception.lastObservation ? ` · ${snapshot.perception.lastObservation}` : ''}
+          </p>
+        ) : null}
+        <p className="jcc-hint">SEE != CLICK. VIEW != CONTROL. CONTROL != ADMIN.</p>
       </section>
 
       <section className="jcc-block">
@@ -334,6 +354,40 @@ export default function CommandCenterPanels({
           Simulation mode
         </label>
       </section>
+    </>
+  );
+}
+
+export function SourceGraphPanel({ domains }: Pick<CommandCenterPanelProps, 'domains'>) {
+  const graph = sourceGraphLayout(domains);
+  return (
+    <section className="jcc-block">
+      <h2>Source graph</h2>
+      {graph.length === 0 ? (
+        <p className="jcc-empty">No research domains this session.</p>
+      ) : (
+        <svg className="jcc-source-graph" viewBox="0 0 100 100" role="img" aria-label="Research source domains">
+          <circle cx="50" cy="50" r="4" className="jcc-source-graph__core" />
+          {graph.map(node => (
+            <g key={node.domain}>
+              <line x1="50" y1="50" x2={node.x} y2={node.y} className="jcc-source-graph__edge" />
+              <circle cx={node.x} cy={node.y} r="3.2" className="jcc-source-graph__node" />
+              <text x={node.x} y={node.y + 7} textAnchor="middle">{node.domain}</text>
+            </g>
+          ))}
+        </svg>
+      )}
+    </section>
+  );
+}
+
+export default function CommandCenterPanels(props: CommandCenterPanelProps) {
+  return (
+    <>
+      <OperationsPanel {...props} />
+      <IntelligencePanel snapshot={props.snapshot} />
+      <SourceGraphPanel domains={props.domains} />
+      <DevicesPanel snapshot={props.snapshot} busy={props.busy} onSimulation={props.onSimulation} />
     </>
   );
 }

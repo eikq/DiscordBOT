@@ -1,4 +1,6 @@
-import { MAX_FETCHES, MAX_RESEARCH_ROUNDS, MAX_SEARCH_QUERIES } from './constants';
+import { MAX_RESEARCH_ROUNDS } from './constants';
+import { planStructuredResearch, type StructuredResearchPlan } from './queryPlan';
+import type { DepthBudget, PlannedQuery } from './types';
 
 export type ResearchPlan = {
   queries: string[];
@@ -8,27 +10,37 @@ export type ResearchPlan = {
   freshness: 'any' | 'latest';
   cancelled?: boolean;
   pageBudget?: number;
+  queryPlan?: PlannedQuery[];
+  budget?: DepthBudget;
+  providerLimit?: number;
 };
 
-export function planResearch(query: string, officialOnly: boolean, freshness: 'any' | 'latest'): ResearchPlan {
-  const topic = query.trim();
-  const queries = [topic];
-  if (officialOnly) queries.push(`${topic} official site`);
-  if (freshness === 'latest') queries.push(`${topic} latest`, `${topic} 2026`);
-  else queries.push(`${topic} documentation`);
+export function toResearchPlan(plan: StructuredResearchPlan): ResearchPlan {
   return {
-    queries: [...new Set(queries.filter(Boolean))].slice(0, MAX_SEARCH_QUERIES),
-    maxFetches: MAX_FETCHES,
-    maxRounds: MAX_RESEARCH_ROUNDS,
-    officialOnly,
-    freshness,
+    queries: plan.queries.map(item => item.text),
+    maxFetches: plan.budget.maxFetches,
+    maxRounds: plan.budget.maxRounds,
+    officialOnly: plan.officialOnly,
+    freshness: plan.freshness,
     cancelled: false,
-    pageBudget: MAX_FETCHES,
+    pageBudget: plan.budget.maxFetches,
+    queryPlan: plan.queries,
+    budget: plan.budget,
+    providerLimit: plan.budget.providerLimit,
   };
 }
 
-export function nextRoundQuery(topic: string, round: number): string | null {
-  if (round >= MAX_RESEARCH_ROUNDS) return null;
+export function planResearch(query: string, officialOnly: boolean, freshness: 'any' | 'latest'): ResearchPlan {
+  return toResearchPlan(planStructuredResearch({
+    query,
+    depth: 'standard',
+    officialOnly,
+    freshness,
+  }));
+}
+
+export function nextRoundQuery(topic: string, round: number, maxRounds = MAX_RESEARCH_ROUNDS): string | null {
+  if (round >= maxRounds) return null;
   if (round === 1) return `${topic} news`;
   return null;
 }

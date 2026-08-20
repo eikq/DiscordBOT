@@ -34,6 +34,7 @@ export type SemanticHit = {
 export function fuseMemoryRetrieval(input: {
   lexical: RetrievedMemory[];
   semantic?: SemanticHit[];
+  canonicalById?: Map<string, RetrievedMemory>;
   topK?: number;
 }): FusionResult {
   const topK = Math.max(1, Math.min(input.topK ?? 8, 16));
@@ -58,16 +59,17 @@ export function fuseMemoryRetrieval(input: {
     scores.set(id, { score: rrf(rank), channel: 'lexical', text: item.text });
   }
   semantic.forEach((hit, rank) => {
-    const lexical = lexicalById.get(hit.canonicalId)?.item;
-    const text = lexical?.text ?? hit.text ?? '';
-    if (!text) return;
+    const sqlite = lexicalById.get(hit.canonicalId)?.item
+      ?? input.canonicalById?.get(hit.canonicalId);
+    if (!sqlite) return;
     const current = scores.get(hit.canonicalId);
     const add = rrf(rank);
     if (current) {
       current.score += add;
       current.channel = 'both';
-    } else if (lexical) {
-      scores.set(hit.canonicalId, { score: add, channel: 'semantic', text: lexical.text });
+      current.text = sqlite.text;
+    } else {
+      scores.set(hit.canonicalId, { score: add, channel: 'semantic', text: sqlite.text });
     }
   });
   const items = [...scores.entries()]

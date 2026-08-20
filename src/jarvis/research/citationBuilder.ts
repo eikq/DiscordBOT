@@ -1,12 +1,8 @@
+import { sanitizeCitations } from './citationSafety';
 import type { ResearchCitation, SourceRecord } from './types';
 
 export function buildCitations(sources: SourceRecord[]): ResearchCitation[] {
-  return sources.map((source, index) => ({
-    sourceId: source.sourceId,
-    label: `[${index + 1}] ${source.domain}`,
-    url: source.canonicalUrl || source.url,
-    sourceClass: source.sourceClass,
-  }));
+  return sanitizeCitations(sources);
 }
 
 export function sourceRefs(sources: SourceRecord[]): string[] {

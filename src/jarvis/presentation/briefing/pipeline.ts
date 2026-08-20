@@ -1,5 +1,5 @@
 import { buildPresentationModel } from './model';
-import { scaleNarrationToSpeech } from './narration';
+import { applySpokenDuration, spokenSequenceFrom } from './playback';
 import { planPresentation, shouldBuildRichPresentation } from './planner';
 import { sanitizePlannedPresentation } from './sanitize';
 import type { PlannedPresentation, PresentationInput } from './types';
@@ -17,16 +17,16 @@ export function runPresentationPipeline(
   if (!shouldBuildRichPresentation(plan)) {
     return { density: 'plain' };
   }
-  const model = buildPresentationModel(input, plan, { reducedMotion: options.reducedMotion });
+  let model = buildPresentationModel(input, plan, { reducedMotion: options.reducedMotion });
   if (options.spokenMs) {
-    model.narrationSegments = scaleNarrationToSpeech(model.narrationSegments, options.spokenMs);
+    model = applySpokenDuration(model, options.spokenMs, options.reducedMotion);
   }
   return sanitizePlannedPresentation(model);
 }
 
 export function spokenTextFor(planned: PlannedPresentation, fallback: string): string {
   if (planned.density === 'plain') return fallback;
-  return planned.spokenSummary || fallback;
+  return spokenSequenceFrom(planned) || planned.spokenSummary || fallback;
 }
 
 export function isRichPresentation(value: PlannedPresentation | undefined): value is Exclude<PlannedPresentation, { density: 'plain' }> {

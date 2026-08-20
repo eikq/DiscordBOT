@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { THAI_COMBINING_FIXTURE } from '../i18n/thaiIntegrity';
 import { routeJarvisRequest } from '../intent/requestRouter';
 import type { JsonCollection } from '../evolution/persistTypes';
-import { CERT_CATEGORIES, type CertificationResult, type CertificationRun, type CertCategory } from './types';
+import { CERT_CATEGORIES, type CertificationResult, type CertificationRun, type CertificationStatus, type CertCategory } from './types';
 
 type Fixture = {
   category: CertCategory;
@@ -84,7 +84,7 @@ export class CapabilityCertificationBank {
     private readonly persist?: JsonCollection<CertificationRun>,
   ) {
     this.now = now;
-    if (persist) this.runs.push(...persist.load());
+    if (persist) this.runs.push(...persist.load().map(normalizeCertificationRun));
   }
 
   public runFixtures(modelProfileId: string): CertificationRun {
@@ -100,6 +100,7 @@ export class CapabilityCertificationBank {
       modelProfileId,
       status: 'FIXTURE_ONLY',
       liveOllama: false,
+      liveVerified: false,
       results,
     };
     this.runs.push(run);
@@ -126,4 +127,45 @@ export class CapabilityCertificationBank {
 
 export function realModelCertificationBlocked(): 'BLOCKED_LOCAL_ACCEPTANCE' {
   return 'BLOCKED_LOCAL_ACCEPTANCE';
+}
+
+export function cloudCertificationLabel(run?: { status?: string }): 'FIXTURE_ONLY' | 'CLOUD_VERIFIED' {
+  return run?.status === 'CLOUD_VERIFIED' ? 'CLOUD_VERIFIED' : 'FIXTURE_ONLY';
+}
+
+export function certificationIsLiveVerified(_run?: { status?: string; liveVerified?: boolean }): false {
+  return false;
+}
+
+export function normalizeCertificationRun(run: Partial<CertificationRun> & {
+  id: string;
+  modelProfileId: string;
+}): CertificationRun {
+  return {
+    id: run.id,
+    at: run.at ?? new Date(0).toISOString(),
+    modelProfileId: run.modelProfileId,
+    status: cloudSafeStatus(run.status),
+    liveOllama: false,
+    liveVerified: false,
+    results: (run.results ?? []).map(item => ({
+      category: item.category,
+      passed: Boolean(item.passed),
+      detail: item.detail,
+      simulated: true,
+    })),
+  };
+}
+
+function cloudSafeStatus(status: unknown): CertificationStatus {
+  if (status === 'LIVE_VERIFIED') return 'FIXTURE_ONLY';
+  if (
+    status === 'CLOUD_VERIFIED'
+    || status === 'BLOCKED_LOCAL_ACCEPTANCE'
+    || status === 'CERTIFIED'
+    || status === 'FIXTURE_ONLY'
+  ) {
+    return status;
+  }
+  return 'FIXTURE_ONLY';
 }

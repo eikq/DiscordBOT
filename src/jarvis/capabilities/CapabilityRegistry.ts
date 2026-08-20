@@ -1,4 +1,5 @@
 import type { ToolResultRef } from '../core/types';
+import { capabilityPresentationFacts } from './capabilityFacts';
 import type {
   CapabilityAvailabilityState,
   CapabilityDescriptor,
@@ -91,11 +92,15 @@ export function capabilityResultToToolRef(result: CapabilityResult): ToolResultR
       : result.status === 'rejected'
         ? (result.error || 'denied')
         : (result.error || result.status);
+  const facts = capabilityPresentationFacts(result.capabilityId, result.structured, result.content);
   return {
     toolName: result.capabilityId,
     status,
     ...(result.sourceUrls.length > 0 ? { sourceUrls: result.sourceUrls } : {}),
     summary,
+    ...(facts?.systemSnapshot || facts?.displays
+      ? { facts: { ...(facts.systemSnapshot ? { systemSnapshot: facts.systemSnapshot } : {}), ...(facts.displays ? { displays: facts.displays } : {}) } }
+      : {}),
   };
 }
 

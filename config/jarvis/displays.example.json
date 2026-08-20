@@ -2,13 +2,13 @@
   "displays": [
     {
       "id": "\\\\.\\DISPLAY1",
-      "name": "notebook",
-      "aliases": ["laptop", "จอโน้ตบุ๊ก"]
+      "name": "example-notebook",
+      "aliases": ["notebook", "laptop", "จอโน้ตบุ๊ก"]
     },
     {
-      "id": "\\\\.\\DISPLAY2",
-      "name": "external",
-      "aliases": ["studio", "จอภายนอก"]
+      "id": "\\\\.\\DISPLAY-EXAMPLE-SECOND",
+      "name": "example-main",
+      "aliases": ["main", "จอหลัก"]
     }
   ]
 }

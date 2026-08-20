@@ -27,6 +27,8 @@ export type JarvisTraceRecord = {
   sessionId?: string;
   turnId?: string;
   taskId?: string;
+  stepId?: string;
+  presentationId?: string;
   route?: string;
   modelProfileId?: string;
   engine?: string;
@@ -47,6 +49,10 @@ export type JarvisTraceRecord = {
   success?: boolean;
   /** User-visible input. Not reasoning. Combining marks must be preserved. */
   inputText?: string;
+  /** Workload class used for model routing. Observable policy, not hidden reasoning. */
+  workload?: string;
+  fallbackFrom?: string;
+  fallbackReason?: string;
 };
 
 export const FORBIDDEN_TRACE_KEYS = [
@@ -67,4 +73,16 @@ export const FORBIDDEN_TRACE_KEYS = [
   'token',
   'cookie',
   'cookies',
+  'authorization',
+  'apiKey',
+  'api_key',
+  'dotenv',
+  'envFile',
+  'rvcModel',
+  'rvc',
+  'voiceSecret',
+  'consentToken',
+  'rawAudio',
+  'datasetPath',
+  'wavPath',
 ] as const;

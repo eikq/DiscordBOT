@@ -52,6 +52,21 @@ cookies.txt
 # Local MCP registration may later contain tokens
 .cursor/mcp.json
 
+# Local display aliases (owner machine names). Keep displays.example.json.
+config/jarvis/displays.json
+
+# Model weights / private media (never source-control)
+*.gguf
+*.ggml
+*.safetensors
+*.pth
+*.pt
+*.onnx
+*.ckpt
+*.pem
+*.key
+*.whl
+
 # Accidental root dumps (handoff packs / screenshots)
 /*.png
 /*.zip

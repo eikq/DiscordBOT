@@ -1,4 +1,5 @@
 import type { PresentationDensity, PresentationInput, PresentationMode } from './types';
+import { shouldAttachMemoryProvenance } from './memoryProvenance';
 
 export type PresentationPlan = {
   density: PresentationDensity;
@@ -75,6 +76,10 @@ export function planPresentation(input: PresentationInput): PresentationPlan {
     return { density: 'rich', mode: 'report', reason: 'structured_evidence' };
   }
 
+  if (shouldAttachMemoryProvenance(input)) {
+    return { density: 'rich', mode: 'report', reason: 'memory_provenance' };
+  }
+
   return { density: 'plain', mode: 'summary', reason: 'lightweight_reply' };
 }
 
@@ -84,8 +89,8 @@ export function shouldBuildRichPresentation(plan: PresentationPlan): boolean {
 
 function isResearchTurn(input: PresentationInput): boolean {
   const route = String(input.route || '').toUpperCase();
-  if (input.capabilityId === 'research.search' || route === 'RESEARCH') return true;
-  if (input.capabilityId && input.capabilityId !== 'research.search') return false;
+  if (input.capabilityId?.startsWith('research.') || route === 'RESEARCH') return true;
+  if (input.capabilityId && !input.capabilityId.startsWith('research.')) return false;
   if (route === 'CAPABILITY' || route === 'CONVERSATION') return false;
   return hasResearchBody(input);
 }
@@ -102,7 +107,10 @@ function hasStructuredEvidence(input: PresentationInput): boolean {
   return hasResearchBody(input)
     || Boolean(input.workOutcome?.evidence?.length)
     || Boolean(input.workOutcome?.observations?.length)
-    || Boolean(input.systemSnapshot?.parts?.length);
+    || Boolean(input.systemSnapshot?.parts?.length)
+    || Boolean(input.systemSnapshot?.cpu || input.systemSnapshot?.ram || input.systemSnapshot?.disk || input.systemSnapshot?.gpu)
+    || Boolean(typeof input.displays?.count === 'number' && input.displays.count > 0)
+    || shouldAttachMemoryProvenance(input);
 }
 
 function isDesktopPresenceCapability(id?: string): boolean {

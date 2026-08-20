@@ -22,16 +22,25 @@ Hidden reasoning keys are stripped. Secrets are redacted.
 
 ## Narration + TTS sync
 
-`spokenSummary` is a short presenter script. `VoiceOutputRouter` still speaks
-only when `speak: true`. If TTS duration is known, `scaleNarrationToSpeech`
-stretches segment estimates. Otherwise segments use ~150 wpm estimates.
-There is no fake word-level timing.
+Spoken text is a concise sequence (overview → clipped section lines → finish),
+not the raw document. `VoiceOutputRouter` still speaks only when `speak: true`.
+Client `audio.duration` / `ontimeupdate` drive `spokenAtMs` and
+`scaleNarrationToSpeech`. Pause is explicitly unsupported for Edge-TTS.
+There is no fake word-level timing. Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit).
+Live Edge-TTS sequential briefing: NEEDS_LOCAL_VERIFY.
 
 ## Motion
 
-Each narration segment can highlight/focus/scroll/spotlight a section, card,
-source, or recommendation. Pulse and zoom are skipped under reduced motion.
-No fabricated data animations.
+Motion follows the active narration segment (focus, sparse highlight). Pulse
+and zoom are skipped under reduced motion; static focus remains. Repeat/Back
+are presenter-local seeks and do not invoke WorkAgent.
+
+## Structured facts
+
+`system.status` and `desktop.listDisplays` attach typed facts. Diagnostic
+cards use `system.cpu` / `system.memory` / `system.disk` / `system.gpu`
+(GPU omitted when absent). Display briefings use the real count; get-window
+`count: 0` must not overwrite a list of two displays.
 
 ## Presenter Mode
 
@@ -55,7 +64,10 @@ Capabilities (ActionGate / PermissionPolicy):
 Jarvis window only. `hwnd`, `processName`, and `windowTitle` are forbidden.
 
 Fail-closed reasons: `WINDOW_UNAVAILABLE`, `DISPLAY_NOT_FOUND`,
-`PERMISSION_REQUIRED`, `UNSUPPORTED_HOST`.
+`UNKNOWN_DISPLAY`, `PERMISSION_REQUIRED`, `UNSUPPORTED_HOST`, `INVALID_TARGET`.
+
+Display matching uses greatest positive intersection area. Gaps and exclusive
+edges return `UNKNOWN_DISPLAY` instead of falling back to primary.
 
 This repo is an Express + React dashboard, not an Electron app. The lab tab
 can report `screenX/Y` + `outerWidth/Height` via `POST /api/jarvis/presence`.
@@ -73,6 +85,8 @@ one non-primary display is present.
 
 Display enumeration is not run on `/api/jarvis/status` polling.
 
-Native-shell decision: ADR-023 Proposed. Prefer a Windows helper that
-owns Jarvis HWNDs. Do not steal the browser window. See
+Native-shell decision: ADR-023 Phase 1 contracts are implemented as
+cloud-safe scaffolding (`nativeProtocol`, ownership registry, fake adapter).
+The helper is not installed. Browser host remains supported and fail-closes
+mutations with `UNSUPPORTED_HOST`. See
 `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.

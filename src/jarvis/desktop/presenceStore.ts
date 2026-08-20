@@ -1,4 +1,4 @@
-import { displayContaining } from './displayNames';
+import { displayForWindow } from './displayNames';
 import type {
   ClientWindowReport,
   DesktopHostKind,
@@ -50,7 +50,7 @@ export class JarvisPresenceStore {
       width: this.report.outerWidth,
       height: this.report.outerHeight,
     };
-    const display = displayContaining(displays, { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 });
+    const display = displayForWindow(displays, bounds);
     return {
       available: true,
       hostKind,
@@ -59,6 +59,7 @@ export class JarvisPresenceStore {
       displayName: display?.name,
       state: this.report.isMaximized ? 'maximized' : 'normal',
       source: 'client-report',
+      ...(display ? {} : { reasonCode: 'UNKNOWN_DISPLAY' as const }),
     };
   }
 }

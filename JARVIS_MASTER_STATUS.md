@@ -26,6 +26,30 @@ See `JARVIS_SECURITY_STATUS.md` for SEC/JF-014.5+ labels.
 
 Command-center SSE owner visual QA, Whonix/PRIVATE_BROWSER,
 mic, CCTV, Discord voice, live model certification, and real media pipelines
-remain **BLOCKED_LOCAL_ACCEPTANCE** (LA-002–LA-025). LA-001 local Ollama `/ask`
-(conversation, information, research via WorkAgent, bound capability) is
-**LIVE_VERIFIED** on 2026-08-20. Do not treat unit tests as live verified.
+remain **BLOCKED_LOCAL_ACCEPTANCE**. **LA-001** and **LA-002** stay **PARTIAL**
+(owner 2026-08-20). Do not mark them LIVE_VERIFIED. Cloud unit tests are not
+live QA.
+
+Presenter/Desktop Queue 01 on
+`cursor/jarvis-cloud-evolution-2026-08-20` (base `8aba6b0`):
+structured briefing facts, TTS-driven narration timeline, repeat/back,
+intersection display matching, native-helper contracts/mocks, comparison
+routing. Later queues 02–11 on the same branch are CLOUD_COMPLETE as
+software (unit). Queue 12 is the physical-machine handoff:
+`CURSOR_LOCAL_ACCEPTANCE_NEXT.md`. Labels: IMPLEMENTED + CLOUD_VERIFIED
+(unit) for Cloud software. LA-001/002 remain PARTIAL. LA-026/LA-027 remain
+PARTIAL / NATIVE_SHELL_REQUIRED. Native helper is not installed.
+
+Queue 02 Research Intelligence V2 on the same branch: structured query
+planning, depth budgets (NONE never hits providers), source quality
+metadata, claim/evidence mapping, contradictions, cache honesty,
+citation grounding, research Presenter mapping. IMPLEMENTED +
+CLOUD_VERIFIED (unit). Not LIVE_VERIFIED. Whonix/Tor
+LOCAL_VERIFY_REQUIRED.
+
+Queue 03 Canonical Memory Intelligence V2 on the same branch: SQLite
+stays canonical; schema v3 quality fields; contradiction-safe
+supersession; hybrid fusion drops orphan vectors; query-aware classes;
+bounded scored retrieval; episode→candidate learning; owner correction;
+optional Presenter provenance. Qdrant is not started. IMPLEMENTED +
+CLOUD_VERIFIED (unit) `npm run test:cloud` **541/541**. Not LIVE_VERIFIED.

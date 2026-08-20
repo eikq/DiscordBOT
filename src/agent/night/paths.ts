@@ -24,6 +24,11 @@ export function isPrivateRelative(relPosix: string, denylist: string[]): boolean
       if (base === prefix || base.startsWith(prefix + '.')) return true;
       continue;
     }
+    if (/^\*\.[A-Za-z0-9]+$/u.test(pattern)) {
+      const ext = pattern.slice(1).toLowerCase();
+      if (base.toLowerCase().endsWith(ext)) return true;
+      continue;
+    }
     if (pattern.endsWith('*/') || pattern.endsWith('*')) {
       const prefix = pattern.replace(/\*\/?$/, '');
       if (normalized === prefix.replace(/\/$/, '') || normalized.startsWith(prefix)) return true;

@@ -3,7 +3,261 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Presenter + desktop live acceptance
+## This turn — Queue 12 Final Cloud Audit and Physical-Machine Handoff
+
+Labels: IMPLEMENTED (handoff docs). Not LIVE_VERIFIED.
+No new architecture. Cloud feature queues stop here.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `dbe1c6b0e4be54384d0dae9d2cf9d55ea495d104`
+Evidence: `npx tsc --noEmit` PASS; `npm run test:cloud` **633/633**.
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Handoff: `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
+ADR: ADR-034.
+
+Cloud can no longer verify Windows displays, native HWND, Ollama/GPU,
+mic/STT/TTS/RVC, Discord, Whonix/Tor, cameras, or phones. Remaining
+work is classified; exact host tests are in the handoff document.
+Native helper is not installed. Build/install only after owner approval.
+
+Do not merge. Do not mark LIVE_VERIFIED. Do not start Queue 13+.
+STOP after this queue.
+
+## Previous — Queue 11 Full-System Cloud Integration Pass
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+Do not claim live Tor, native helper, camera, mic, STT, TTS, or GPU.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `47a1f6ca15e734c53c2f1d395e59868c97b64e1d`
+Implementation: `3768a1d25f0dd4b75e618bdeedc805ba99dcba50`
+TurnId test fix: `0d2bdd835182ed8346bdb52e8fb2626169d999f7`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-033.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_cloud_integration.test.ts` +
+`tests/jarvis_local_acceptance.test.ts` + `tests/jarvis_ops.test.ts`
+**30/30**; `npm run test:cloud` **633/633**.
+
+Fourteen offline/simulated fixtures cover conversation, research,
+diagnostics, WorkAgent permission, Presenter, memory, skills, mock
+voice interruption, simulated perception, Night review, missing native
+helper, and restricted-model non-selection. Default `turnId` is not a
+copy of `requestId`. Distinct failure codes are not collapsed.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 10 Security Hardening Pass
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+Do not claim live Tor, native helper, or host-browser verification.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `935b01bfe3d36eb6ba1819140c8d203470e13f51`
+Implementation: `a3487504f652aab4ffb30b3a3456c323781b4690`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-032.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_security_hardening.test.ts` plus existing security /
+skills / memory / perception / presenter tests **127/127**;
+`npm run test:cloud` **614/614**.
+
+LLM output is not execution. Untrusted research/web/model/vision cannot
+approve privilege, plant owner-trusted memory, or mint TRUSTED skills.
+SSRF policy now catches IPv4-mapped IPv6 after Node canonicalization.
+Native helper IPC fails closed on forged/replayed/impersonated requests.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 09 Command Center V2 unified operational interface
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+No live `/jarvis-lab` visual sign-off. Native helper is not installed.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `85a87694a0478a13f90b3a686ddbd7b850898c22`
+Implementation: `3c6f5ce19e92cbfa129404ca45d6b6b5a691670e`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-031.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_command_center_v2.test.ts` plus lab-ui / briefing /
+command-center / lab-scene tests green. Full `npm run test:cloud`
+deferred while later Cloud follow-ups are queued.
+
+Presentation-only mode shell (Assistant, Presenter, Operations, Memory,
+Intelligence, Devices). No CommandCenterRuntime rewrite. Global
+REAL/SIMULATION/DEGRADED/OFFLINE. Simulation is never live hardware.
+Owner corrections go through Ask. Intelligence uses INSUFFICIENT_DATA
+when evidence is absent.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 08 Proactive Runtime + Scheduler + Night Agent V2
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+No live GPU / timer / unattended Night coding claims.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `4b123835e3ad078c25be743da861ec3a66d032ed`
+Implementation: `c6c22ef0de4c51368d2759e73eea59d5a8268d32`
+Feat: `95a60584071a735fba016702ce3e4c5f2be384c1`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-030.
+Evidence: `npx tsc --noEmit` PASS;
+`tests/jarvis_proactive_runtime.test.ts` **9/9**. Full
+`npm run test:cloud` deferred while later Cloud follow-ups are queued.
+
+Three existing schedulers only (reminders, NightCycle, ProactiveMonitor).
+ProactiveRuntime is a coordinator, not a fourth scheduler. Background
+Night yields to higher resource priority. Notices cannot auto-act.
+`autoPromoted: false`. Mutating apply is not blindly retried.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 07 Perception, Screen, CCTV and Device Architecture
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+No live camera or device claims.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `4593b351d6a1a778ed915eeca05b994ed8312a2e`
+Implementation: `8d3753cdb20c1f101084bce4fb6ec7671c6d0404`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-029.
+Evidence: `npx tsc --noEmit` PASS;
+`tests/jarvis_perception.test.ts` **8/8**. Full `npm run test:cloud`
+deferred while later Cloud follow-ups are queued.
+
+SEE != CLICK. VIEW != CONTROL. CONTROL != ADMIN. Vision output is
+untrusted. Anomaly pipeline never auto-acts physically.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 06 Realtime Voice Interaction Architecture
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+Do not claim microphone / STT / TTS / RVC live verification.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `f63b51898778c7732ead37279babfb81d7675de3`
+Implementation: `7d3a69008bff41947105c516b16ba7d74d5987c4`
+Feat: `b8e4f4a9ae00feecfac913e1fa8612cd15e7c549`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-028.
+Evidence: `npx tsc --noEmit` PASS;
+`tests/jarvis_realtime_voice.test.ts` **13/13**. Full
+`npm run test:cloud` deferred while later Cloud follow-ups are queued.
+
+NightCycle on Command Center now pauses for `realtime_voice`. Mutating
+WorkAgent apply is not cancelled by barge-in. Persona remains
+independent from voice.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 05 Model Registry, Certification, Routing and Efficiency
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+RESTRICTED models are never auto-selected and never security authorities.
+Cloud certification is FIXTURE_ONLY. No model downloads. No live hardware
+benchmarks. SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `d0f333660a40c6f828778bf21cb5a9927d399aad`
+Implementation: `e38f27281841dc8938eeaf07890a8617d396b6c0`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-027.
+Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_models_v2.test.ts` +
+`tests/jarvis_research_addendum.test.ts` 20/20; `npm run test:cloud`
+**562/562**.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 04 Safe Evolution + Procedural Skills V2
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+SQLite remains canonical. Qdrant is not started.
+`autoPromote=false`. Jarvis cannot self-approve skill trust.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `9175ef5c4c65ec8aab7e0f0d5a40c0280e55c26b`
+Implementation: `866e843e935dcd99fb02ecf60952e78002e832da`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-026.
+Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_skills_v2.test.ts`
+green with related evolution tests; `npm run test:cloud` **553/553**.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 03 Canonical Memory Intelligence V2
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+SQLite remains canonical. Qdrant is not started and is not a source of
+truth. Research/web claims are not owner-trusted memory.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `7b8b19dd08f3fc8db350c116a7c598fdd443bf47`
+Implementation: `b7b9e49dc6c637fef4ea847d39254bd8693b55f2`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_memory_v2.test.ts` + sqlite/core memory tests green;
+`npm run test:cloud` **541/541**.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+SQLite remains canonical. Qdrant is not started and is not a source of
+truth. Research/web claims are not owner-trusted memory.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `7b8b19dd08f3fc8db350c116a7c598fdd443bf47`
+Implementation: `b7b9e49dc6c637fef4ea847d39254bd8693b55f2`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_memory_v2.test.ts` + sqlite/core memory tests green;
+`npm run test:cloud` **541/541**.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 02 Research Intelligence V2
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+PRIVATE_BROWSER remains fail-closed. Whonix/Tor **LOCAL_VERIFY_REQUIRED**.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `d02f40155aa1521cefbf24fc05aac605310462de`
+Implementation: `66b4772`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_research_v2.test.ts` +
+`tests/jarvis_research.test.ts` 36/36; `npm run test:cloud` **532/532**.
+
+## Previous — Queue 01 Presenter + Desktop (evolution branch)
+
+Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
+LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
+No merge. Native helper **not installed**.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Base: `8aba6b019c436b1e636f32274607015a4dc23e38`
+(`origin/local/jarvis-acceptance-2026-08-20`)
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+
+Cloud-safe work: structured presentation facts, TTS-driven narration
+timeline, repeat/back, intersection display matching, native-helper
+contracts/mocks, comparison routing, Ollama `llm.model`.
+
+Verification (Cloud, re-run on evolution branch): targeted **48/48**;
+`npx tsc --noEmit` PASS; `npm run test:cloud` **517/517**. Handoff:
+`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`. HEAD: `5d6e5bc`.
+
+## Previous — Presenter + desktop live acceptance
 
 Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
 LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.

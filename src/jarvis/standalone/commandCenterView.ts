@@ -74,10 +74,13 @@ export type CommandCenterClientSnapshot = {
     night: {
       status: string;
       stage: string | null;
+      v2Stage?: string | null;
       pausedFor?: string;
+      pauseReason?: string;
       experiencesProcessed: number;
       reflectionsCreated: number;
       skillsProposed: number;
+      autoPromoted: false;
     };
     candidates: Array<{ id: string; hypothesis: string; status: string; simulated?: boolean }>;
     productionPromotionAllowed: false;
@@ -107,8 +110,29 @@ export type CommandCenterClientSnapshot = {
   notifications: Array<{ id: string; summary: string; severity: string; simulated: boolean }>;
   control: CommandCenterSnapshot['control'] & { autonomyLabel: string; maxAutonomyLabel: string };
   vision: { title: string; simulated: boolean; elements: number } | null;
+  perception: {
+    simulated: true;
+    label: 'SIMULATION';
+    liveCamera: false;
+    visionAuthoritative: false;
+    lastObservation?: string;
+    devices: number;
+    memoryCandidates: number;
+  };
+  proactive: {
+    simulated: true;
+    label: 'SIMULATION';
+    currentPriority: string;
+    jobs: Array<{ id: string; kind: string; label: string; state: string; priority: string; pausedFor?: string }>;
+    noticePolicy: { mayNotify: true; mayAutoAct: false; mayKillProcesses: false };
+    nightV2Pipeline: readonly string[];
+    autoPromoted: false;
+    competingSchedulerAdded: false;
+    schedulerCount: 3;
+    coordinatorIsScheduler: false;
+  };
   intelligence: {
-    traces: { count: number; lastRoute?: string; lastInput?: string };
+    traces: { count: number; lastRoute?: string; lastInput?: string; lastModelProfileId?: string; lastWorkload?: string; lastFallbackReason?: string };
     analyzer: { status: string; reason?: string; samples: number };
     runtimeSpec: { id: string; version: number };
     specCandidates: Array<{ id: string; hypothesis: string; status: string }>;
@@ -173,10 +197,13 @@ export function presentCommandCenter(
       night: {
         status: snapshot.evolution.night.status,
         stage: snapshot.evolution.night.stage,
+        v2Stage: snapshot.evolution.night.v2Stage,
         pausedFor: snapshot.evolution.night.pausedFor,
+        pauseReason: snapshot.evolution.night.pauseReason,
         experiencesProcessed: snapshot.evolution.night.experiencesProcessed,
         reflectionsCreated: snapshot.evolution.night.reflectionsCreated,
         skillsProposed: snapshot.evolution.night.skillsProposed,
+        autoPromoted: false,
       },
       candidates: snapshot.evolution.candidates.slice(0, 6).map(item => ({
         id: item.id,
@@ -251,11 +278,46 @@ export function presentCommandCenter(
           elements: snapshot.vision.elements.length,
         }
       : null,
+    perception: {
+      simulated: true,
+      label: 'SIMULATION',
+      liveCamera: false,
+      visionAuthoritative: false,
+      lastObservation: snapshot.perception.lastEvent?.observation,
+      devices: snapshot.perception.devices.length,
+      memoryCandidates: snapshot.perception.memoryCandidates,
+    },
+    proactive: {
+      simulated: true,
+      label: 'SIMULATION',
+      currentPriority: snapshot.proactive.currentPriority,
+      jobs: snapshot.proactive.jobs.map(job => ({
+        id: job.id,
+        kind: job.kind,
+        label: job.label,
+        state: job.state,
+        priority: job.priority,
+        ...(job.pausedFor ? { pausedFor: job.pausedFor } : {}),
+      })),
+      noticePolicy: {
+        mayNotify: true,
+        mayAutoAct: false,
+        mayKillProcesses: false,
+      },
+      nightV2Pipeline: snapshot.proactive.nightV2Pipeline,
+      autoPromoted: false,
+      competingSchedulerAdded: false,
+      schedulerCount: 3,
+      coordinatorIsScheduler: false,
+    },
     intelligence: {
       traces: {
         count: snapshot.intelligence.traces.count,
         lastRoute: snapshot.intelligence.traces.recent.at(-1)?.route,
         lastInput: snapshot.intelligence.traces.recent.at(-1)?.inputText,
+        lastModelProfileId: snapshot.intelligence.traces.recent.at(-1)?.modelProfileId,
+        lastWorkload: snapshot.intelligence.traces.recent.at(-1)?.workload,
+        lastFallbackReason: snapshot.intelligence.traces.recent.at(-1)?.fallbackReason,
       },
       analyzer: {
         status: snapshot.intelligence.analyzer.status,

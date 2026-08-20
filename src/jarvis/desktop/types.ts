@@ -19,6 +19,7 @@ export type DesktopPresenceCapabilityId = (typeof DESKTOP_PRESENCE_CAPABILITY_ID
 export const DESKTOP_PRESENCE_REASONS = [
   'WINDOW_UNAVAILABLE',
   'DISPLAY_NOT_FOUND',
+  'UNKNOWN_DISPLAY',
   'PERMISSION_REQUIRED',
   'UNSUPPORTED_HOST',
   'INVALID_BOUNDS',
@@ -29,7 +30,7 @@ export type DesktopPresenceReason = (typeof DESKTOP_PRESENCE_REASONS)[number];
 
 export type DesktopHostKind = 'browser' | 'electron' | 'native-helper' | 'test';
 
-export type DisplayRole = 'primary' | 'current' | 'external' | 'notebook';
+export type DisplayRole = 'primary' | 'current' | 'external' | 'notebook' | 'main';
 
 export type DisplaySelector = {
   index?: number;
@@ -69,6 +70,32 @@ export type JarvisWindowInfo = {
 };
 
 export type JarvisLayout = 'maximized' | 'minimized' | 'normal' | 'presenter' | 'restore';
+
+export type NativeWindowRole = 'CONTROL' | 'PRESENTER';
+
+export type OwnedJarvisWindowRef = {
+  windowId: string;
+  role: NativeWindowRole;
+  sessionId: string;
+  runtimeId: string;
+};
+
+/** Native mutations may only target registered Jarvis-owned windows. */
+export type NativeJarvisWindowAdapter = {
+  listDisplays?: () => Promise<DisplayInfo[]>;
+  getWindow?: () => Promise<JarvisWindowInfo>;
+  getOwnedWindows?: () => Promise<OwnedJarvisWindowRef[]>;
+  getWindowState?: (windowId: string) => Promise<JarvisWindowInfo>;
+  setBounds?: (bounds: DisplayBounds) => Promise<WindowOpResult>;
+  moveOwnedWindow?: (input: { windowId: string; display?: DisplayInfo; bounds: DisplayBounds }) => Promise<WindowOpResult>;
+  resizeOwnedWindow?: (input: { windowId: string; bounds: DisplayBounds }) => Promise<WindowOpResult>;
+  focus?: () => Promise<WindowOpResult>;
+  focusOwnedWindow?: (windowId: string) => Promise<WindowOpResult>;
+  setLayout?: (layout: Exclude<JarvisLayout, 'restore' | 'presenter'>, display?: DisplayInfo) => Promise<WindowOpResult>;
+  setOwnedWindowLayout?: (windowId: string, layout: Exclude<JarvisLayout, 'restore' | 'presenter'>, display?: DisplayInfo) => Promise<WindowOpResult>;
+  setFullscreen?: (windowId: string, enabled: boolean) => Promise<WindowOpResult>;
+  restore?: (windowId: string) => Promise<WindowOpResult>;
+};
 
 export type WindowOpStatus = 'moved' | 'focused' | 'resized' | 'layout-set' | 'reported' | 'unavailable' | 'failed';
 
