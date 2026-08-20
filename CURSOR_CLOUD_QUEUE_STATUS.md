@@ -11,7 +11,9 @@ queue. Later queued prompts must **not** restart from
 `cursor/jarvis-cloud-evolution-2026-08-20`
 
 Fetch and continue from the latest successfully pushed HEAD of that
-branch only. Do not merge. Do not push `main`. Do not force push.
+branch only **if a later owner prompt explicitly continues Cloud**.
+Queue 12 is the stop-line: do not start another Cloud feature queue
+automatically. Do not merge. Do not push `main`. Do not force push.
 
 ## Queue 01 — Presenter Intelligence + Desktop Presence
 
@@ -383,7 +385,7 @@ Handoff: ADR-033, `tests/jarvis_cloud_integration.test.ts`.
 Status: **COMPLETE** (handoff). Not LIVE_VERIFIED.
 No new architecture. Cloud feature queues stop here.
 
-Queue 12 HEAD: _pending pin after docs commit_
+Queue 12 HEAD: `dbe1c6b0e4be54384d0dae9d2cf9d55ea495d104`
 
 Handoff document: `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`
 

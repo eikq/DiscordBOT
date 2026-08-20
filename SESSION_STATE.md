@@ -10,7 +10,8 @@ No new architecture. Cloud feature queues stop here.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
-HEAD: _pending pin after docs commit_
+HEAD: `dbe1c6b0e4be54384d0dae9d2cf9d55ea495d104`
+Evidence: `npx tsc --noEmit` PASS; `npm run test:cloud` **633/633**.
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 Handoff: `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
 ADR: ADR-034.
