@@ -1,8 +1,10 @@
 export {
   DEFAULT_BUDGETS,
+  DISTINCT_FAILURE_CODES,
   JARVIS_VISUAL_STATES,
 } from './types';
 export type {
+  DistinctFailureCode,
   EmitMeta,
   JarvisBudgets,
   JarvisErrorCode,
@@ -19,8 +21,16 @@ export {
   higherResourcePriority,
   evaluatePreemption,
 } from './resourcePriority';
-export { classifyFailure, isRetryableError, jarvisError } from './errors';
+export { classifyFailure, isDistinctFailureCode, isRetryableError, jarvisError } from './errors';
 export type { JarvisStructuredError } from './errors';
+export {
+  correlationIsCoherent,
+  correlationIssues,
+  createCorrelationIds,
+  extendCorrelation,
+  toTraceCorrelation,
+} from './correlation';
+export type { CorrelationIssue, JarvisCorrelationIds } from './correlation';
 export { budgetExceeded, mergeBudgets, remainingBudget } from './budgets';
 export { operationalLabel, visualStateFromEvent, visualStateFromEvents } from './visualState';
 export { formatSseComment, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay } from './sse';

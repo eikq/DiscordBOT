@@ -86,6 +86,7 @@ import { runStandaloneTextTurn, type StandaloneTextTurnOutput } from './textHarn
 import { CommandCenterRuntime, sharedCommandCenter } from './commandCenter';
 import { routeJarvisRequest, shouldUseWorkAgent, type RouteDecision } from '../intent/requestRouter';
 import { traceCapabilitiesFromTurn } from '../ops/traceCapabilities';
+import { createCorrelationIds } from '../ops/correlation';
 import { synthesizeTaskResponse } from '../agent/synthesize';
 import type { SynthesizedTaskResponse } from '../agent/types';
 import type { AffectStyle } from '../evolution/affect';
@@ -811,10 +812,14 @@ export class JarvisLabRuntime {
       text: String(input.text || '').trim(),
       sessionId,
     });
-    const task = await center.runObjective(String(input.text || '').trim(), {
+    const ids = createCorrelationIds({
       sessionId,
       requestId: request.requestId,
-      turnId: request.requestId,
+    });
+    const task = await center.runObjective(String(input.text || '').trim(), {
+      sessionId: ids.sessionId,
+      requestId: ids.requestId,
+      turnId: ids.turnId,
       route,
       capabilityId,
     });
@@ -1101,10 +1106,14 @@ export class JarvisLabRuntime {
       route: route.route,
       objective: String(input.text || ''),
     });
-    center.recordTurnTrace({
-      requestId: output.request.requestId,
+    const ids = createCorrelationIds({
       sessionId,
-      turnId: output.request.requestId,
+      requestId: output.request.requestId,
+    });
+    center.recordTurnTrace({
+      requestId: ids.requestId,
+      sessionId: ids.sessionId,
+      turnId: ids.turnId,
       route: route.route,
       inputText: String(input.text || ''),
       totalLatencyMs: output.timings.totalMs,

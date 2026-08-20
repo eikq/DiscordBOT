@@ -34,15 +34,26 @@ export type OperationProgress = {
   unit?: string;
 };
 
+export const DISTINCT_FAILURE_CODES = [
+  'UNSUPPORTED_HOST',
+  'PERMISSION_REQUIRED',
+  'DENIED',
+  'TIMEOUT',
+  'PROVIDER_UNAVAILABLE',
+  'INSUFFICIENT_DATA',
+  'UNKNOWN_DISPLAY',
+  'VERIFICATION_FAILED',
+] as const;
+
+export type DistinctFailureCode = (typeof DISTINCT_FAILURE_CODES)[number];
+
 export type JarvisErrorCode =
-  | 'PROVIDER_UNAVAILABLE'
-  | 'PERMISSION_REQUIRED'
+  | DistinctFailureCode
   | 'CAPABILITY_DENIED'
   | 'RESEARCH_TIMEOUT'
   | 'MEMORY_CONFLICT'
   | 'PLAN_INVALID'
   | 'STEP_FAILED'
-  | 'VERIFICATION_FAILED'
   | 'RESOURCE_PRESSURE'
   | 'LOCAL_ACCEPTANCE_REQUIRED'
   | 'CANCELLED'

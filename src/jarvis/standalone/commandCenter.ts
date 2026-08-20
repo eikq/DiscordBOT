@@ -13,6 +13,7 @@ import type { ModelRouteDecision } from '../models/modelRouter';
 import { workloadFromRoute } from '../models/workload';
 import type { CertificationRun, ModelProfile } from '../models/types';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
+import { createCorrelationIds } from '../ops/correlation';
 import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
 import { SimulatedDeviceProvider, type DeviceRecord } from '../devices';
@@ -396,12 +397,17 @@ export class CommandCenterRuntime {
       this.failures,
       trustedSkills,
     );
-    const requestId = options.requestId?.trim() || `jarvis-${started}`;
-    const turnId = options.turnId?.trim() || requestId;
+    const ids = createCorrelationIds({
+      sessionId: options.sessionId,
+      requestId: options.requestId?.trim() || `jarvis-${started}`,
+      turnId: options.turnId,
+    });
+    const requestId = ids.requestId;
+    const turnId = ids.turnId;
     const task = this.agent.receive(objective, plan, {
       simulated,
       requestId,
-      sessionId: options.sessionId,
+      sessionId: ids.sessionId,
       turnId,
     });
     this.noteLatestRequest({
@@ -468,11 +474,18 @@ export class CommandCenterRuntime {
   }): void {
     const retries = task.plan.reduce((acc, step) => acc + (step.retryPolicy?.attempted ?? 0), 0);
     const routed = this.routeModel({ route: meta.route, objective: task.objective });
+    const activeStep = task.plan.find(step => (
+      step.status === 'running'
+      || step.status === 'waiting_permission'
+      || step.status === 'failed'
+      || step.status === 'blocked'
+    )) ?? [...task.plan].reverse().find(step => step.status === 'done');
     this.traces.record({
       requestId: meta.requestId || task.requestId,
       sessionId: meta.sessionId || task.sessionId,
       turnId: meta.turnId || task.turnId,
       taskId: task.id,
+      ...(activeStep ? { stepId: activeStep.id } : {}),
       route: meta.route,
       inputText: task.objective,
       capabilities: traceCapabilitiesFromWork(task.toolResults),

@@ -100,6 +100,6 @@ export function denyPermissionStep(step: PlanStep): PlanStep {
           denied: true,
         },
     resultSummary: 'Owner denied permission. Denial stays denied.',
-    errorCode: 'PERMISSION_REQUIRED',
+    errorCode: 'DENIED',
   };
 }

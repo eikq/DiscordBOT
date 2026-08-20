@@ -27,6 +27,8 @@ export type JarvisTraceRecord = {
   sessionId?: string;
   turnId?: string;
   taskId?: string;
+  stepId?: string;
+  presentationId?: string;
   route?: string;
   modelProfileId?: string;
   engine?: string;

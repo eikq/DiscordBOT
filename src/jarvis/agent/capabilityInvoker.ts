@@ -186,7 +186,9 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
     return {
       ok: false,
       summary: result.error || `Capability ${result.capabilityId} is ${result.status}.`,
-      errorCode: result.status === 'timeout' ? 'RESEARCH_TIMEOUT' : 'PROVIDER_UNAVAILABLE',
+      errorCode: result.status === 'timeout'
+        ? (result.capabilityId.startsWith('research.') ? 'RESEARCH_TIMEOUT' : 'TIMEOUT')
+        : 'PROVIDER_UNAVAILABLE',
       toolResult,
     };
   }

@@ -267,9 +267,10 @@ export {
   affectCannotAuthorize,
   applyTaskOutcome,
   runExperiencePipeline,
+  classifyFailureKnowledge,
 } from './evolution';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse, recoverInterruptedTask } from './agent';
-export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, efficiencyForModel, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution, yieldsTo, shouldYieldBackground, evaluatePreemption, RESOURCE_PRIORITY_ORDER, RESOURCE_PRIORITY_RANK, proactiveRuntimeIsScheduler, EXISTING_SCHEDULERS, PROACTIVE_COORDINATOR } from './ops';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, isDistinctFailureCode, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, DISTINCT_FAILURE_CODES, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, efficiencyForModel, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution, yieldsTo, shouldYieldBackground, evaluatePreemption, RESOURCE_PRIORITY_ORDER, RESOURCE_PRIORITY_RANK, proactiveRuntimeIsScheduler, EXISTING_SCHEDULERS, PROACTIVE_COORDINATOR, createCorrelationIds, correlationIsCoherent, toTraceCorrelation } from './ops';
 export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, neverAutoSelectRestricted, realModelCertificationBlocked, cloudCertificationLabel, certificationIsLiveVerified, normalizeWorkload, workloadFromRoute, MODEL_WORKLOADS, CERT_CATEGORIES } from './models';
 export { ArtifactWorkflow } from './artifacts';
 export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';

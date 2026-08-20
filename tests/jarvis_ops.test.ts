@@ -54,7 +54,9 @@ test('visual states come from real events and never invent chain-of-thought', ()
 });
 
 test('error taxonomy and budgets stay bounded', () => {
-  assert.equal(classifyFailure({ reasonCode: 'timeout' }), 'RESEARCH_TIMEOUT');
+  assert.equal(classifyFailure({ reasonCode: 'timeout' }), 'TIMEOUT');
+  assert.equal(classifyFailure({ reasonCode: 'RESEARCH_TIMEOUT' }), 'RESEARCH_TIMEOUT');
+  assert.equal(classifyFailure({ stage: 'research', message: 'timed out' }), 'RESEARCH_TIMEOUT');
   assert.equal(classifyFailure({ message: 'permission required' }), 'PERMISSION_REQUIRED');
   assert.equal(classifyFailure({ message: 'cycle detected' }), 'DEPENDENCY_CYCLE');
   const budgets = mergeBudgets({ retries: 99, taskSteps: 0 });
