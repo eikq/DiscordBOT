@@ -3,7 +3,28 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 09 Command Center V2 unified operational interface
+## This turn — Queue 10 Security Hardening Pass
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+Do not claim live Tor, native helper, or host-browser verification.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: _pending pin_
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-032.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_security_hardening.test.ts` plus existing security /
+skills / memory / perception / presenter tests green.
+
+LLM output is not execution. Untrusted research/web/model/vision cannot
+approve privilege, plant owner-trusted memory, or mint TRUSTED skills.
+SSRF policy now catches IPv4-mapped IPv6 after Node canonicalization.
+Native helper IPC fails closed on forged/replayed/impersonated requests.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 09 Command Center V2 unified operational interface
 
 Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
 No live `/jarvis-lab` visual sign-off. Native helper is not installed.

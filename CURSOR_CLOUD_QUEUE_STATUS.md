@@ -301,6 +301,39 @@ deferred while later Cloud follow-ups are queued.
 
 Handoff: ADR-031, `tests/jarvis_command_center_v2.test.ts`.
 
+## Queue 10 — Security Hardening Pass
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+Defensive review. Existing controls were not disabled.
+
+Queue 10 HEAD: _pending pin after docs commit_
+
+Shipped:
+
+- Adversarial regressions in `tests/jarvis_security_hardening.test.ts`
+- IPv4-mapped IPv6 / decimal-hex / metadata / nip.io SSRF blocks
+- Prompt-injection strings remain data (owner policy, confirmation
+  token, install program, `.env`, localhost)
+- Native helper: forged IPC, replay, HWND/PID, protocol mismatch,
+  impersonation fail closed
+- Untrusted research cannot plant owner-trusted memory or TRUSTED skills
+- WorkAgent grants require owner; webpage actor is UNTRUSTED_ACTOR
+- Trace denylist includes credentials, cookies, `.env`, voice secrets
+- Gitignore + Night denylist: display aliases, model weights, runtime DBs
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted security / skills /
+memory / perception / presenter tests green. Full `npm run test:cloud`
+run as part of this queue.
+
+Labels stay:
+
+- LA-001 **PARTIAL**
+- LA-002 **PARTIAL**
+- LA-026 **PARTIAL**
+- LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**
+
+Handoff: ADR-032, `tests/jarvis_security_hardening.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution

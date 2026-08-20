@@ -1354,6 +1354,63 @@ dashboard were not in scope.
   display, and native-shell hosting: host-only / LA-026–027 remain
   PARTIAL. Do not mark LIVE_VERIFIED from Cloud.
 
+## ADR-032 — Privilege boundaries stay fail-closed under untrusted content
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live Whonix/Tor, native helper, and host browser remain
+BLOCKED_LOCAL_ACCEPTANCE / host-only.
+
+### Context
+
+Queue 10 needed a defensive review of the expanded Jarvis architecture
+after Presenter, Research V2, Memory V2, Skills V2, models, voice,
+perception, proactive runtime, and Command Center V2. Untrusted
+research, model output, vision text, and code comments must not become
+authority. LLM output is not execution.
+
+### Decision
+
+- `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE` stays code, not
+  prompt policy. Skill `propose()` always stores `DRAFT` / `CANDIDATE`
+  even if untrusted text asks for `TRUSTED`.
+- Jarvis cannot approve, renew, or expand its own privilege. WorkAgent
+  grants require `actor === 'owner'`. Webpage/model actors are
+  `UNTRUSTED_ACTOR`.
+- Webpage / research / model / vision / skill sources cannot write
+  `ownerTrusted` memory even if they request it.
+- Research SSRF policy blocks localhost, `127.0.0.0/8`, RFC1918,
+  link-local, CGNAT, multicast/broadcast, metadata (including Azure
+  `168.63.129.16`), IPv4-mapped IPv6 (`::ffff:7f00:1` after Node
+  canonicalization), decimal/hex/short IPv4 forms, and IP-prefix
+  hostnames such as `127.0.0.1.nip.io`. Redirect hops are re-checked.
+  PRIVATE_BROWSER does not fall back to host Playwright.
+- Native helper IPC is fail-closed: protocol mismatch, HWND/PID
+  injection, forged token, runtime impersonation, replayed nonce, and
+  unowned window ids are rejected. Tokens are never logged.
+- Traces omit CoT, scratchpads, confirmation tokens, credentials,
+  cookies, `.env`, and voice/RVC secrets.
+- Gitignore and Night denylist cover runtime DBs under `data/jarvis/`,
+  owner display aliases, model weights, and credentials.
+
+### Alternatives considered
+
+- Treating Node's IPv4-mapped IPv6 canonical form as public because it
+  is not dotted-quad — rejected (SSRF bypass).
+- Honoring `trustStatus: TRUSTED` on skill propose so tests stay
+  simple — rejected.
+- Weakening existing PRIVATE_BROWSER / lease tests to keep a looser
+  helper contract — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_security_hardening.test.ts`
+  plus existing `tests/jarvis_security.test.ts`; `npx tsc --noEmit` PASS).
+  Not LIVE_VERIFIED.
+- Live Tor, native helper install, and host browser: host-only.
+  LA-026/027 remain PARTIAL. Do not mark LIVE_VERIFIED from Cloud.
+
+
 
 
 

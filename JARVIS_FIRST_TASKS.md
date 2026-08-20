@@ -208,6 +208,7 @@ Evidence:
 - Local APIs: `GET /api/jarvis/status`, `POST /api/jarvis/ask`, `POST /api/jarvis/presentation` (localhost-restricted)
 - UI-R1–R8 command center: ribbon / memory rail / CSS/SVG core / tools rail / timeline / dock (`JARVIS_UI_REDESIGN_TASKS.md`)
 - Queue 09 Command Center V2: six operational modes, one primary body at a time; global REAL/SIMULATION/DEGRADED/OFFLINE chip; Presenter fullscreen-ready; owner memory corrections via Ask (`tests/jarvis_command_center_v2.test.ts`, ADR-031)
+- Queue 10 Security Hardening: untrusted content stays data; SSRF includes IPv4-mapped IPv6; native helper forged/replay/impersonation fail-closed; no self-trust of memory/skills (`tests/jarvis_security_hardening.test.ts`, ADR-032)
 - `createJarvisLabRuntime({ attachDefaultMemory: true })` on the server; tests pass `attachDefaultMemory: false` so they never open `data/jarvis/jarvis.db`
 - Live lab UI verified 2026-08-19 on `:3010` with `JARVIS_STANDALONE=1`; not Discord; speech inactive
 
