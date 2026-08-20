@@ -27,7 +27,11 @@ export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | '
     estimatedMs: estimateNarrationMs(spoken),
   }];
 
-  const narratable = model.sections.filter(section => section.id !== 'sec-summary' && section.body);
+  const narratable = model.sections.filter(section => (
+    section.id !== 'sec-summary'
+    && section.kind !== 'followups'
+    && section.body
+  )).slice(0, 4);
   for (const [index, section] of narratable.entries()) {
     const text = sectionNarration(section);
     segments.push({
@@ -35,7 +39,9 @@ export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | '
       order: index + 1,
       text,
       kind: 'section',
-      target: { type: 'section', id: section.id },
+      target: section.cards?.[0]
+        ? { type: section.cards[0].startsWith('system.') ? 'metric' : 'card', id: section.cards[0] }
+        : { type: 'section', id: section.id },
       estimatedMs: estimateNarrationMs(text),
     });
   }
@@ -52,6 +58,16 @@ export function buildNarrationSegments(model: Pick<PresentationModel, 'mode' | '
     });
   }
 
+  const finish = 'That is the briefing. Ask if you want a section repeated.';
+  segments.push({
+    id: 'narr-finish',
+    order: segments.length,
+    text: finish,
+    kind: 'finish',
+    target: { type: 'section', id: 'sec-followups' },
+    estimatedMs: estimateNarrationMs(finish),
+  });
+
   return segments;
 }
 
@@ -62,15 +78,25 @@ export function scaleNarrationToSpeech(
   if (!spokenMs || spokenMs < 200 || segments.length === 0) return segments;
   const estimated = segments.reduce((sum, item) => sum + item.estimatedMs, 0);
   if (estimated <= 0) return segments;
-  const factor = spokenMs / estimated;
-  return segments.map(item => ({
+  const rounded = segments.map(item => Math.max(1, Math.round((item.estimatedMs / estimated) * spokenMs)));
+  rounded[rounded.length - 1] += spokenMs - rounded.reduce((sum, item) => sum + item, 0);
+  if (rounded[rounded.length - 1] < 1) {
+    let need = 1 - rounded[rounded.length - 1];
+    rounded[rounded.length - 1] = 1;
+    for (let i = 0; i < rounded.length - 1 && need > 0; i += 1) {
+      const take = Math.min(Math.max(0, rounded[i] - 1), need);
+      rounded[i] -= take;
+      need -= take;
+    }
+  }
+  return segments.map((item, index) => ({
     ...item,
-    estimatedMs: Math.max(400, Math.round(item.estimatedMs * factor)),
+    estimatedMs: rounded[index] ?? item.estimatedMs,
   }));
 }
 
 function sectionNarration(section: PresentationSection): string {
-  return clipSentence(`${section.title}. ${section.body}`, 240);
+  return clipSentence(`${section.title}. ${section.body}`, 120);
 }
 
 function clipSentence(text: string, max: number): string {

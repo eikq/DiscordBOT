@@ -41,6 +41,7 @@ export type VoiceOutputResult = {
   reason?: string;
   mime?: string;
   audioBase64?: string;
+  audioDurationMs?: number;
   timings: VoiceOutputTimings;
   resourcePhase: VoiceResourcePhase;
 };

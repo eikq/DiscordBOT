@@ -66,11 +66,14 @@ import type {
 import { FileBehaviorPersonaProvider } from '../presentation/filePersonaProvider';
 import { FactPreservingPresentationEngine } from '../presentation/PresentationEngine';
 import {
+  applySpokenDuration,
   runPresentationPipeline,
   spokenTextFor,
   type PlannedPresentation,
 } from '../presentation/briefing';
 import { sharedJarvisPresenceStore, type ClientWindowReport } from '../desktop';
+import { unavailableNativeHelperHealth } from '../desktop/nativeHelper';
+import { mergeCapabilityPresentationFacts } from '../capabilities/capabilityFacts';
 import { StandalonePresentationSessions } from '../presentation/standaloneSession';
 import { ProbeVoiceProfileResolver } from '../presentation/voiceAvailability';
 import { RouterVoiceResolver, StandaloneVoiceRouter } from '../speech';
@@ -183,6 +186,13 @@ export type JarvisLabStatus = {
     canMoveWindow: boolean;
     reportedAt?: string;
     bounds?: { x: number; y: number; width: number; height: number };
+    nativeHelper?: {
+      status: 'unavailable' | 'starting' | 'ready' | 'degraded';
+      installed: boolean;
+      protocolVersion: number;
+      reasonCode?: string;
+      message: string;
+    };
   };
 };
 
@@ -359,6 +369,7 @@ export class JarvisLabRuntime {
       hostKind: electron ? 'electron' : 'browser',
       windowAvailable: Boolean(report),
       canMoveWindow: false,
+      nativeHelper: unavailableNativeHelperHealth(),
       ...(report?.reportedAt ? { reportedAt: report.reportedAt } : {}),
       ...(report ? {
         bounds: {
@@ -605,8 +616,10 @@ export class JarvisLabRuntime {
       replyText: adjusted.presented.text,
       route,
       capabilityId: prepared.resolution.capabilityId,
+      toolResults: adjusted.result.toolResults,
     });
     const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak, briefing);
+    const presentedBriefing = this.withSpokenDuration(briefing, speech);
     this.observeAskTurn(input, prepared.sessionId, route, adjusted);
     return {
       ...adjusted,
@@ -617,7 +630,7 @@ export class JarvisLabRuntime {
       intent: prepared.intent,
       route,
       affectStyle: this.workCenter()?.affect.style(),
-      briefing,
+      briefing: presentedBriefing,
       ...(speech ? { speech } : {}),
     };
   }
@@ -656,7 +669,10 @@ export class JarvisLabRuntime {
       replyText: adjusted.presented.text,
       route,
       capabilityId: prepared.resolution.capabilityId,
+      toolResults: adjusted.result.toolResults,
     });
+    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak, briefing);
+    const presentedBriefing = this.withSpokenDuration(briefing, speech);
     const finalPayload = {
       ...adjusted,
       coreState: 'complete' as const,
@@ -666,10 +682,9 @@ export class JarvisLabRuntime {
       intent: prepared.intent,
       route,
       affectStyle: this.workCenter()?.affect.style(),
-      briefing,
+      briefing: presentedBriefing,
     };
     emit({ type: 'final', payload: finalPayload });
-    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak, briefing);
     if (speech) emit({ type: 'speech', payload: speech });
     return { ...finalPayload, ...(speech ? { speech } : {}) };
   }
@@ -830,6 +845,7 @@ export class JarvisLabRuntime {
         toolName: item.capability,
         status: item.status === 'ok' ? 'ok' as const : 'error' as const,
         summary: item.summary,
+        ...(item.facts ? { facts: item.facts } : {}),
       })),
       memoryRefs: [],
       actionResults: freezeActionResults([{
@@ -855,8 +871,14 @@ export class JarvisLabRuntime {
       route,
       capabilityId: waiting?.capability || task.toolResults[0]?.capability,
       workOutcome: synthesis,
+      toolResults: task.toolResults.map(item => ({
+        toolName: item.capability,
+        summary: item.summary,
+        facts: item.facts,
+      })),
     });
     const speech = await this.maybeSpeak(synthesis.text, request.requestId, presented.voiceProfileId, input.speak, briefing);
+    const presentedBriefing = this.withSpokenDuration(briefing, speech);
     return {
       request,
       result,
@@ -876,7 +898,7 @@ export class JarvisLabRuntime {
       taskId: task.id,
       workOutcome: synthesis,
       affectStyle: this.workCenter()?.affect.style(),
-      briefing,
+      briefing: presentedBriefing,
       ...(speech ? { speech } : {}),
       ...(waiting?.pendingConfirmation ? {
         pendingConfirmation: {
@@ -909,16 +931,57 @@ export class JarvisLabRuntime {
     });
   }
 
+  private withSpokenDuration(
+    briefing: PlannedPresentation,
+    speech?: VoiceOutputResult,
+  ): PlannedPresentation {
+    const spokenMs = speech?.audioDurationMs;
+    if (!spokenMs || briefing.density === 'plain') return briefing;
+    return applySpokenDuration(briefing, spokenMs);
+  }
+
   private buildBriefing(input: {
     text: string;
     replyText: string;
     route?: RouteDecision;
     capabilityId?: string;
     workOutcome?: SynthesizedTaskResponse;
+    toolResults?: Array<{
+      toolName?: string;
+      capability?: string;
+      summary?: string;
+      facts?: {
+        systemSnapshot?: NonNullable<Parameters<typeof runPresentationPipeline>[0]['systemSnapshot']>;
+        displays?: NonNullable<Parameters<typeof runPresentationPipeline>[0]['displays']>;
+      };
+    }>;
   }): PlannedPresentation {
     const research = this.researchSnapshot();
     const presence = this.presenceStatus();
     const researchTurn = input.route?.route === 'RESEARCH' || input.capabilityId === 'research.search';
+    const merged = mergeCapabilityPresentationFacts((input.toolResults ?? []).map(item => {
+      const displays = item.facts?.displays;
+      const systemSnapshot = item.facts?.systemSnapshot;
+      if (!systemSnapshot && !displays) return undefined;
+      return {
+        capabilityId: item.toolName || item.capability || '',
+        ...(systemSnapshot ? { systemSnapshot } : {}),
+        ...(displays && typeof displays.count === 'number' && Array.isArray(displays.ids)
+          ? {
+            displays: {
+              count: displays.count,
+              ids: displays.ids,
+              names: displays.names,
+              currentName: displays.currentName,
+              currentId: displays.currentId,
+              hostKind: displays.hostKind,
+              reason: displays.reason,
+            },
+          }
+          : {}),
+      };
+    }));
+    const desktopTurn = Boolean(input.capabilityId?.startsWith('desktop.') || merged.displays);
     return runPresentationPipeline({
       text: input.text,
       replyText: input.replyText,
@@ -942,9 +1005,15 @@ export class JarvisLabRuntime {
         uncertainty: research.last.uncertainty,
         disagreements: research.last.disagreements,
       } : undefined,
-      displays: input.capabilityId?.startsWith('desktop.') ? {
-        hostKind: presence.hostKind,
-        reason: presence.canMoveWindow ? undefined : 'Browser host cannot move the Jarvis window.',
+      systemSnapshot: merged.systemSnapshot,
+      displays: desktopTurn ? {
+        hostKind: merged.displays?.hostKind || presence.hostKind,
+        reason: merged.displays?.reason || (presence.canMoveWindow ? undefined : 'Browser host cannot move the Jarvis window.'),
+        ...(merged.displays && merged.displays.count > 0 ? { count: merged.displays.count } : {}),
+        ids: merged.displays?.ids,
+        names: merged.displays?.names,
+        currentName: merged.displays?.currentName,
+        currentId: merged.displays?.currentId,
       } : undefined,
     });
   }

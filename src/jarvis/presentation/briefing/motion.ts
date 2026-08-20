@@ -16,8 +16,11 @@ export function buildMotionTimeline(
   for (const segment of segments) {
     const focus = cueFor(segment, cursor, 'focus', reduced);
     if (focus) cues.push(focus);
-    const highlight = cueFor(segment, cursor + Math.min(180, Math.round(segment.estimatedMs * 0.08)), 'highlight', reduced);
-    if (highlight) cues.push(highlight);
+    const metric = segment.target.id.startsWith('system.') || segment.target.id === 'desktop.displays';
+    if (metric || segment.kind === 'section') {
+      const highlight = cueFor(segment, cursor + Math.min(120, Math.round(segment.estimatedMs * 0.08)), 'highlight', reduced);
+      if (highlight) cues.push(highlight);
+    }
     if (segment.target.type === 'source') {
       const spot = cueFor(segment, cursor + 80, 'spotlight', reduced);
       if (spot) cues.push(spot);
@@ -25,10 +28,6 @@ export function buildMotionTimeline(
     if (segment.target.type === 'graph-node') {
       const pulse = cueFor(segment, cursor + 80, 'pulse', reduced);
       if (pulse) cues.push(pulse);
-    }
-    if (segment.kind === 'section') {
-      const scroll = cueFor(segment, cursor, 'scroll', reduced);
-      if (scroll) cues.push(scroll);
     }
     cursor += segment.estimatedMs;
   }

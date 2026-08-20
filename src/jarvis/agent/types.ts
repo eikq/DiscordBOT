@@ -116,7 +116,31 @@ export type WorkTask = {
   turnId?: string;
   plan: PlanStep[];
   evidence: string[];
-  toolResults: Array<{ capability: string; status: string; summary: string; risk?: string }>;
+  toolResults: Array<{
+    capability: string;
+    status: string;
+    summary: string;
+    risk?: string;
+    facts?: {
+      systemSnapshot?: {
+        summary?: string;
+        parts?: string[];
+        cpu?: { usagePct: number; cores: number };
+        ram?: { usedPct: number; freeMb?: number; totalMb?: number };
+        disk?: { usedPct?: number; freeGb?: number; totalGb?: number };
+        gpu?: { name: string; utilizationPct?: number; vramUsedMb?: number; vramTotalMb?: number };
+      };
+      displays?: {
+        count: number;
+        ids: string[];
+        names?: string[];
+        currentName?: string;
+        currentId?: string;
+        hostKind?: string;
+        reason?: string;
+      };
+    };
+  }>;
   permissionRequirements: string[];
   retryBudget: number;
   retriesUsed: number;
@@ -134,7 +158,13 @@ export type WorkStepResult = {
   status?: PlanStepStatus;
   permissionRequired?: boolean;
   errorCode?: JarvisErrorCode;
-  toolResult?: { capability: string; status: string; summary: string; risk?: string };
+  toolResult?: {
+    capability: string;
+    status: string;
+    summary: string;
+    risk?: string;
+    facts?: WorkTask['toolResults'][number]['facts'];
+  };
   evidence?: string[];
   skipped?: boolean;
   pendingConfirmation?: PendingStepConfirmation;

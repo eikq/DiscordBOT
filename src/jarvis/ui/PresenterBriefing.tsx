@@ -31,8 +31,8 @@ export default function PresenterBriefing({
   }
 
   const reduced = prefersReducedMotion();
-  const cues = visibleMotionCues(briefing, spokenAtMs);
-  const focused = focusedTargetId(cues);
+  const cues = visibleMotionCues(briefing, spokenAtMs, reduced);
+  const focused = briefing.playback?.targetId || focusedTargetId(cues);
   const follow = (id: PresentationFollowUpId, targetId?: string) => {
     onBriefingChange(applyBriefingFollowUp(briefing, id, targetId));
   };
@@ -46,12 +46,17 @@ export default function PresenterBriefing({
       </header>
       {briefing.subtitle ? <p className="jcc-hint">{briefing.subtitle}</p> : null}
       <p className="jcc-presenter__spoken">{briefing.spokenSummary}</p>
+      <p className="jcc-hint" data-playback-state={briefing.playback.playbackState}>
+        {briefing.playback.pauseSupported
+          ? 'Pause is available.'
+          : 'Pause is unsupported for Edge-TTS. Cancel stops speech. Repeat and Back stay on this briefing.'}
+      </p>
       <div className="jcc-presenter__sections">
         {briefing.sections.map(section => (
           <section
             key={section.id}
             id={section.id}
-            className={`jcc-presenter__section${focused === section.id ? ' is-focused' : ''}`}
+            className={`jcc-presenter__section${focused === section.id || section.cards?.includes(focused || '') ? ' is-focused' : ''}`}
             data-kind={section.kind}
           >
             <h3>{section.title}</h3>
@@ -62,7 +67,7 @@ export default function PresenterBriefing({
       {briefing.cards.length > 0 ? (
         <ul className="jcc-presenter__cards">
           {briefing.cards.map(card => (
-            <li key={card.id} className={focused === card.id ? 'is-focused' : undefined} data-kind={card.kind}>
+            <li key={card.id} className={focused === card.id ? 'is-focused' : undefined} data-kind={card.kind} id={card.id}>
               <strong>{card.title}</strong>
               <span>{card.body}</span>
             </li>

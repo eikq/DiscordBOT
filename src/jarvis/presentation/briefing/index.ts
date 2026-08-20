@@ -18,5 +18,7 @@ export { buildPresentationModel } from './model';
 export { buildNarrationSegments, estimateNarrationMs, scaleNarrationToSpeech, spokenSummaryFrom } from './narration';
 export { activeMotionCues, buildMotionTimeline, motionTargetsOf } from './motion';
 export { applyBriefingFollowUp, defaultFollowUps, isPresentationFollowUp } from './followUp';
+export { classifyPresenterAuthority } from './authority';
+export { applySpokenDuration, backPlayback, createPlayback, playbackAtElapsed, repeatPlayback, spokenSequenceFrom } from './playback';
 export { presentationHasForbiddenKeys, sanitizePlannedPresentation, sanitizePresentationText } from './sanitize';
 export { isRichPresentation, runPresentationPipeline, spokenTextFor } from './pipeline';

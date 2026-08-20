@@ -38,6 +38,25 @@ export interface ToolResultRef {
   status: 'ok' | 'unavailable' | 'error';
   sourceUrls?: string[];
   summary?: string;
+  facts?: {
+    systemSnapshot?: {
+      summary?: string;
+      parts?: string[];
+      cpu?: { usagePct: number; cores: number };
+      ram?: { usedPct: number; freeMb?: number; totalMb?: number };
+      disk?: { usedPct?: number; freeGb?: number; totalGb?: number };
+      gpu?: { name: string; utilizationPct?: number; vramUsedMb?: number; vramTotalMb?: number };
+    };
+    displays?: {
+      count: number;
+      ids: string[];
+      names?: string[];
+      currentName?: string;
+      currentId?: string;
+      hostKind?: string;
+      reason?: string;
+    };
+  };
 }
 
 export interface MemoryRef {

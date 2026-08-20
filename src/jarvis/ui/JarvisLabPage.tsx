@@ -12,6 +12,7 @@ import JarvisCoreVisual from './JarvisCoreVisual';
 import CommandCenterPanels from './CommandCenterPanels';
 import PresenterBriefing from './PresenterBriefing';
 import type { PlannedPresentation } from '../presentation/briefing/types';
+import { applySpokenDuration, playbackAtElapsed, segmentStartMs } from '../presentation/briefing/playback';
 import { acceptSseSeq } from './operationsView';
 import { graphCategoriesOf, graphCategoryColor, type GraphSnapshot } from './graph/graphTypes';
 import { shortestGraphPath } from './graph/graphLayout';
@@ -126,6 +127,7 @@ type LabStatus = {
     canMoveWindow: boolean;
     reportedAt?: string;
     bounds?: { x: number; y: number; width: number; height: number };
+    nativeHelper?: { status: string; installed: boolean; protocolVersion: number; reasonCode?: string; message: string };
   };
 };
 
@@ -181,9 +183,11 @@ type LabAskResponse = {
     reason?: string;
     mime?: string;
     audioBase64?: string;
+    audioDurationMs?: number;
     timings?: { sourceTtsMs?: number; rvcMs?: number; totalMs?: number; sourceEngine?: string };
   };
   llm?: {
+    model?: string;
     promptTokens?: number;
     outputTokens?: number;
     tokensPerSec?: number;
@@ -570,10 +574,41 @@ export default function JarvisLabPage() {
     const audio = new Audio(`data:${speech.mime || 'audio/mpeg'};base64,${speech.audioBase64}`);
     player.current = audio;
     setSpeechState('speaking');
+    audio.onloadedmetadata = () => {
+      if (playGeneration.current !== generation) return;
+      const durationMs = Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : undefined;
+      if (durationMs && durationMs > 200) {
+        setBriefing(current => {
+          if (!current || current.density === 'plain') return current;
+          return applySpokenDuration(current, durationMs, reducedMotion);
+        });
+      }
+    };
+    audio.ontimeupdate = () => {
+      if (playGeneration.current !== generation) return;
+      const elapsed = Math.round(audio.currentTime * 1000);
+      setSpokenAtMs(elapsed);
+      setBriefing(current => {
+        if (!current || current.density === 'plain') return current;
+        const next = playbackAtElapsed(current.id, current.narrationSegments, elapsed, {
+          actualSpeechDurationMs: current.playback?.actualSpeechDurationMs,
+          playbackState: 'playing',
+        });
+        if (next.segmentIndex === current.playback.segmentIndex) return current;
+        return { ...current, playback: next };
+      });
+    };
     audio.onended = () => {
       if (playGeneration.current === generation) {
         setSpeechState('idle');
         currentSpeechTurn.current = null;
+        setBriefing(current => {
+          if (!current || current.density === 'plain') return current;
+          return {
+            ...current,
+            playback: { ...current.playback, playbackState: 'completed' },
+          };
+        });
       }
     };
     audio.onerror = () => {
@@ -1144,16 +1179,18 @@ export default function JarvisLabPage() {
   }, []);
 
   useEffect(() => {
-    if (viewMode !== 'presenter' || !briefing || briefing.density === 'plain' || reducedMotion) {
-      setSpokenAtMs(0);
+    if (viewMode !== 'presenter' || !briefing || briefing.density === 'plain' || speechState === 'speaking') {
       return;
     }
-    const started = performance.now();
+    if (reducedMotion) {
+      return;
+    }
+    const started = performance.now() - spokenAtMs;
     const timer = window.setInterval(() => {
       setSpokenAtMs(performance.now() - started);
     }, 250);
     return () => window.clearInterval(timer);
-  }, [viewMode, briefing, reducedMotion]);
+  }, [viewMode, briefing && briefing.density !== 'plain' ? briefing.id : undefined, reducedMotion, speechState]);
 
   const setQuality = (mode: QualityMode) => {
     setQualityMode(mode);
@@ -1526,6 +1563,7 @@ export default function JarvisLabPage() {
                 {status.presence.hostKind}
                 {status.presence.windowAvailable ? ' · window reported' : ' · window unknown'}
                 {status.presence.canMoveWindow ? ' · native move ready' : ' · browser host cannot move this tab'}
+                {status.presence.nativeHelper?.installed ? ' · helper installed' : ' · native helper unavailable'}
               </p>
             ) : null}
 
@@ -1534,7 +1572,20 @@ export default function JarvisLabPage() {
               open={viewMode === 'presenter'}
               spokenAtMs={spokenAtMs}
               onClose={() => fireCamera('core')}
-              onBriefingChange={setBriefing}
+              onBriefingChange={next => {
+                setBriefing(next);
+                if (next.density === 'plain') return;
+                const start = segmentStartMs(next.narrationSegments, next.playback.segmentIndex);
+                setSpokenAtMs(start);
+                const audio = player.current;
+                if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
+                  audio.currentTime = Math.min(start / 1000, Math.max(0, audio.duration - 0.05));
+                  if (next.playback.playbackState === 'playing' || next.playback.playbackState === 'idle') {
+                    void audio.play().catch(() => undefined);
+                    setSpeechState('speaking');
+                  }
+                }
+              }}
             />
 
             <div className="jcc-float jcc-float--evidence" data-open={evidenceOpen && memoryRefs.length > 0 ? 'true' : 'false'}>

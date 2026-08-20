@@ -102,7 +102,9 @@ function hasStructuredEvidence(input: PresentationInput): boolean {
   return hasResearchBody(input)
     || Boolean(input.workOutcome?.evidence?.length)
     || Boolean(input.workOutcome?.observations?.length)
-    || Boolean(input.systemSnapshot?.parts?.length);
+    || Boolean(input.systemSnapshot?.parts?.length)
+    || Boolean(input.systemSnapshot?.cpu || input.systemSnapshot?.ram || input.systemSnapshot?.disk || input.systemSnapshot?.gpu)
+    || Boolean(typeof input.displays?.count === 'number' && input.displays.count > 0);
 }
 
 function isDesktopPresenceCapability(id?: string): boolean {

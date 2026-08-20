@@ -16,7 +16,8 @@ export type PresentationTargetType =
   | 'card'
   | 'graph-node'
   | 'recommendation'
-  | 'source';
+  | 'source'
+  | 'metric';
 
 export type PresentationTarget = {
   type: PresentationTargetType;
@@ -55,7 +56,30 @@ export type PresentationTable = {
   rows: string[][];
 };
 
-export type NarrationSegmentKind = 'summary' | 'section' | 'extended';
+export type NarrationSegmentKind = 'summary' | 'section' | 'extended' | 'finish';
+
+export const NARRATION_PLAYBACK_STATES = [
+  'idle',
+  'playing',
+  'completed',
+  'cancelled',
+  'pause_unsupported',
+] as const;
+
+export type NarrationPlaybackStatus = (typeof NARRATION_PLAYBACK_STATES)[number];
+
+export type NarrationPlaybackState = {
+  presentationId: string;
+  segmentId: string;
+  segmentIndex: number;
+  spokenAtMs: number;
+  estimatedDurationMs: number;
+  actualSpeechDurationMs?: number;
+  playbackState: NarrationPlaybackStatus;
+  targetId: string;
+  motionCue?: MotionCueAction;
+  pauseSupported: false;
+};
 
 export type NarrationSegment = {
   id: string;
@@ -119,6 +143,7 @@ export type PresentationModel = {
   followUpSuggestions: PresentationFollowUp[];
   narrationSegments: NarrationSegment[];
   motionTimeline: MotionCue[];
+  playback: NarrationPlaybackState;
 };
 
 export type PlainPresentation = {
@@ -150,10 +175,17 @@ export type PresentationInput = {
   systemSnapshot?: {
     summary?: string;
     parts?: string[];
+    cpu?: { usagePct: number; cores: number };
+    ram?: { usedPct: number; freeMb?: number; totalMb?: number };
+    disk?: { usedPct?: number; freeGb?: number; totalGb?: number };
+    gpu?: { name: string; utilizationPct?: number; vramUsedMb?: number; vramTotalMb?: number };
   };
   displays?: {
     count?: number;
+    ids?: string[];
+    names?: string[];
     currentName?: string;
+    currentId?: string;
     hostKind?: string;
     reason?: string;
   };
