@@ -11,9 +11,8 @@ PRIVATE_BROWSER remains fail-closed. Whonix/Tor **LOCAL_VERIFY_REQUIRED**.
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
 Implementation: `66b4772`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
-Targeted: `npx tsc --noEmit` PASS; `tests/jarvis_research_v2.test.ts` +
-`tests/jarvis_research.test.ts` 36/36; briefing/security/command-center
-related tests green. Full `npm run test:cloud` follows.
+Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_research_v2.test.ts` +
+`tests/jarvis_research.test.ts` 36/36; `npm run test:cloud` **532/532**.
 
 ## Previous — Queue 01 Presenter + Desktop (evolution branch)
 

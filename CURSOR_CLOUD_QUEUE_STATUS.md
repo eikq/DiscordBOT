@@ -44,7 +44,7 @@ Handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
 
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 
-Implementation HEAD: `66b4772`
+Queue 02 HEAD: pin after this docs commit; continue from latest pushed HEAD.
 
 Structured query planning, depth budgets (NONE never hits providers),
 source trustClass metadata, dedup with provenance, claim/evidence
@@ -53,8 +53,8 @@ research Presenter mapping, observable traces. PRIVATE_BROWSER stays
 fail-closed. Whonix/Tor: **LOCAL_VERIFY_REQUIRED**.
 
 Cloud evidence: `npx tsc --noEmit` PASS; targeted research/v2 +
-JF-013 + Presenter briefing tests green. Full `npm run test:cloud`
-count is recorded after the verification commit.
+JF-013 + Presenter briefing tests green; `npm run test:cloud`
+**532/532**.
 
 Handoff: `docs/JF013_SAFE_WEB_RESEARCH.md`, ADR-024.
 
