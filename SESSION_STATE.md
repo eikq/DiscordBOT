@@ -10,6 +10,7 @@ SQLite remains canonical. Qdrant is not started and is not a source of
 truth. Research/web claims are not owner-trusted memory.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `7b8b19dd08f3fc8db350c116a7c598fdd443bf47`
 Implementation: `b7b9e49dc6c637fef4ea847d39254bd8693b55f2`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 Evidence: `npx tsc --noEmit` PASS; targeted

@@ -63,8 +63,7 @@ Handoff: `docs/JF013_SAFE_WEB_RESEARCH.md`, ADR-024.
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 
 Implementation: `b7b9e49dc6c637fef4ea847d39254bd8693b55f2`
-Queue 03 HEAD is pinned after this docs commit on
-`cursor/jarvis-cloud-evolution-2026-08-20`.
+Queue 03 HEAD: `7b8b19dd08f3fc8db350c116a7c598fdd443bf47`
 
 SQLite remains canonical truth. Qdrant/vector is a derived retrieval
 index only and is **not** started. Obsidian/view layers stay
