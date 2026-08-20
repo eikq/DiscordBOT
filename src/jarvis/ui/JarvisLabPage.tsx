@@ -139,6 +139,9 @@ type LabAskResponse = {
   research?: LabResearchSnapshot;
   workspace?: LabWorkspaceSnapshot;
   intent?: { stage: string; detail: string; kind: string; capabilityId?: string };
+  route?: { route: string; socialAction: string; agentic: boolean; reason: string };
+  taskId?: string;
+  workOutcome?: { outcome: string; text: string };
   pendingConfirmation?: LabPendingConfirmation;
   coreState: string;
   presentation?: LabStatus['presentation'];
@@ -445,7 +448,10 @@ export default function JarvisLabPage() {
       source.onmessage = event => {
         try {
           const payload = JSON.parse(event.data) as { seq?: number };
-          if (typeof payload.seq === 'number') lastSeq = payload.seq;
+          if (typeof payload.seq === 'number') {
+            if (payload.seq <= lastSeq) return;
+            lastSeq = payload.seq;
+          }
         } catch {
           return;
         }
@@ -1508,7 +1514,18 @@ export default function JarvisLabPage() {
 
             <div className="jcc-answer" data-state={busy ? 'busy' : response || draftText ? 'ready' : 'empty'}>
               {draftText || response?.presented.text ? (
-                <p>{draftText || response?.presented.text}</p>
+                <>
+                  <p>{draftText || response?.presented.text}</p>
+                  {response?.workOutcome ? (
+                    <p className="jcc-hint">
+                      {response.workOutcome.outcome}
+                      {response.route?.route ? ` · ${response.route.route}` : ''}
+                      {response.taskId ? ` · ${response.taskId}` : ''}
+                    </p>
+                  ) : response?.route ? (
+                    <p className="jcc-hint">Route {response.route.route} · {response.route.socialAction}</p>
+                  ) : null}
+                </>
               ) : (
                 <div className="jcc-core-status" data-phase={coreStatusTitle}>
                   <strong>{coreStatusTitle}</strong>
@@ -1658,7 +1675,16 @@ export default function JarvisLabPage() {
                     if (commandCenter?.task?.id) void postCommandCenter('/api/jarvis/command-center/cancel', { taskId: commandCenter.task.id });
                   }}
                   onGrant={() => {
-                    if (commandCenter?.task?.id) void postCommandCenter('/api/jarvis/command-center/grant', { taskId: commandCenter.task.id });
+                    const perm = commandCenter?.permission;
+                    const taskId = commandCenter?.task?.id || perm?.taskId;
+                    if (taskId) {
+                      void postCommandCenter('/api/jarvis/command-center/grant', {
+                        taskId,
+                        stepId: perm?.stepId,
+                        proposalId: perm?.proposalId,
+                        capability: perm?.capability,
+                      });
+                    }
                   }}
                   onSimulation={enabled => { void postCommandCenter('/api/jarvis/command-center/control', { simulationMode: enabled }); }}
                   onRunTask={objective => { void postCommandCenter('/api/jarvis/command-center/task', { objective }); }}

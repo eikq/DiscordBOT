@@ -65,6 +65,7 @@ export type CommandCenterSnapshot = {
     selfModel: ReturnType<CapabilitySelfModel['matrix']>;
     candidates: ReturnType<CandidateManager['list']>;
     benchmarks: ReturnType<BenchmarkBank['latest']>;
+    modelAdaptation: { trained: false; candidates: number; nextAfterPolicy: string | null };
   };
   request: { route: RouteDecision; objective: string; taskId?: string } | null;
   permission: {
@@ -118,7 +119,7 @@ export class CommandCenterRuntime {
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
-  private readonly memoryStore?: JarvisMemoryStore;
+  private memoryStore?: JarvisMemoryStore;
   private lastRequest: { route: RouteDecision; objective: string; taskId?: string } | null = null;
 
   constructor(options: CommandCenterOptions = {}) {
@@ -155,6 +156,7 @@ export class CommandCenterRuntime {
       now: options.now,
       invoke: options.invoke ?? createCapabilityWorkInvoker({
         host: () => this.host,
+        researchDepth: () => this.control.snapshot().researchDepth,
       }),
       simulated,
       onTerminal: task => this.recordTaskExperience(task),
@@ -176,6 +178,10 @@ export class CommandCenterRuntime {
 
   public attachCapabilities(host: CapabilityHost): void {
     this.host = host;
+  }
+
+  public attachMemoryStore(store: JarvisMemoryStore): void {
+    this.memoryStore = store;
   }
 
   public snapshot(): CommandCenterSnapshot {
@@ -215,6 +221,11 @@ export class CommandCenterRuntime {
         selfModel: this.selfModel.matrix(),
         candidates: this.candidates.list(),
         benchmarks: this.benchmarks.latest(),
+        modelAdaptation: {
+          trained: false,
+          candidates: this.modelAdaptation.list().length,
+          nextAfterPolicy: this.modelAdaptation.nextLayer('POLICY'),
+        },
       },
       request: this.lastRequest,
       permission: permissionOf(active),

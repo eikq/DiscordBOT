@@ -64,6 +64,7 @@ export class NightCycle {
   private readonly budgets: JarvisBudgets;
   private readonly now: () => number;
   private runStarted = 0;
+  private nextStageIndex = 0;
   private readonly report: NightCycleReport;
 
   constructor(private readonly options: NightCycleOptions) {
@@ -103,13 +104,23 @@ export class NightCycle {
 
   public run(): NightCycleReport {
     this.cancelRequested = false;
+    const continuing = this.status === 'paused' || this.status === 'running';
+    if (!continuing) {
+      this.nextStageIndex = 0;
+      this.runStarted = this.now();
+      Object.assign(this.report, emptyReport(this.options.simulated));
+      this.options.events?.emit('NIGHT_CYCLE', 'Night consolidation started', {}, 'info', {
+        visualState: 'EVOLVING',
+        simulated: this.options.simulated,
+      });
+    } else {
+      this.report.pausedFor = undefined;
+      this.runStarted = this.now();
+    }
     this.status = 'running';
-    this.runStarted = this.now();
-    this.options.events?.emit('NIGHT_CYCLE', 'Night consolidation started', {}, 'info', {
-      visualState: 'EVOLVING',
-      simulated: this.options.simulated,
-    });
-    for (const stage of NIGHT_STAGES) {
+    this.report.status = 'running';
+    for (let i = this.nextStageIndex; i < NIGHT_STAGES.length; i += 1) {
+      const stage = NIGHT_STAGES[i];
       if (this.cancelRequested) break;
       const pressure = this.options.resource?.() ?? 'background_evolution';
       if (pressure === 'realtime_voice' || pressure === 'owner_task') {
@@ -117,6 +128,7 @@ export class NightCycle {
         this.report.pausedFor = pressure;
         this.report.status = 'paused';
         this.stage = stage;
+        this.nextStageIndex = i;
         return this.snapshot();
       }
       if (this.now() - this.runStarted > this.budgets.nightCycleRuntimeMs) {
@@ -124,10 +136,12 @@ export class NightCycle {
         this.report.pausedFor = 'background_evolution';
         this.report.status = 'paused';
         this.stage = stage;
+        this.nextStageIndex = i;
         return this.snapshot();
       }
       this.stage = stage;
       this.step(stage);
+      this.nextStageIndex = i + 1;
     }
     this.status = this.cancelRequested ? 'cancelled' : 'completed';
     this.report.status = this.status;

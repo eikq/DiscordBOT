@@ -1,12 +1,14 @@
 import type { CapabilityHost, CapabilityResult } from '../capabilities/types';
 import { classifyFailure } from '../ops/errors';
 import type { JarvisErrorCode } from '../ops/types';
+import { RESEARCH_CURRENT, RESEARCH_SEARCH } from '../research/constants';
 import { isBlockedCapabilityId, resolveStepCapability } from './capabilityResolve';
 import type { PlanStep, WorkStepInvoker, WorkStepResult, WorkTask } from './types';
 
 export type CapabilityInvokerOptions = {
   host?: CapabilityHost | (() => CapabilityHost | undefined);
   sessionId?: string;
+  researchDepth?: () => string | undefined;
 };
 
 export function createCapabilityWorkInvoker(options: CapabilityInvokerOptions = {}): WorkStepInvoker {
@@ -95,9 +97,14 @@ async function invokeThroughHost(
   const confirmation = step.permissionLease?.token && step.pendingConfirmation?.proposalId
     ? { proposalId: step.pendingConfirmation.proposalId, token: step.permissionLease.token }
     : undefined;
+  let input = resolved.input;
+  if ((resolved.id === RESEARCH_SEARCH || resolved.id === RESEARCH_CURRENT) && input.depth === undefined) {
+    const depth = options.researchDepth?.();
+    if (depth) input = { ...input, depth };
+  }
   const result = await host.invoke({
     id: resolved.id,
-    input: resolved.input,
+    input,
     source: 'system',
     sessionId: options.sessionId || task.id,
     requestId: `${task.id}:${step.id}`,

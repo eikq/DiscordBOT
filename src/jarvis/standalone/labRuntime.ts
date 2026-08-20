@@ -219,7 +219,7 @@ export class JarvisLabRuntime {
 
   constructor(options: JarvisLabRuntimeOptions = {}) {
     const attached = options.memory
-      ? { service: options.memory, schemaVersion: options.memorySchemaVersion }
+      ? { service: options.memory, store: undefined as SqliteJarvisMemoryStore | undefined, schemaVersion: options.memorySchemaVersion }
       : options.attachDefaultMemory
         ? tryDefaultMemory()
         : undefined;
@@ -253,7 +253,11 @@ export class JarvisLabRuntime {
     this.voices = options.voices
       ?? (this.speech ? new RouterVoiceResolver(this.speech) : undefined)
       ?? (options.attachDefaultPresentation ? new ProbeVoiceProfileResolver() : undefined);
-    this.engine = new FactPreservingPresentationEngine({ persona: this.persona, voices: this.voices });
+    this.engine = new FactPreservingPresentationEngine({
+      persona: this.persona,
+      voices: this.voices,
+      affectStyle: () => this.commandCenter?.affect.style(),
+    });
     this.stt = options.stt ?? new LocalSTTProvider();
     this.probeStt = options.probeStt ?? (async () => ({
       reachable: false,
@@ -273,6 +277,9 @@ export class JarvisLabRuntime {
     } else if (options.attachDefaultCapabilities) {
       this.commandCenter = sharedCommandCenter();
       if (this.capabilityHost) this.commandCenter.attachCapabilities(this.capabilityHost);
+    }
+    if (this.commandCenter && attached?.store) {
+      this.commandCenter.attachMemoryStore(attached.store);
     }
   }
 
@@ -543,15 +550,8 @@ export class JarvisLabRuntime {
     affectStyle?: AffectStyle;
   }> {
     const prepared = await this.prepareAsk(input);
-    const route = routeJarvisRequest({
-      text: String(input.text || '').trim(),
-      intentKind: prepared.resolution.kind,
-    });
-    if (shouldUseWorkAgent(route, {
-      explicitCalls: Boolean(input.capabilityCalls?.length || input.capabilities?.length),
-      intentKind: prepared.resolution.kind,
-      capabilityId: prepared.resolution.capabilityId,
-    })) {
+    const { route, useWork } = this.decideAskRoute(input, prepared);
+    if (useWork) {
       return this.askViaWorkAgent(input, prepared.sessionId, route);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
@@ -581,8 +581,19 @@ export class JarvisLabRuntime {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
     speech?: VoiceOutputResult;
+    route?: RouteDecision;
+    taskId?: string;
+    workOutcome?: SynthesizedTaskResponse;
+    affectStyle?: AffectStyle;
   }> {
     const prepared = await this.prepareAsk(input);
+    const { route, useWork } = this.decideAskRoute(input, prepared);
+    if (useWork) {
+      const output = await this.askViaWorkAgent(input, prepared.sessionId, route);
+      emit({ type: 'final', payload: output });
+      if (output.speech) emit({ type: 'speech', payload: output.speech });
+      return output;
+    }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
       engine: this.engine,
@@ -597,6 +608,8 @@ export class JarvisLabRuntime {
       research: this.researchSnapshot(),
       workspace: this.workspaceSnapshot(),
       intent: prepared.intent,
+      route,
+      affectStyle: this.workCenter()?.affect.style(),
     };
     emit({ type: 'final', payload: finalPayload });
     const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
@@ -661,6 +674,24 @@ export class JarvisLabRuntime {
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
     const invoked = await this.capabilityHost.denyProposal(input.proposalId, input.actionSource ?? 'ui');
     return this.finishActionTurn(invoked, sessionId, input.speak);
+  }
+
+  private decideAskRoute(
+    input: JarvisLabAskInput,
+    prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
+  ): { route: RouteDecision; useWork: boolean } {
+    const route = routeJarvisRequest({
+      text: String(input.text || '').trim(),
+      intentKind: prepared.resolution.kind,
+    });
+    return {
+      route,
+      useWork: shouldUseWorkAgent(route, {
+        explicitCalls: Boolean(input.capabilityCalls?.length || input.capabilities?.length),
+        intentKind: prepared.resolution.kind,
+        capabilityId: prepared.resolution.capabilityId,
+      }),
+    };
   }
 
   private workCenter(): CommandCenterRuntime | undefined {
@@ -1092,10 +1123,10 @@ async function resolveLabActionTurn(text: string, input: {
   return { capabilities: [], resolution };
 }
 
-function tryDefaultMemory(): { service: JarvisMemoryService; schemaVersion?: number } | undefined {
+function tryDefaultMemory(): { service: JarvisMemoryService; store: SqliteJarvisMemoryStore; schemaVersion?: number } | undefined {
   try {
     const store = SqliteJarvisMemoryStore.open();
-    return { service: new JarvisMemoryRetrieval(store), schemaVersion: store.schemaVersion() };
+    return { service: new JarvisMemoryRetrieval(store), store, schemaVersion: store.schemaVersion() };
   } catch (error) {
     console.warn(`[JarvisLab] Memory store not attached: ${error instanceof Error ? error.message : error}`);
     return undefined;

@@ -69,9 +69,10 @@ export type CommandCenterClientSnapshot = {
     productionPromotionAllowed: false;
     benchmarks: Array<{ id: string; category: string; passed: boolean; detail: string }>;
     graph: { nodes: number; edges: number; empty: boolean };
+    modelAdaptation: { trained: false; candidates: number };
   };
   request: { route: string; socialAction: string; agentic: boolean; reason: string } | null;
-  permission: { waiting: boolean; capability?: string; proposalId?: string };
+  permission: { waiting: boolean; taskId?: string; stepId?: string; capability?: string; proposalId?: string };
   memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: Array<{
     id: string;
@@ -170,6 +171,10 @@ export function presentCommandCenter(
         edges: snapshot.evolution.graph.edges.length,
         empty: snapshot.evolution.graph.nodes.length === 0,
       },
+      modelAdaptation: {
+        trained: false,
+        candidates: snapshot.evolution.modelAdaptation.candidates,
+      },
     },
     request: snapshot.request
       ? {
@@ -181,6 +186,8 @@ export function presentCommandCenter(
       : null,
     permission: {
       waiting: snapshot.permission.waiting,
+      taskId: snapshot.permission.taskId,
+      stepId: snapshot.permission.stepId,
       capability: snapshot.permission.capability,
       proposalId: snapshot.permission.proposalId,
     },

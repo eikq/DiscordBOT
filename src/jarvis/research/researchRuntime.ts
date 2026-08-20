@@ -189,10 +189,13 @@ export class ResearchRuntime {
     compare?: boolean;
     reuseLast?: boolean;
     maxResults?: number;
-    depth?: 'quick' | 'standard' | 'deep' | 'forensic';
+    depth?: 'none' | 'quick' | 'standard' | 'deep' | 'forensic';
   }): Promise<ResearchResult> {
     const freshness = input.freshness ?? 'any';
     const officialOnly = Boolean(input.officialOnly);
+    if (input.depth === 'none') {
+      return this.fail('search', 'Research depth is none. No web fetch was performed.', 'RESEARCH_DISABLED');
+    }
     if (input.reuseLast) {
       const last = this.lastResult();
       if (last) {

@@ -35,8 +35,8 @@ export function parseObjective(value: unknown): string | undefined {
   return objective;
 }
 
-export function parseNightAction(value: unknown): 'run' | 'pause' | 'cancel' | undefined {
-  return value === 'run' || value === 'pause' || value === 'cancel' ? value : undefined;
+export function parseNightAction(value: unknown): 'run' | 'pause' | 'cancel' | 'resume' | undefined {
+  return value === 'run' || value === 'pause' || value === 'cancel' || value === 'resume' ? value : undefined;
 }
 
 export function parseTaskId(value: unknown): string | undefined {

@@ -6,16 +6,21 @@ import test from 'node:test';
 import {
   CommandCenterRuntime,
   ExperienceStore,
+  FactPreservingPresentationEngine,
   FailureLedger,
   NightCycle,
   SkillVersionRegistry,
   WorkAgent,
   affectCannotAuthorize,
   createCapabilityWorkInvoker,
+  defaultJarvisPresentation,
+  parseNightAction,
   planForObjective,
+  presentCommandCenter,
   routeJarvisRequest,
   shouldUseWorkAgent,
   synthesizeTaskResponse,
+  withPersona,
 } from '../src/jarvis';
 import { createJarvisLabRuntime } from '../src/jarvis/standalone/labRuntime';
 import { adaptPlanForFailures } from '../src/jarvis/agent/adaptivePlan';
@@ -30,6 +35,7 @@ import { BenchmarkBank } from '../src/jarvis/evolution/benchmarks';
 import { shouldRecordSocialEvolution } from '../src/jarvis/evolution/socialFilter';
 import { writeExperienceEpisode, researchTextIsUntrustedMemory } from '../src/jarvis/memory/experienceBridge';
 import { SqliteJarvisMemoryStore } from '../src/bot/memory/jarvis/SqliteJarvisMemoryStore';
+import { GAM_PERSONA_ID } from '../src/jarvis/presentation/types';
 import { visionActionAllowed } from '../src/jarvis/vision';
 import { cctvViewIsNotConfigure } from '../src/jarvis/devices';
 import { parsePermissionGrant } from '../src/jarvis/standalone/commandCenterHttp';
@@ -462,4 +468,178 @@ test('vision see does not imply click and CCTV view is not configure', () => {
 test('HTTP permission grant parser stays fail-closed', () => {
   assert.equal(parsePermissionGrant({ taskId: '../x' }).taskId, undefined);
   assert.ok(parsePermissionGrant({ taskId: 'task_deadbeefdead', token: 'abc' }).token);
+  assert.equal(parseNightAction('resume'), 'resume');
+});
+
+test('duplicate experience id still rejects secrets and discord messages', () => {
+  const store = new ExperienceStore();
+  const first = store.create({
+    id: 'exp_dup_secret',
+    kind: 'episodic',
+    goal: 'safe',
+    situation: 'safe',
+    actions: [],
+    tools: [],
+    result: 'ok',
+    outcome: 'success',
+    lessons: [],
+    confidence: 0.8,
+    privacyClass: 'private',
+    significance: 0.7,
+  });
+  assert.throws(() => store.create({
+    ...first,
+    goal: 'DISCORD_TOKEN=abcdefghijklmnop',
+    lessons: [],
+  }, 'system'));
+  assert.throws(() => store.create({
+    kind: 'social',
+    goal: 'hello',
+    situation: 'discord chat',
+    actions: [],
+    tools: [],
+    result: 'hi',
+    outcome: 'success',
+    lessons: [],
+    confidence: 0.9,
+    privacyClass: 'private',
+    significance: 0.9,
+    channel: 'discord',
+    eventKind: 'message',
+  }, 'system'));
+});
+
+test('askStream uses the same work-agent router as ask', async () => {
+  const host = testHost({
+    'workspace.search': () => result('workspace.search', { content: 'found CapabilityHost' }),
+  });
+  const center = new CommandCenterRuntime({ host, persistRoot: tempRoot('jarvis-ask-stream-') });
+  const lab = createJarvisLabRuntime({
+    capabilities: host,
+    commandCenter: center,
+    attachDefaultMemory: false,
+    attachDefaultSkills: false,
+    attachDefaultPresentation: false,
+    attachDefaultSpeech: false,
+    reminders: false,
+    research: false,
+    workspace: false,
+    llm: { generateText: async () => 'should not be required for work routing' },
+  });
+  const events: Array<{ type: string }> = [];
+  const asked = await lab.askStream(
+    { text: 'inspect these files and fix the issue', sessionId: 'route-stream' },
+    event => { events.push(event); },
+  );
+  assert.equal(asked.route?.route, 'WORK');
+  assert.ok(asked.taskId);
+  assert.ok(events.some(item => item.type === 'final'));
+  center.agent.store.close();
+  center.persistence?.close();
+});
+
+test('command center writes one canonical episode and exposes permission ids', async () => {
+  const host = testHost({
+    'workspace.search': () => result('workspace.search', { content: 'found CapabilityHost' }),
+  });
+  const root = tempRoot('jarvis-mem-wire-');
+  const memory = SqliteJarvisMemoryStore.open(path.join(root, 'jarvis.db'));
+  const center = new CommandCenterRuntime({
+    host,
+    persistRoot: path.join(root, 'runtime'),
+    memoryStore: memory,
+  });
+  const task = await center.runObjective('inspect these files and fix the issue');
+  const episodes = memory.listEpisodes();
+  assert.equal(episodes.length, 1);
+  assert.equal(episodes[0]?.payload.trustedSemanticWrite, false);
+  assert.equal(episodes[0]?.provenance.sourceRecordId, `exp_task_${task.id}`);
+  const presented = presentCommandCenter(center.snapshot());
+  assert.equal(presented.request?.route, 'WORK');
+  assert.equal(presented.evolution.modelAdaptation.trained, false);
+  assert.equal(typeof presented.permission.waiting, 'boolean');
+  memory.close();
+  center.agent.store.close();
+  center.persistence?.close();
+});
+
+test('owner research depth is forwarded to research.search', async () => {
+  const captured: Record<string, unknown>[] = [];
+  const host = testHost({
+    'research.search': input => {
+      captured.push(input);
+      return result('research.search', { content: 'untrusted docs', untrustedOutput: true });
+    },
+  });
+  const center = new CommandCenterRuntime({ host, persistRoot: tempRoot('jarvis-depth-') });
+  center.control.patch({ researchDepth: 'deep' }, 'owner');
+  await center.runObjective('research the latest Qwen documentation');
+  assert.equal(captured[0]?.depth, 'deep');
+  center.agent.store.close();
+  center.persistence?.close();
+});
+
+test('night resume continues from the paused stage', () => {
+  const experiences = new ExperienceStore();
+  experiences.create({
+    kind: 'episodic',
+    domain: 'task',
+    goal: 'status',
+    situation: 'status',
+    actions: ['apply'],
+    tools: ['system.status'],
+    result: 'ok',
+    outcome: 'success',
+    lessons: ['ok'],
+    confidence: 0.9,
+    privacyClass: 'private',
+    significance: 0.8,
+  });
+  let priority: 'realtime_voice' | 'background_evolution' = 'realtime_voice';
+  const night = new NightCycle({
+    experiences,
+    resource: () => priority,
+    simulated: true,
+  });
+  const paused = night.run();
+  assert.equal(paused.status, 'paused');
+  assert.equal(paused.stage, 'DIGEST');
+  assert.equal(paused.experiencesProcessed, 0);
+  priority = 'background_evolution';
+  night.resume();
+  const done = night.run();
+  assert.equal(done.status, 'completed');
+  assert.equal(done.experiencesProcessed, 1);
+});
+
+test('formal affect suppresses slang without changing facts', async () => {
+  const engine = new FactPreservingPresentationEngine({
+    affectStyle: {
+      warmth: 0.2,
+      humor: 0.1,
+      enthusiasm: 0.2,
+      directness: 0.8,
+      formality: 0.9,
+      responseLength: 'short',
+      voiceEnergy: 'low',
+    },
+  });
+  const presented = await engine.render(
+    {
+      requestId: 'req-affect',
+      answerIntent: 'answer',
+      suggestedContent: 'Recursion is a function that calls itself.',
+      verifiedFacts: [{ key: 'def', value: 'calls itself', sourceType: 'system', immutableForPresentation: true }],
+      unverifiedClaims: [],
+      toolResults: [],
+      memoryRefs: [],
+      actionResults: [],
+      uncertainty: [],
+    },
+    withPersona(defaultJarvisPresentation(), GAM_PERSONA_ID, 'STYLE'),
+    { sessionId: 'affect' },
+  );
+  assert.match(presented.text, /calls itself/);
+  assert.doesNotMatch(presented.text, /แบบนี้ไง/);
+  assert.ok(presented.transformations.includes('affect:formal'));
 });

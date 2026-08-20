@@ -74,6 +74,12 @@ export default function CommandCenterPanels({
           <div className="jcc-permit jcc-permit--task">
             <p className="jcc-permit__kicker">Work agent waiting</p>
             <p>{snapshot.task.objective}</p>
+            {snapshot.permission?.capability ? (
+              <p className="jcc-hint">
+                {snapshot.permission.capability}
+                {snapshot.permission.stepId ? ` · ${snapshot.permission.stepId}` : ''}
+              </p>
+            ) : null}
             <div className="jcc-permit__actions">
               <button type="button" className="jcc-permit__deny" disabled={busy} onClick={onCancel}>Cancel</button>
               <button type="button" className="jcc-permit__allow" disabled={busy} onClick={onGrant}>Grant once</button>
@@ -141,6 +147,12 @@ export default function CommandCenterPanels({
         )}
         {snapshot?.evolution.goals[0] ? <p className="jcc-hint">Goal: {snapshot.evolution.goals[0]}</p> : null}
         {snapshot?.evolution.lessons[0] ? <p className="jcc-hint">Lesson: {snapshot.evolution.lessons[0]}</p> : null}
+        <p className="jcc-hint">
+          Model adaptation registry-only
+          {snapshot?.evolution.modelAdaptation
+            ? ` · ${snapshot.evolution.modelAdaptation.candidates} candidates · trained=${snapshot.evolution.modelAdaptation.trained}`
+            : ' · no LoRA training'}
+        </p>
         {snapshot?.evolution.graph.empty ? (
           <p className="jcc-empty">Fluctlight is empty until a real experience is recorded.</p>
         ) : (

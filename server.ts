@@ -1101,7 +1101,10 @@ async function startServer() {
       const center = sharedCommandCenter();
       if (action === 'pause') center.night.pause();
       else if (action === 'cancel') center.night.cancel();
-      else center.runNight();
+      else if (action === 'resume') {
+        center.night.resume();
+        center.runNight();
+      } else center.runNight();
       return res.json(center.present());
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
