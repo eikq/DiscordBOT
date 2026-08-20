@@ -1179,6 +1179,60 @@ callback, so background evolution did not pause for lab voice.
 - Live mic/STT/TTS/RVC and speech↔motion: BLOCKED_LOCAL_ACCEPTANCE /
   NEEDS_LOCAL_VERIFY (LA-026 stays PARTIAL).
 
+## ADR-029 — Perception observes; it does not authorize
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live cameras, screen capture, CCTV hardware, and device control remain
+BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 07 needed a unified perception layer for future screen, camera,
+CCTV, phone, and sensor sources. Existing simulated vision, VIEW-only
+devices, and ProactiveMonitor already encoded SEE != CLICK. They were
+not one typed event pipeline with privacy, retention, CCTV action
+split, or Command Center perception state.
+
+### Decision
+
+- SEE != CLICK, VIEW != CONTROL, CONTROL != ADMIN. Observation never
+  grants CapabilityHost / ActionGate authority.
+- PerceptualEvent is the typed observation: source, timestamp,
+  observation, confidence, region/object refs, privacy classification,
+  simulation flag, evidence refs.
+- Screen providers may capture display, Jarvis window, or a selected
+  region. They do not click, type, or move windows. Cloud is mock-only.
+- Image-model output is untrusted data (`authoritative: false`). It
+  cannot authorize click/submit/control.
+- CCTV actions are `cctv.view`, `cctv.searchEvents`, `cctv.control`,
+  `cctv.configure`, `cctv.admin`. Default Jarvis grant is view +
+  searchEvents.
+- Perceptual observations may become memory *candidates* only, with
+  bounded retention (sensitive 24h, secret session). They do not auto-
+  write canonical SQLite.
+- Anomaly path: observe → normalize → rule/threshold → candidate →
+  cooldown → owner notification candidate. Never auto-act physically.
+- Device identity includes trust and lastSeen. Traces must not carry
+  tokens, cookies, passwords, or API keys.
+- Command Center surfaces are labeled SIMULATION. `liveCamera: false`.
+
+### Alternatives considered
+
+- Treating a vision-model description as an authorized click target —
+  rejected.
+- Defaulting CCTV CONTROL because VIEW is granted — rejected.
+- Auto-writing camera frames or events into canonical memory —
+  rejected.
+- Auto-actuating PTZ or locks from an anomaly candidate — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_perception.test.ts`
+  8/8; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
+- Live capture/CCTV/sensors: BLOCKED_LOCAL_ACCEPTANCE.
+
+
 
 
 

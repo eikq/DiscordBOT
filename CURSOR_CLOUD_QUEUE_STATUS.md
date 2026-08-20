@@ -189,6 +189,40 @@ deferred while later Cloud follow-ups are queued.
 
 Handoff: ADR-028, `tests/jarvis_realtime_voice.test.ts`.
 
+## Queue 07 — Perception, Screen, CCTV and Device Architecture
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+No live camera or device claims.
+
+Implementation: `8d3753cdb20c1f101084bce4fb6ec7671c6d0404`
+
+Unified `src/jarvis/perception/` layer on top of existing simulated
+vision/devices/monitor. Observing never grants authority to act.
+
+Shipped:
+
+- Typed PerceptualEvent: source, timestamp, observation, confidence,
+  region/object refs, privacy classification, simulation, evidence refs
+- Screen capture contracts: display, Jarvis window, selected region
+  (mocks; `controlGranted: false`)
+- Vision interpretation is `untrusted` and `authoritative: false`
+- CCTV actions: view, searchEvents, control, configure, admin.
+  Default Jarvis grant is view + searchEvents only
+- Perceptual memory candidates (`memoryClass: perceptual/episodic`)
+  with bounded retention; `persistToCanonical: false`
+- Anomaly pipeline: normalize → rule/threshold → candidate → cooldown
+  → owner notification candidate. `physicalAct: false`
+- Device identity: deviceId, type, owner label, capabilities, trust,
+  connectivity, lastSeen. Secrets stripped from traces
+- Command Center snapshot/presentation labeled SIMULATION, no live camera
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_perception.test.ts` **8/8** plus command-center /
+cloud-finalization / lab-ui tests green. Full `npm run test:cloud`
+deferred while later Cloud follow-ups are queued.
+
+Handoff: ADR-029, `tests/jarvis_perception.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution

@@ -3,7 +3,26 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 06 Realtime Voice Interaction Architecture
+## This turn — Queue 07 Perception, Screen, CCTV and Device Architecture
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+No live camera or device claims.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `8d3753cdb20c1f101084bce4fb6ec7671c6d0404`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-029.
+Evidence: `npx tsc --noEmit` PASS;
+`tests/jarvis_perception.test.ts` **8/8**. Full `npm run test:cloud`
+deferred while later Cloud follow-ups are queued.
+
+SEE != CLICK. VIEW != CONTROL. CONTROL != ADMIN. Vision output is
+untrusted. Anomaly pipeline never auto-acts physically.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 06 Realtime Voice Interaction Architecture
 
 Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
 Do not claim microphone / STT / TTS / RVC live verification.

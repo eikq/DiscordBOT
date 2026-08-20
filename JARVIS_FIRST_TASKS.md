@@ -525,7 +525,7 @@ Status: INTEGRATED + UNIT_VERIFIED + Queue 04 Procedural Skills V2 **IMPLEMENTED
 
 ## JF-016 / JF-017 / JF-018 — Vision, monitor, devices
 Depends on JF-015
-Status: IMPLEMENTED + UNIT_VERIFIED architecture (simulated vision fixtures, proactive monitor, VIEW-only devices, owner autonomy 0–5). Live screen capture / CCTV / host sensors **BLOCKED_LOCAL_ACCEPTANCE**.
+Status: IMPLEMENTED + UNIT_VERIFIED architecture (simulated vision fixtures, proactive monitor, VIEW-only devices, owner autonomy 0–5). Queue 07 unified Perception layer **IMPLEMENTED + UNIT_VERIFIED** (typed PerceptualEvent, mock screen/CCTV/device registry, untrusted vision, bounded perceptual memory candidates, anomaly cooldown, no physical auto-act; Command Center labeled SIMULATION). Live screen capture / CCTV / host sensors **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## JF-013-PROACTIVE — Proactive events / automation (historical id)
 Depends on permissions/tools/memory
