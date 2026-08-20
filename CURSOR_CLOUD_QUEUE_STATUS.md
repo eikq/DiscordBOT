@@ -161,6 +161,7 @@ Microphone / STT / TTS / RVC live verification is **not** claimed.
 
 Implementation: `7d3a69008bff41947105c516b16ba7d74d5987c4`
 (feat `b8e4f4a9ae00feecfac913e1fa8612cd15e7c549`)
+Queue 06 HEAD: `f63b51898778c7732ead37279babfb81d7675de3`
 
 Explicit turn states: IDLE, LISTENING, TRANSCRIBING, THINKING,
 WORKING, SPEAKING, INTERRUPTED, WAITING_OWNER, ERROR.

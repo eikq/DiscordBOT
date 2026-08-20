@@ -10,6 +10,7 @@ Do not claim microphone / STT / TTS / RVC live verification.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `f63b51898778c7732ead37279babfb81d7675de3`
 Implementation: `7d3a69008bff41947105c516b16ba7d74d5987c4`
 Feat: `b8e4f4a9ae00feecfac913e1fa8612cd15e7c549`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
