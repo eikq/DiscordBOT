@@ -182,9 +182,9 @@ test('night budget pause stays paused, not yielded', () => {
   let t = 0;
   const night = new NightCycle({
     experiences,
-    budgets: { nightCycleRuntimeMs: 1 },
+    budgets: { nightCycleRuntimeMs: 1_000 },
     now: () => {
-      t += 10;
+      t += 2_000;
       return t;
     },
     simulated: true,
