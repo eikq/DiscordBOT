@@ -10,6 +10,7 @@ No live camera or device claims.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `4593b351d6a1a778ed915eeca05b994ed8312a2e`
 Implementation: `8d3753cdb20c1f101084bce4fb6ec7671c6d0404`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 ADR: ADR-029.

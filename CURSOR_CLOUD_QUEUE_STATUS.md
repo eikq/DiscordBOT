@@ -195,6 +195,7 @@ Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 No live camera or device claims.
 
 Implementation: `8d3753cdb20c1f101084bce4fb6ec7671c6d0404`
+Queue 07 HEAD: `4593b351d6a1a778ed915eeca05b994ed8312a2e`
 
 Unified `src/jarvis/perception/` layer on top of existing simulated
 vision/devices/monitor. Observing never grants authority to act.
