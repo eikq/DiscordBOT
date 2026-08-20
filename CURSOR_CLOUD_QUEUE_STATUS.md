@@ -93,7 +93,8 @@ Handoff: ADR-025, `tests/jarvis_memory_v2.test.ts`.
 
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 
-Implementation: `866e843`
+Implementation: `866e843e935dcd99fb02ecf60952e78002e832da`
+Queue 04 HEAD: `9175ef5c4c65ec8aab7e0f0d5a40c0280e55c26b`
 
 Preserve `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE`.
 Jarvis may never approve its own privilege expansion.

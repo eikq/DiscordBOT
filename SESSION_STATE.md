@@ -10,7 +10,8 @@ SQLite remains canonical. Qdrant is not started.
 `autoPromote=false`. Jarvis cannot self-approve skill trust.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
-Implementation: `866e843`
+HEAD: `9175ef5c4c65ec8aab7e0f0d5a40c0280e55c26b`
+Implementation: `866e843e935dcd99fb02ecf60952e78002e832da`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 ADR: ADR-026.
 Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_skills_v2.test.ts`
