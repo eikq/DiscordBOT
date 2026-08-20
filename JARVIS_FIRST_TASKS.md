@@ -489,11 +489,19 @@ Status: IMPLEMENTED depth planner + injection/SSRF tests. Live DEEP private brow
 
 ## JF-014.6 — Realtime operations telemetry
 Depends on JF-014.5
-Status: IMPLEMENTED event bus + lab `/api/jarvis/events`. Command Center live-QA pending.
+Status: IMPLEMENTED + UNIT_VERIFIED (`JarvisEventBus` seq/id, bounded buffer, SSE `id:` + `after=`/`Last-Event-ID` replay, heartbeat comments, visual states). `/jarvis-lab` EventSource wired. Browser SSE live-QA **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## JF-015 — Multi-step work agent
 Depends on JF-014.5 / JF-014.55*
-Status: NOT_IMPLEMENTED
+Status: INTEGRATED + UNIT_VERIFIED. `/api/jarvis/ask` now routes CONVERSATION/INFORMATION vs RESEARCH/WORK/CAPABILITY. Agentic routes use WorkAgent → CapabilityHost. ActionGate grants resume the same step with a scoped lease (no self-approve, no token reuse). Live Ollama/hardware execution **BLOCKED_LOCAL_ACCEPTANCE**.
+
+## EVO-001–010 — Evolution runtime (fail-closed)
+Depends on JF-015
+Status: INTEGRATED + UNIT_VERIFIED lifecycle and durable `evolution.db`. One experience per task (`exp_task_<id>`). Canonical SQLite episodes are written with provenance; research text stays untrusted. Night cycle includes BENCHMARK, persists reflections, and proposes success-only skill candidates. No autonomous production writes. Failure cannot mint trusted skills. Candidates never auto-promote. LoRA is registry-only (`trained: false`). Affect cannot authorize. Night cycle pauses on `realtime_voice`. Live night/Ollama **BLOCKED_LOCAL_ACCEPTANCE**.
+
+## JF-016 / JF-017 / JF-018 — Vision, monitor, devices
+Depends on JF-015
+Status: IMPLEMENTED + UNIT_VERIFIED architecture (simulated vision fixtures, proactive monitor, VIEW-only devices, owner autonomy 0–5). Live screen capture / CCTV / host sensors **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## JF-013-PROACTIVE — Proactive events / automation (historical id)
 Depends on permissions/tools/memory
@@ -512,6 +520,19 @@ Goal:
 Feed structured CCTV events into Jarvis.
 
 Not a prerequisite for Jarvis Core v1 unless owner chooses.
+
+## JF-019 — Presentation Mode + desktop presence
+Depends on JF-009 / JF-010 / UI-R9
+Status: IMPLEMENTED + CLOUD_VERIFIED (unit). Live: LA-026 PARTIAL; LA-027 PARTIAL — NATIVE_SHELL_REQUIRED. ADR-023 Phase 1 contracts scaffolded; helper not installed. Cloud: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+
+Goal:
+Present rich results in the existing `/jarvis-lab` command center and report honest desktop/window presence. Jarvis may only move its own window.
+
+Evidence:
+- `src/jarvis/presentation/briefing/` pipeline (plain | rich | briefing)
+- `src/jarvis/desktop/` capabilities through ActionGate
+- Presenter camera + briefing panel on `/jarvis-lab`
+- Tests: `tests/jarvis_presentation_briefing.test.ts`, `tests/jarvis_desktop_presence.test.ts`, `tests/jarvis_presenter_desktop_cloud.test.ts`
 
 ## DEFERRED — Discord integration
 

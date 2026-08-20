@@ -1,4 +1,5 @@
 import { inferReminderIntent } from '../../automation/reminderIntent';
+import { inferDesktopPresenceIntent } from '../../desktop/intent';
 import { inferResearchIntent } from '../../research/researchIntent';
 import { inferWorkspaceIntent } from '../../workspace/workspaceIntent';
 import {
@@ -91,6 +92,15 @@ export function inferActionIntent(
 
   const research = inferResearchIntent(raw);
   if (research.kind !== 'none') return research;
+
+  const presence = inferDesktopPresenceIntent(raw);
+  if (presence.kind === 'action') {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [{ id: presence.capabilityId, input: presence.arguments }],
+    };
+  }
 
   for (const item of BLOCKED_PATTERNS) {
     if (!item.pattern.test(raw)) continue;

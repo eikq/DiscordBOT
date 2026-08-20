@@ -524,7 +524,11 @@ function unavailableReason(reasonCode: string): boolean {
     || reasonCode === 'UNKNOWN_SOURCE'
     || reasonCode === 'PRIVATE_BROWSER_UNAVAILABLE'
     || reasonCode === 'VIRTUALBOX_MISSING'
-    || reasonCode === 'PRIVILEGE_STORE_UNAVAILABLE';
+    || reasonCode === 'PRIVILEGE_STORE_UNAVAILABLE'
+    || reasonCode === 'WINDOW_UNAVAILABLE'
+    || reasonCode === 'DISPLAY_NOT_FOUND'
+    || reasonCode === 'UNSUPPORTED_HOST'
+    || reasonCode === 'PERMISSION_REQUIRED';
 }
 
 function confirmationMessage(reasonCode: string): string {
@@ -556,6 +560,24 @@ function describeProposal(
   if (capabilityId === 'desktop.openSettings') {
     const settingsId = String(input.settingsId ?? 'settings');
     return { displayName: settingsId, summary: `Open ${settingsId} settings`, target: settingsId, risk: 'LOW_RISK_ACTION' };
+  }
+  if (capabilityId === 'desktop.listDisplays') {
+    return { displayName: 'Displays', summary: 'List displays', target: 'jarvis-window', risk: 'READ_ONLY' };
+  }
+  if (capabilityId === 'desktop.getJarvisWindow') {
+    return { displayName: 'Jarvis window', summary: 'Read Jarvis window', target: 'jarvis-window', risk: 'READ_ONLY' };
+  }
+  if (capabilityId === 'desktop.moveJarvisWindow') {
+    return { displayName: 'Move Jarvis', summary: 'Move Jarvis window', target: 'jarvis-window', risk: 'CONFIRM_REQUIRED' };
+  }
+  if (capabilityId === 'desktop.setJarvisWindowBounds') {
+    return { displayName: 'Resize Jarvis', summary: 'Resize Jarvis window', target: 'jarvis-window', risk: 'CONFIRM_REQUIRED' };
+  }
+  if (capabilityId === 'desktop.focusJarvisWindow') {
+    return { displayName: 'Focus Jarvis', summary: 'Focus Jarvis window', target: 'jarvis-window', risk: 'CONFIRM_REQUIRED' };
+  }
+  if (capabilityId === 'desktop.setJarvisLayout') {
+    return { displayName: 'Jarvis layout', summary: 'Set Jarvis window layout', target: 'jarvis-window', risk: 'CONFIRM_REQUIRED' };
   }
   if (capabilityId === 'jarvis.startService' || capabilityId === 'jarvis.stopService' || capabilityId === 'jarvis.restartService') {
     const serviceId = String(input.serviceId ?? 'service');
@@ -627,6 +649,16 @@ function targetClassOf(proposal: ActionProposal, lists: DesktopAllowlists): stri
   }
   if (proposal.capabilityId === 'desktop.openSettings') {
     return `settings:${String(proposal.normalizedArguments.settingsId ?? '')}`;
+  }
+  if (
+    proposal.capabilityId === 'desktop.listDisplays'
+    || proposal.capabilityId === 'desktop.getJarvisWindow'
+    || proposal.capabilityId === 'desktop.moveJarvisWindow'
+    || proposal.capabilityId === 'desktop.setJarvisWindowBounds'
+    || proposal.capabilityId === 'desktop.focusJarvisWindow'
+    || proposal.capabilityId === 'desktop.setJarvisLayout'
+  ) {
+    return 'jarvis-window';
   }
   if (proposal.capabilityId.startsWith('jarvis.') && proposal.normalizedArguments.serviceId) {
     return `jarvis-service:${String(proposal.normalizedArguments.serviceId)}`;

@@ -23,6 +23,36 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     argumentSchemaSummary: 'settingsId',
     sideEffectClass: 'LOW_RISK_ACTION',
   },
+  'desktop.listDisplays': {
+    shortDescription: 'List attached displays. Read-only.',
+    argumentSchemaSummary: '(none)',
+    sideEffectClass: 'READ_ONLY',
+  },
+  'desktop.getJarvisWindow': {
+    shortDescription: 'Read Jarvis window bounds and current display.',
+    argumentSchemaSummary: '(none)',
+    sideEffectClass: 'READ_ONLY',
+  },
+  'desktop.moveJarvisWindow': {
+    shortDescription: 'Move the Jarvis window to another display.',
+    argumentSchemaSummary: 'displaySelector',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'desktop.setJarvisWindowBounds': {
+    shortDescription: 'Resize the Jarvis window only.',
+    argumentSchemaSummary: 'x, y, width, height',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'desktop.focusJarvisWindow': {
+    shortDescription: 'Focus the Jarvis window only.',
+    argumentSchemaSummary: '(none)',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'desktop.setJarvisLayout': {
+    shortDescription: 'Maximize, restore, or open presenter layout on a display.',
+    argumentSchemaSummary: 'layout, displaySelector?',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
   'system.status': {
     shortDescription: 'Read local CPU/RAM/GPU/disk status.',
     argumentSchemaSummary: '(none)',

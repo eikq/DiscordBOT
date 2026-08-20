@@ -257,6 +257,7 @@ export class StandaloneVoiceRouter implements VoiceOutputRouter {
       reason: extra.reason,
       mime: extra.mime,
       audioBase64: extra.audioBase64,
+      audioDurationMs: extra.audioDurationMs,
     };
   }
 }

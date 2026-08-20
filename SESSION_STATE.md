@@ -1,7 +1,158 @@
 ﻿# Cursor Session State
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
+
+## This turn — Presenter + Desktop cloud implementation
+
+Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
+LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
+No merge. Native helper **not installed**.
+
+Branch: `cursor/jarvis-presenter-desktop-cloud-2026-08-20-4838`
+Base: `8aba6b019c436b1e636f32274607015a4dc23e38`
+(`origin/local/jarvis-acceptance-2026-08-20`)
+
+Cloud-safe work: structured presentation facts, TTS-driven narration
+timeline, repeat/back, intersection display matching, native-helper
+contracts/mocks, comparison routing, Ollama `llm.model`.
+
+Verification (Cloud): targeted **48/48**; `npx tsc --noEmit` PASS;
+`npm run test:cloud` **517/517**. Handoff:
+`CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+
+## Previous — Presenter + desktop live acceptance
+
+Labels: LA-026 **PARTIAL**. LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**.
+LA-001 and LA-002 remain **PARTIAL** (owner). No LIVE_VERIFIED upgrade.
+No merge. Not pushed. No Tauri/Electron/Rust install.
+
+Branch: `local/jarvis-acceptance-2026-08-20` from presenter commit `b2db545`.
+Simulation OFF. Lab `JARVIS_STANDALONE=1` `http://127.0.0.1:3010`.
+Real Edge-TTS. Real 2-display enum after timeout fix. Browser host cannot
+move Chrome/Edge. Native-helper architecture is **Proposed** (ADR-023).
+
+Cloud handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
+
+Fixes this pass (minimal): research briefing isolation; WorkAgent desktop
+intent wiring; list/get timeout 18s / write 20s; spawn enum timeout 15s.
+
+Verification: targeted **21/21**; `npx tsc --noEmit` PASS;
+`npm run test:cloud` **498/498**. No Discord / Whonix / CCTV.
+
+## Previous — Presentation Mode + desktop presence (implement)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. Live QA was this turn.
+
+## Previous — LA-001 / LA-002 close pass
+
+Owner later directed **PARTIAL** for both. Agent-browser evidence remains
+historical. LA-002 is **not OWNER_VERIFIED** (LA-013). No merge. Not pushed.
+Discord / Whonix / STT / RVC / uncensored / MoneyPrinterTurbo were not started.
+
+Branch: `local/jarvis-acceptance-2026-08-20` from `4724cbf`.
+Simulation OFF. Lab `JARVIS_STANDALONE=1` `http://127.0.0.1:3010`.
+Ollama `0.32.14` / `digital-me-qwen38:27b-ad-q4km`.
+`npx tsc --noEmit` PASS. `npm run test:cloud` **477/477**.
+
+Close-pass defects fixed: requestId correlation through WorkAgent, capability
+trace collection, single latest-request writer, bounded Last task DAG,
+permission-wait grant/deny/cancel, usage `tokens` kept while confirm tokens
+stay redacted.
+
+Uncached research: marker `LA001-UNCACHED-2026-08-20-1787232948618`,
+`requestId=jarvis-1787232959132`, `task_693bb3aeb0ae`, `cached=false`,
+trace `tr_4430cb02f901` same requestId + `research.search` ok.
+Capability: `สถานะระบบ` `jarvis-1787232970933` / `tr_003c467ced03`.
+Hello after tokens-keep: `jarvis-1787233596801` / `tr_acc97921764e` tokens=10.
+Permission: wait/cancel `task_4ebf6826844b`; Grant once `task_f2fe0ec67647`.
+
+LA-002 visual: newest request follows CONVERSATION after research; Last task
+DAG inspectable; permission wait shown; SSE live/refresh/dedup with no
+console errors. Hidden-tab pause is product behavior. Do not start LA-003+.
+
+## Previous — Jarvis research addendum (cloud delta before local acceptance)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware/Ollama/IME/video remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed. OpenClaude/MoneyPrinterTurbo/Qwen weights were not installed.
+
+Starting branch: `cursor/jarvis-cloud-finalization-4838` @ `f2f53dc`.
+Continuation branch: `cursor/jarvis-research-addendum-4838`.
+
+Prior WorkAgent / CapabilityHost / evolution / Command Center / typed ask router work was preserved, not rebuilt.
+
+- Trace: isolated `ops.db` `TraceStore` records observable facts only (request/session/turn/task/route/model/engine/refs/latency/tokens/retries/errors). Forbidden CoT keys stripped. `TraceAnalyzer` returns `INSUFFICIENT_DATA` rather than inventing p50/p95.
+- RuntimeSpec: versioned INTELLIGENCE/ENGINE/AGENT/TOOLS_MEMORY/LEARNING description of the existing runtime. Security/permissions/owner/trust/secrets/promotion are frozen.
+- Model profiles: STANDARD / EXPERIMENTAL / RESTRICTED. Uncensored Qwen exists as RESTRICTED with `securityAuthority: false`. No model is the permission system.
+- Certification: 10 fixture categories, `liveOllama: false`, status `FIXTURE_ONLY`. Real Ollama/Qwen = BLOCKED_LOCAL_ACCEPTANCE.
+- Efficiency: success/latency/tokens when measured. RAM/VRAM/CPU/GPU/energy/cost omitted unless probed.
+- Model routing: deterministic policy; RESTRICTED never auto-selected; night stronger model only if `hardware.idle === true`.
+- Spec optimization: BASELINE → HYPOTHESIS → isolated benchmark → REJECT/PROMOTION_CANDIDATE. `autoPromote()` is always false.
+- Thai: combining-mark fixture round-trips HTTP `parseObjective`, `createJarvisRequest`, task objective, SQLite fact, trace, JSON, Command Center. Windows IME remains BLOCKED_LOCAL_ACCEPTANCE.
+- Artifacts + media: stage/manifest/validate simulator. MoneyPrinterTurbo `installed: false`. Publish never auto.
+- Memory: lexical + semantic fusion keeps SQLite canonical; Qdrant index-only orphans dropped.
+- Scheduler: audited reminders / night / monitor only. Jobs are not permissions. No fourth scheduler.
+- Command Center: Intelligence panel on the existing lab UI. Empty analyzer shows INSUFFICIENT_DATA.
+- Night Cycle: consumes traces for owner-review spec candidates. `autoPromoted: false`. No training.
+
+Verification: targeted addendum+related **49/49**; `npx tsc --noEmit` PASS; `npm run test:cloud` **468/468**. Browser visual QA not run.
+
+## Previous — cloud finalization wiring (memory, stream, depth, night resume, grant)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware/browser/Ollama remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed.
+
+Branch: `cursor/jarvis-cloud-finalization-4838` from `6ba63bd` (`cursor/jarvis-runtime-integration-4838`).
+
+Follow-up after the ask-router / ActionGate pass (`8945da3`):
+
+- Experience writes validate actor + secrets + Discord social filter **before** idempotent id reuse. Duplicate `exp_task_*` ids cannot smuggle `DISCORD_TOKEN=…` or webpage actors.
+- Default lab memory store attaches to Command Center so a real WorkAgent outcome writes one canonical `jarvis.db` episode (`trustedSemanticWrite: false`).
+- `askStream` uses the same typed router as `ask` (research/work no longer fall through to LLM-only).
+- Owner `researchDepth` is forwarded into `research.search` / `research.current`. Depth `none` performs no web fetch.
+- Night Cycle `run()` continues from the paused stage; HTTP accepts `action: resume`.
+- Command Center client snapshot now includes `permission.taskId/stepId/proposalId` and registry-only model-adaptation counts. Grant once posts those ids. SSE skips `seq <= lastSeq`.
+- Affect may suppress casual slang when formal; it cannot authorize and cannot drop immutable facts.
+
+Verification this turn: targeted suite **119/119**; `npx tsc --noEmit` PASS; `npm run test:cloud` **457/457**. Browser visual QA not run (no browser MCP).
+
+## Previous — cloud finalization (ask router, ActionGate handshake, one evolution loop)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed.
+
+- P0 router: `routeJarvisRequest` → CONVERSATION / INFORMATION / RESEARCH / WORK / CAPABILITY with IGNORE/REACT/SPEAK. `hello` / `how are you?` / `explain recursion` stay off WorkAgent. Research/work/unbound capability go through `/api/jarvis/ask` → WorkAgent.
+- P0 permission: `grantPermission` no longer marks gated steps done. Owner lease is bound to task/step/capability/scope/risk/expiry. Same step resumes through CapabilityHost. Jarvis/system cannot self-approve. Tokens are stripped from `work.db`. Denial stays denied.
+- P0 synthesis + evolution: user-facing SUCCESS/PARTIAL/BLOCKED/FAILED/CANCELLED/DEGRADED. One experience id `exp_task_<taskId>`. Duplicate observers are no-ops. Failure still cannot mint a trusted skill.
+- P0 memory: optional canonical episode write via `writeExperienceEpisode`. Research/untrusted tool output cannot become owner-trusted semantic memory.
+- P1: failure-adaptive retry bounds, trusted-only skill retrieval, night BENCHMARK stage, Command Center route/permission/benchmarks/honest empty Fluctlight, affect style metadata only.
+- P2: vision health + SEE≠CLICK, monitor simulation helper, VIEW≠CONFIGURE preserved. Authoritative queue: `BLOCKED_LOCAL_ACCEPTANCE.md` LA-001–LA-013.
+
+## Previous — runtime integration (CapabilityHost, persistence, night cycle)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware paths remain **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed.
+
+Branch: `cursor/jarvis-runtime-integration-4838` from `e9403bb`.
+
+Maturity audit (code, not class-exists):
+
+- JF-014.6: FUNCTIONAL_CORE. Event bus + SSE replay exist. Browser SSE QA still **BLOCKED_LOCAL_ACCEPTANCE**.
+- JF-015: INTEGRATED + UNIT_VERIFIED. `createCapabilityWorkInvoker` calls CapabilityHost. Isolated `work.db`. Restart/resume tested. Unrestricted shell denied.
+- EVO-001–010: INTEGRATED + UNIT_VERIFIED for the outcome → experience → reflection → candidate path. Durable `evolution.db`. Night cycle writes reflections and success-only skill candidates. Still no auto-promote. Affect cannot authorize.
+- JF-016/017/018: SIMULATION_ONLY + **BLOCKED_LOCAL_ACCEPTANCE**.
+- Command Center: FUNCTIONAL_CORE. Real `runObjective` / night endpoints + lab host attach. Simulation stays labeled. Not **OWNER_VERIFIED**. No browser MCP in this cloud.
+
+Verification this turn: targeted integration tests **9/9**; work/evolution/command-center/lab-ui/night **50/50**; `npx tsc --noEmit` PASS; `npm run test:cloud` **436/436**. The two prior Night Agent Linux failures are classified TEST_PORTABILITY_BUG and fixed without weakening assertions (`path.win32` for Windows fixtures; Cursor launch accepts `node` or `node.exe`).
+
+## Previous — cloud-safe Jarvis roadmap (JF-014.6 / JF-015 / EVO / Command Center)
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed. Hardware paths are **BLOCKED_LOCAL_ACCEPTANCE**. No merge to main. No Discord features. No secrets committed.
+
+The previous cloud pass wrote work-agent / evolution / ops libraries and then stopped before SSE APIs, lab UI wiring, docs, commit, and PR. This turn finished that wiring.
+
+- JF-014.6: event `id`/`seq`, bounded buffer, SSE `id:` + `after=`/`Last-Event-ID` replay, heartbeat comments, visual-state mapping. `/jarvis-lab` EventSource reconnects. Browser SSE QA not run in cloud.
+- JF-015: DAG work agent with cancel/pause/resume, permission wait, stale-terminal write guard, simulated demos via `CommandCenterRuntime`.
+- EVO-001–010: claims, retrieval rank, structured reflection (failure cannot mint trusted skills), skill lifecycle, failure ledger, self-model `INSUFFICIENT DATA` until n≥3, growth planner cap 3, practice/benchmarks, night cycle pause on `realtime_voice`, affect cannot authorize, identity overlay, journal, candidate manager (no auto-promote), LoRA registry only (`trained: false`).
+- JF-016/017/018: simulated vision (see ≠ click/type/submit), proactive monitor, VIEW-only devices, owner autonomy 0–5 (Jarvis cannot raise max).
+- Lab: `/api/jarvis/command-center` GET + demo/control/cancel/grant POSTs (loopback + mutation guard). Simulation banner, live ops steps, evolution rail, source graph, devices.
+- Verification this turn: targeted Jarvis tests **48/48** pass; `npx tsc --noEmit` PASS; `npm run test:cloud` **425/427** pass. The two failures are pre-existing `night_agent_grok_only` Windows-path assertions on Linux (`path.basename` of `C:\\...` and `node.exe` vs `node`). Not claimed as this change. Browser SSE / Ollama / Whonix / mic / CCTV remain **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## This turn — cloud-safe Jarvis checkpoint for Cursor Cloud Agents
 

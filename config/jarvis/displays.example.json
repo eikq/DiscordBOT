@@ -1,0 +1,14 @@
+{
+  "displays": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "name": "example-notebook",
+      "aliases": ["notebook", "laptop", "จอโน้ตบุ๊ก"]
+    },
+    {
+      "id": "\\\\.\\DISPLAY-EXAMPLE-SECOND",
+      "name": "example-main",
+      "aliases": ["main", "จอหลัก"]
+    }
+  ]
+}

@@ -23,6 +23,12 @@ import {
   DESKTOP_OPEN_PROJECT,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_FOCUS_JARVIS_WINDOW,
+  DESKTOP_GET_JARVIS_WINDOW,
+  DESKTOP_LIST_DISPLAYS,
+  DESKTOP_MOVE_JARVIS_WINDOW,
+  DESKTOP_SET_JARVIS_LAYOUT,
+  DESKTOP_SET_JARVIS_WINDOW_BOUNDS,
   JARVIS_HEALTH_CHECK,
   JARVIS_RESTART_SERVICE,
   JARVIS_RUNTIME_STATUS,
@@ -93,6 +99,11 @@ const FORBIDDEN_KEYS = new Set([
   'authorization',
   'host',
   'hostname',
+  'hwnd',
+  'windowHandle',
+  'processId',
+  'windowTitle',
+  'className',
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -222,7 +233,119 @@ export function validateActionInput(
     return validateWorkspaceInput(capabilityId, input);
   }
 
+  if (capabilityId === DESKTOP_LIST_DISPLAYS || capabilityId === DESKTOP_GET_JARVIS_WINDOW || capabilityId === DESKTOP_FOCUS_JARVIS_WINDOW) {
+    if (!onlyKeys(input, [])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: `${capabilityId} does not accept arguments.` };
+    }
+    return { ok: true, value: {} };
+  }
+
+  if (capabilityId === DESKTOP_MOVE_JARVIS_WINDOW) {
+    return validateMoveWindowInput(input);
+  }
+
+  if (capabilityId === DESKTOP_SET_JARVIS_WINDOW_BOUNDS) {
+    return validateWindowBoundsInput(input);
+  }
+
+  if (capabilityId === DESKTOP_SET_JARVIS_LAYOUT) {
+    return validateWindowLayoutInput(input);
+  }
+
   return { ok: false, reasonCode: 'UNKNOWN_CAPABILITY', userMessage: 'Unknown capability.' };
+}
+
+const DISPLAY_ROLES = new Set(['primary', 'current', 'external', 'notebook']);
+const WINDOW_LAYOUTS = new Set(['maximized', 'minimized', 'normal', 'presenter', 'restore']);
+const DISPLAY_ID_PATTERN = /^(?:\\\\\.\\)?DISPLAY\d+$|^[A-Za-z0-9_.:\\-]{1,64}$/iu;
+const DISPLAY_NAME_PATTERN = /^[\p{L}\p{N} _.-]{1,48}$/u;
+
+function validateMoveWindowInput(input: Record<string, unknown>): ValidatedActionInput {
+  if (!onlyKeys(input, ['displaySelector', 'displayId', 'displayIndex', 'displayName', 'role'])) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only a display selector is allowed.' };
+  }
+  return validateDisplaySelectorInput(input);
+}
+
+function validateWindowLayoutInput(input: Record<string, unknown>): ValidatedActionInput {
+  if (!onlyKeys(input, ['layout', 'displaySelector', 'displayId', 'displayIndex', 'displayName', 'role'])) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only layout and a display selector are allowed.' };
+  }
+  if (typeof input.layout !== 'string' || !WINDOW_LAYOUTS.has(input.layout)) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Unknown Jarvis window layout.' };
+  }
+  if (input.layout === 'restore' && onlyKeys(input, ['layout'])) {
+    return { ok: true, value: { layout: input.layout } };
+  }
+  const selector = validateDisplaySelectorInput(input);
+  if (!selector.ok) return selector;
+  return { ok: true, value: { layout: input.layout, ...selector.value } };
+}
+
+function validateWindowBoundsInput(input: Record<string, unknown>): ValidatedActionInput {
+  if (!onlyKeys(input, ['x', 'y', 'width', 'height'])) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only x, y, width, and height are allowed.' };
+  }
+  const bounds = ['x', 'y', 'width', 'height'].map(key => input[key]);
+  if (bounds.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+    return { ok: false, reasonCode: 'INVALID_BOUNDS', userMessage: 'Window bounds must be numbers.' };
+  }
+  const width = input.width as number;
+  const height = input.height as number;
+  const x = input.x as number;
+  const y = input.y as number;
+  if (width < 200 || width > 16000 || height < 200 || height > 16000 || Math.abs(x) > 20000 || Math.abs(y) > 20000) {
+    return { ok: false, reasonCode: 'INVALID_BOUNDS', userMessage: 'Those window bounds are not allowed.' };
+  }
+  return { ok: true, value: { x, y, width, height } };
+}
+
+function validateDisplaySelectorInput(input: Record<string, unknown>): ValidatedActionInput {
+  const raw = input.displaySelector;
+  const selector = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {
+      ...(typeof input.displayId === 'string' ? { id: input.displayId } : {}),
+      ...(typeof input.displayIndex === 'number' ? { index: input.displayIndex } : {}),
+      ...(typeof input.displayName === 'string' ? { name: input.displayName } : {}),
+      ...(typeof input.role === 'string' ? { role: input.role } : {}),
+    };
+  const nestedForbidden = rejectForbidden(selector);
+  if (nestedForbidden) return nestedForbidden;
+  if (!onlyKeys(selector, ['index', 'id', 'name', 'role'])) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Those display arguments are not allowed.' };
+  }
+  const value: Record<string, unknown> = {};
+  if (raw) value.displaySelector = {};
+  const target = (value.displaySelector ?? value) as Record<string, unknown>;
+  if (selector.index !== undefined) {
+    if (typeof selector.index !== 'number' || !Number.isInteger(selector.index) || selector.index < 1 || selector.index > 16) {
+      return { ok: false, reasonCode: 'DISPLAY_NOT_FOUND', userMessage: 'Monitor index must be 1-16.' };
+    }
+    target.index = selector.index;
+  }
+  if (selector.id !== undefined) {
+    if (typeof selector.id !== 'string' || !DISPLAY_ID_PATTERN.test(selector.id)) {
+      return { ok: false, reasonCode: 'DISPLAY_NOT_FOUND', userMessage: 'Unknown display id.' };
+    }
+    target.id = selector.id;
+  }
+  if (selector.name !== undefined) {
+    if (typeof selector.name !== 'string' || !DISPLAY_NAME_PATTERN.test(selector.name)) {
+      return { ok: false, reasonCode: 'DISPLAY_NOT_FOUND', userMessage: 'Unknown display name.' };
+    }
+    target.name = selector.name;
+  }
+  if (selector.role !== undefined) {
+    if (typeof selector.role !== 'string' || !DISPLAY_ROLES.has(selector.role)) {
+      return { ok: false, reasonCode: 'DISPLAY_NOT_FOUND', userMessage: 'Unknown display role.' };
+    }
+    target.role = selector.role;
+  }
+  if (!target.index && !target.id && !target.name && !target.role) {
+    return { ok: false, reasonCode: 'DISPLAY_NOT_FOUND', userMessage: 'A display selector is required.' };
+  }
+  return { ok: true, value };
 }
 
 function parseServiceId(value: unknown): ValidatedActionInput {
@@ -308,7 +431,7 @@ function validateReminderInput(capabilityId: string, input: Record<string, unkno
 
 function validateResearchInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {
   const allowed = capabilityId === RESEARCH_SEARCH
-    ? ['query', 'maxResults', 'freshness']
+    ? ['query', 'maxResults', 'freshness', 'depth']
     : capabilityId === RESEARCH_FETCH
       ? ['sourceId', 'url', 'freshness']
       : capabilityId === RESEARCH_GET

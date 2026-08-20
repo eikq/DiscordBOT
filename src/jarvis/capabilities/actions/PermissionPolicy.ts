@@ -8,6 +8,12 @@ import {
   DESKTOP_OPEN_PROJECT,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_FOCUS_JARVIS_WINDOW,
+  DESKTOP_GET_JARVIS_WINDOW,
+  DESKTOP_LIST_DISPLAYS,
+  DESKTOP_MOVE_JARVIS_WINDOW,
+  DESKTOP_SET_JARVIS_LAYOUT,
+  DESKTOP_SET_JARVIS_WINDOW_BOUNDS,
   JARVIS_HEALTH_CHECK,
   JARVIS_RESTART_SERVICE,
   JARVIS_RUNTIME_STATUS,
@@ -29,6 +35,33 @@ export class PermissionPolicy {
       capabilityId: proposal.capabilityId,
       proposalId: proposal.proposalId,
     };
+
+    if (proposal.capabilityId === DESKTOP_LIST_DISPLAYS || proposal.capabilityId === DESKTOP_GET_JARVIS_WINDOW) {
+      return {
+        ...base,
+        decision: 'allow',
+        reasonCode: 'READ_ONLY',
+        userMessage: proposal.capabilityId === DESKTOP_LIST_DISPLAYS
+          ? 'Read-only display list.'
+          : 'Read-only Jarvis window status.',
+        risk: 'READ_ONLY',
+      };
+    }
+
+    if (
+      proposal.capabilityId === DESKTOP_MOVE_JARVIS_WINDOW
+      || proposal.capabilityId === DESKTOP_SET_JARVIS_WINDOW_BOUNDS
+      || proposal.capabilityId === DESKTOP_FOCUS_JARVIS_WINDOW
+      || proposal.capabilityId === DESKTOP_SET_JARVIS_LAYOUT
+    ) {
+      return {
+        ...base,
+        decision: 'confirm',
+        reasonCode: 'JARVIS_WINDOW_ONLY',
+        userMessage: 'This moves or focuses the Jarvis window only. Other apps stay untouched.',
+        risk: 'CONFIRM_REQUIRED',
+      };
+    }
 
     if (proposal.capabilityId === SYSTEM_STATUS) {
       return {

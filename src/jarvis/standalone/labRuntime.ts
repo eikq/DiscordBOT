@@ -65,6 +65,15 @@ import type {
 } from '../presentation/types';
 import { FileBehaviorPersonaProvider } from '../presentation/filePersonaProvider';
 import { FactPreservingPresentationEngine } from '../presentation/PresentationEngine';
+import {
+  applySpokenDuration,
+  runPresentationPipeline,
+  spokenTextFor,
+  type PlannedPresentation,
+} from '../presentation/briefing';
+import { sharedJarvisPresenceStore, type ClientWindowReport } from '../desktop';
+import { unavailableNativeHelperHealth } from '../desktop/nativeHelper';
+import { mergeCapabilityPresentationFacts } from '../capabilities/capabilityFacts';
 import { StandalonePresentationSessions } from '../presentation/standaloneSession';
 import { ProbeVoiceProfileResolver } from '../presentation/voiceAvailability';
 import { RouterVoiceResolver, StandaloneVoiceRouter } from '../speech';
@@ -72,6 +81,12 @@ import type { VoiceOutputResult, VoiceOutputRouter } from '../speech';
 import { LocalLlmJarvisCore, type StandaloneLlm } from './LocalLlmJarvisCore';
 import { describeJarvisRuntimeProfile, type JarvisRuntimeProfile } from './runtimeProfile';
 import { runStandaloneTextTurn, type StandaloneTextTurnOutput } from './textHarness';
+import { CommandCenterRuntime, sharedCommandCenter } from './commandCenter';
+import { routeJarvisRequest, shouldUseWorkAgent, type RouteDecision } from '../intent/requestRouter';
+import { traceCapabilitiesFromTurn } from '../ops/traceCapabilities';
+import { synthesizeTaskResponse } from '../agent/synthesize';
+import type { SynthesizedTaskResponse } from '../agent/types';
+import type { AffectStyle } from '../evolution/affect';
 
 export type JarvisLabAskInput = {
   text: string;
@@ -165,6 +180,20 @@ export type JarvisLabStatus = {
     reasonCode: string;
     detail: string;
   };
+  presence?: {
+    hostKind: 'browser' | 'electron' | 'native-helper' | 'test';
+    windowAvailable: boolean;
+    canMoveWindow: boolean;
+    reportedAt?: string;
+    bounds?: { x: number; y: number; width: number; height: number };
+    nativeHelper?: {
+      status: 'unavailable' | 'starting' | 'ready' | 'degraded';
+      installed: boolean;
+      protocolVersion: number;
+      reasonCode?: string;
+      message: string;
+    };
+  };
 };
 
 export type JarvisLabRuntimeOptions = {
@@ -187,6 +216,7 @@ export type JarvisLabRuntimeOptions = {
   reminders?: ReminderRuntime | false;
   research?: ResearchRuntime | false;
   workspace?: WorkspaceRuntime | false;
+  commandCenter?: CommandCenterRuntime | false;
 };
 
 export class JarvisLabRuntime {
@@ -209,10 +239,11 @@ export class JarvisLabRuntime {
   private readonly research?: ResearchRuntime;
   private readonly workspace?: WorkspaceRuntime;
   private readonly intents = new InteractionContextStore();
+  private commandCenter?: CommandCenterRuntime;
 
   constructor(options: JarvisLabRuntimeOptions = {}) {
     const attached = options.memory
-      ? { service: options.memory, schemaVersion: options.memorySchemaVersion }
+      ? { service: options.memory, store: undefined as SqliteJarvisMemoryStore | undefined, schemaVersion: options.memorySchemaVersion }
       : options.attachDefaultMemory
         ? tryDefaultMemory()
         : undefined;
@@ -246,7 +277,11 @@ export class JarvisLabRuntime {
     this.voices = options.voices
       ?? (this.speech ? new RouterVoiceResolver(this.speech) : undefined)
       ?? (options.attachDefaultPresentation ? new ProbeVoiceProfileResolver() : undefined);
-    this.engine = new FactPreservingPresentationEngine({ persona: this.persona, voices: this.voices });
+    this.engine = new FactPreservingPresentationEngine({
+      persona: this.persona,
+      voices: this.voices,
+      affectStyle: () => this.commandCenter?.affect.style(),
+    });
     this.stt = options.stt ?? new LocalSTTProvider();
     this.probeStt = options.probeStt ?? (async () => ({
       reachable: false,
@@ -258,6 +293,18 @@ export class JarvisLabRuntime {
       capabilities,
       skills,
     });
+    if (options.commandCenter === false) {
+      this.commandCenter = undefined;
+    } else if (options.commandCenter) {
+      this.commandCenter = options.commandCenter;
+      if (this.capabilityHost) this.commandCenter.attachCapabilities(this.capabilityHost);
+    } else if (options.attachDefaultCapabilities) {
+      this.commandCenter = sharedCommandCenter();
+      if (this.capabilityHost) this.commandCenter.attachCapabilities(this.capabilityHost);
+    }
+    if (this.commandCenter && attached?.store) {
+      this.commandCenter.attachMemoryStore(attached.store);
+    }
   }
 
   public async status(sessionId = 'jarvis-lab'): Promise<JarvisLabStatus> {
@@ -306,11 +353,41 @@ export class JarvisLabRuntime {
         summary: item.summary,
         level: item.level,
       })),
+      presence: this.presenceStatus(),
+    };
+  }
+
+  public reportPresence(report: ClientWindowReport): ReturnType<JarvisLabRuntime['presenceStatus']> {
+    sharedJarvisPresenceStore().reportClientWindow(report);
+    return this.presenceStatus();
+  }
+
+  public presenceStatus(): NonNullable<JarvisLabStatus['presence']> {
+    const report = sharedJarvisPresenceStore().currentReport();
+    const electron = typeof process.versions.electron === 'string';
+    return {
+      hostKind: electron ? 'electron' : 'browser',
+      windowAvailable: Boolean(report),
+      canMoveWindow: false,
+      nativeHelper: unavailableNativeHelperHealth(),
+      ...(report?.reportedAt ? { reportedAt: report.reportedAt } : {}),
+      ...(report ? {
+        bounds: {
+          x: report.screenX,
+          y: report.screenY,
+          width: report.outerWidth,
+          height: report.outerHeight,
+        },
+      } : {}),
     };
   }
 
   public recentOperations() {
     return sharedJarvisEventBus().recent(40);
+  }
+
+  public capabilities(): CapabilityHost | undefined {
+    return this.capabilityHost;
   }
 
   public async securitySnapshot(): Promise<HostSecuritySnapshot> {
@@ -517,15 +594,33 @@ export class JarvisLabRuntime {
     research: ResearchSnapshot;
     workspace: WorkspaceSnapshot;
     intent?: { stage: string; detail: string; kind: string; capabilityId?: string };
+    route?: RouteDecision;
+    taskId?: string;
+    workOutcome?: SynthesizedTaskResponse;
+    affectStyle?: AffectStyle;
+    briefing?: PlannedPresentation;
   }> {
     const prepared = await this.prepareAsk(input);
+    const { route, useWork } = this.decideAskRoute(input, prepared);
+    if (useWork) {
+      return this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution.capabilityId);
+    }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
       engine: this.engine,
     });
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
-    const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak);
+    const briefing = this.buildBriefing({
+      text: input.text,
+      replyText: adjusted.presented.text,
+      route,
+      capabilityId: prepared.resolution.capabilityId,
+      toolResults: adjusted.result.toolResults,
+    });
+    const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak, briefing);
+    const presentedBriefing = this.withSpokenDuration(briefing, speech);
+    this.observeAskTurn(input, prepared.sessionId, route, adjusted);
     return {
       ...adjusted,
       coreState: 'complete',
@@ -533,6 +628,9 @@ export class JarvisLabRuntime {
       research: this.researchSnapshot(),
       workspace: this.workspaceSnapshot(),
       intent: prepared.intent,
+      route,
+      affectStyle: this.workCenter()?.affect.style(),
+      briefing: presentedBriefing,
       ...(speech ? { speech } : {}),
     };
   }
@@ -544,8 +642,20 @@ export class JarvisLabRuntime {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
     speech?: VoiceOutputResult;
+    route?: RouteDecision;
+    taskId?: string;
+    workOutcome?: SynthesizedTaskResponse;
+    affectStyle?: AffectStyle;
+    briefing?: PlannedPresentation;
   }> {
     const prepared = await this.prepareAsk(input);
+    const { route, useWork } = this.decideAskRoute(input, prepared);
+    if (useWork) {
+      const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution.capabilityId);
+      emit({ type: 'final', payload: output });
+      if (output.speech) emit({ type: 'speech', payload: output.speech });
+      return output;
+    }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
       engine: this.engine,
@@ -553,6 +663,16 @@ export class JarvisLabRuntime {
     });
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
+    this.observeAskTurn(input, prepared.sessionId, route, adjusted);
+    const briefing = this.buildBriefing({
+      text: input.text,
+      replyText: adjusted.presented.text,
+      route,
+      capabilityId: prepared.resolution.capabilityId,
+      toolResults: adjusted.result.toolResults,
+    });
+    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak, briefing);
+    const presentedBriefing = this.withSpokenDuration(briefing, speech);
     const finalPayload = {
       ...adjusted,
       coreState: 'complete' as const,
@@ -560,9 +680,11 @@ export class JarvisLabRuntime {
       research: this.researchSnapshot(),
       workspace: this.workspaceSnapshot(),
       intent: prepared.intent,
+      route,
+      affectStyle: this.workCenter()?.affect.style(),
+      briefing: presentedBriefing,
     };
     emit({ type: 'final', payload: finalPayload });
-    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
     if (speech) emit({ type: 'speech', payload: speech });
     return { ...finalPayload, ...(speech ? { speech } : {}) };
   }
@@ -587,6 +709,23 @@ export class JarvisLabRuntime {
       throw new Error('Action confirmation is unavailable.');
     }
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    const waiting = this.workCenter()?.agent.store.active().find(task => (
+      task.status === 'WAITING_PERMISSION'
+      && task.plan.some(step => step.pendingConfirmation?.proposalId === input.proposalId)
+    ));
+    if (waiting) {
+      const task = await this.workCenter()!.grantAndResume(waiting.id, {
+        actor: 'owner',
+        proposalId: input.proposalId,
+        token: input.token,
+      });
+      return this.finishWorkTask(
+        { text: waiting.objective, sessionId, speak: input.speak },
+        sessionId,
+        routeJarvisRequest({ text: waiting.objective }),
+        task,
+      );
+    }
     const invoked = await this.capabilityHost.confirm({
       proposalId: input.proposalId,
       token: input.token,
@@ -614,16 +753,268 @@ export class JarvisLabRuntime {
     return this.finishActionTurn(invoked, sessionId, input.speak);
   }
 
+  private decideAskRoute(
+    input: JarvisLabAskInput,
+    prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
+  ): { route: RouteDecision; useWork: boolean } {
+    const route = routeJarvisRequest({
+      text: String(input.text || '').trim(),
+      intentKind: prepared.resolution.kind,
+    });
+    return {
+      route,
+      useWork: shouldUseWorkAgent(route, {
+        explicitCalls: Boolean(input.capabilityCalls?.length || input.capabilities?.length),
+        intentKind: prepared.resolution.kind,
+        capabilityId: prepared.resolution.capabilityId,
+      }),
+    };
+  }
+
+  private workCenter(): CommandCenterRuntime | undefined {
+    if (this.commandCenter) return this.commandCenter;
+    if (!this.capabilityHost) return undefined;
+    this.commandCenter = new CommandCenterRuntime({
+      host: this.capabilityHost,
+      simulated: false,
+    });
+    return this.commandCenter;
+  }
+
+  private async askViaWorkAgent(
+    input: JarvisLabAskInput,
+    sessionId: string,
+    route: RouteDecision,
+    capabilityId?: string,
+  ): Promise<StandaloneTextTurnOutput & {
+    coreState: 'complete';
+    presentation: JarvisLabPresentationStatus;
+    speech?: VoiceOutputResult;
+    pendingConfirmation?: PendingConfirmation;
+    research: ResearchSnapshot;
+    workspace: WorkspaceSnapshot;
+    intent?: { stage: string; detail: string; kind: string; capabilityId?: string };
+    route?: RouteDecision;
+    taskId?: string;
+    workOutcome?: SynthesizedTaskResponse;
+    affectStyle?: AffectStyle;
+  }> {
+    const center = this.workCenter();
+    if (!center) {
+      throw new Error('Work agent is unavailable for this request.');
+    }
+    const request = createJarvisRequest({
+      text: String(input.text || '').trim(),
+      sessionId,
+    });
+    const task = await center.runObjective(String(input.text || '').trim(), {
+      sessionId,
+      requestId: request.requestId,
+      turnId: request.requestId,
+      route,
+      capabilityId,
+    });
+    return this.finishWorkTask(input, sessionId, route, task, request);
+  }
+
+  private async finishWorkTask(
+    input: JarvisLabAskInput,
+    sessionId: string,
+    route: RouteDecision,
+    task: Awaited<ReturnType<CommandCenterRuntime['runObjective']>>,
+    request = createJarvisRequest({
+      text: task.objective,
+      sessionId,
+      requestId: task.requestId,
+    }),
+  ) {
+    const synthesis = synthesizeTaskResponse(task);
+    this.workCenter()?.noteLatestRequest({
+      route,
+      objective: task.objective,
+      taskId: task.id,
+      requestId: request.requestId,
+    });
+    const waiting = task.plan.find(step => step.status === 'waiting_permission');
+    const result: JarvisCoreResult = {
+      requestId: request.requestId,
+      answerIntent: 'standalone_action',
+      verifiedFacts: [],
+      unverifiedClaims: [],
+      toolResults: task.toolResults.map(item => ({
+        toolName: item.capability,
+        status: item.status === 'ok' ? 'ok' as const : 'error' as const,
+        summary: item.summary,
+        ...(item.facts ? { facts: item.facts } : {}),
+      })),
+      memoryRefs: [],
+      actionResults: freezeActionResults([{
+        name: 'work_agent',
+        capabilityId: waiting?.capability || task.toolResults[0]?.capability || 'work.agent',
+        status: task.status === 'COMPLETED'
+          ? 'completed'
+          : task.status === 'WAITING_PERMISSION'
+            ? 'confirmation_required'
+            : task.status === 'CANCELLED'
+              ? 'denied'
+              : 'failed',
+        summary: synthesis.text,
+      }]),
+      uncertainty: [],
+      suggestedContent: synthesis.text,
+    };
+    const presentation = this.sessions.resolveTurn(sessionId);
+    const presented = await this.engine.render(result, presentation, { sessionId });
+    const briefing = this.buildBriefing({
+      text: input.text || task.objective,
+      replyText: synthesis.text,
+      route,
+      capabilityId: waiting?.capability || task.toolResults[0]?.capability,
+      workOutcome: synthesis,
+      toolResults: task.toolResults.map(item => ({
+        toolName: item.capability,
+        summary: item.summary,
+        facts: item.facts,
+      })),
+    });
+    const speech = await this.maybeSpeak(synthesis.text, request.requestId, presented.voiceProfileId, input.speak, briefing);
+    const presentedBriefing = this.withSpokenDuration(briefing, speech);
+    return {
+      request,
+      result,
+      presented: { ...presented, text: synthesis.text },
+      timings: { totalMs: 0 },
+      coreState: 'complete' as const,
+      presentation: await this.presentationStatus(sessionId),
+      research: this.researchSnapshot(),
+      workspace: this.workspaceSnapshot(),
+      intent: {
+        stage: route.agentic ? 'work_agent' : 'conversation',
+        detail: route.reason,
+        kind: route.route,
+        capabilityId: waiting?.capability,
+      },
+      route,
+      taskId: task.id,
+      workOutcome: synthesis,
+      affectStyle: this.workCenter()?.affect.style(),
+      briefing: presentedBriefing,
+      ...(speech ? { speech } : {}),
+      ...(waiting?.pendingConfirmation ? {
+        pendingConfirmation: {
+          proposalId: waiting.pendingConfirmation.proposalId,
+          token: waiting.permissionLease?.token || '',
+          capabilityId: waiting.pendingConfirmation.capability,
+          displayName: waiting.pendingConfirmation.capability,
+          summary: waiting.pendingConfirmation.summary || synthesis.text,
+          target: waiting.capability || '',
+          risk: 'CONFIRM_REQUIRED' as const,
+          reason: waiting.pendingConfirmation.summary || 'Owner permission required.',
+          expiresAt: waiting.pendingConfirmation.expiresAt || '',
+        },
+      } : {}),
+    };
+  }
+
   private async maybeSpeak(
     text: string,
     turnId: string,
     voiceProfileId: string,
     speak?: boolean,
+    briefing?: PlannedPresentation,
   ): Promise<VoiceOutputResult | undefined> {
     if (!speak || !this.speech) return undefined;
-    return await this.speech.speak(text, this.speech.resolveProfile(voiceProfileId), {
+    const spoken = briefing ? spokenTextFor(briefing, text) : text;
+    return await this.speech.speak(spoken, this.speech.resolveProfile(voiceProfileId), {
       turnId,
-      text,
+      text: spoken,
+    });
+  }
+
+  private withSpokenDuration(
+    briefing: PlannedPresentation,
+    speech?: VoiceOutputResult,
+  ): PlannedPresentation {
+    const spokenMs = speech?.audioDurationMs;
+    if (!spokenMs || briefing.density === 'plain') return briefing;
+    return applySpokenDuration(briefing, spokenMs);
+  }
+
+  private buildBriefing(input: {
+    text: string;
+    replyText: string;
+    route?: RouteDecision;
+    capabilityId?: string;
+    workOutcome?: SynthesizedTaskResponse;
+    toolResults?: Array<{
+      toolName?: string;
+      capability?: string;
+      summary?: string;
+      facts?: {
+        systemSnapshot?: NonNullable<Parameters<typeof runPresentationPipeline>[0]['systemSnapshot']>;
+        displays?: NonNullable<Parameters<typeof runPresentationPipeline>[0]['displays']>;
+      };
+    }>;
+  }): PlannedPresentation {
+    const research = this.researchSnapshot();
+    const presence = this.presenceStatus();
+    const researchTurn = input.route?.route === 'RESEARCH' || input.capabilityId === 'research.search';
+    const merged = mergeCapabilityPresentationFacts((input.toolResults ?? []).map(item => {
+      const displays = item.facts?.displays;
+      const systemSnapshot = item.facts?.systemSnapshot;
+      if (!systemSnapshot && !displays) return undefined;
+      return {
+        capabilityId: item.toolName || item.capability || '',
+        ...(systemSnapshot ? { systemSnapshot } : {}),
+        ...(displays && typeof displays.count === 'number' && Array.isArray(displays.ids)
+          ? {
+            displays: {
+              count: displays.count,
+              ids: displays.ids,
+              names: displays.names,
+              currentName: displays.currentName,
+              currentId: displays.currentId,
+              hostKind: displays.hostKind,
+              reason: displays.reason,
+            },
+          }
+          : {}),
+      };
+    }));
+    const desktopTurn = Boolean(input.capabilityId?.startsWith('desktop.') || merged.displays);
+    return runPresentationPipeline({
+      text: input.text,
+      replyText: input.replyText,
+      route: input.route?.route,
+      capabilityId: input.capabilityId,
+      workOutcome: input.workOutcome,
+      research: researchTurn && research.last ? {
+        query: research.last.query,
+        synthesis: research.last.synthesis,
+        sources: research.last.sources.map(item => ({
+          sourceId: item.sourceId,
+          title: item.title,
+          url: item.url,
+          domain: item.domain,
+        })),
+        evidence: research.last.evidence.map(item => ({
+          evidenceId: item.evidenceId,
+          claim: item.claim,
+          sourceId: item.sourceId,
+        })),
+        uncertainty: research.last.uncertainty,
+        disagreements: research.last.disagreements,
+      } : undefined,
+      systemSnapshot: merged.systemSnapshot,
+      displays: desktopTurn ? {
+        hostKind: merged.displays?.hostKind || presence.hostKind,
+        reason: merged.displays?.reason || (presence.canMoveWindow ? undefined : 'Browser host cannot move the Jarvis window.'),
+        ...(merged.displays && merged.displays.count > 0 ? { count: merged.displays.count } : {}),
+        ids: merged.displays?.ids,
+        names: merged.displays?.names,
+        currentName: merged.displays?.currentName,
+        currentId: merged.displays?.currentId,
+      } : undefined,
     });
   }
 
@@ -684,6 +1075,40 @@ export class JarvisLabRuntime {
         actionSource: input.actionSource,
       },
     };
+  }
+
+  private observeAskTurn(
+    input: JarvisLabAskInput,
+    sessionId: string,
+    route: RouteDecision,
+    output: StandaloneTextTurnOutput,
+  ): void {
+    const center = this.commandCenter;
+    if (!center) return;
+    const spec = center.runtimeSpecs.current();
+    center.recordTurnTrace({
+      requestId: output.request.requestId,
+      sessionId,
+      turnId: output.request.requestId,
+      route: route.route,
+      inputText: String(input.text || ''),
+      totalLatencyMs: output.timings.totalMs,
+      tokens: output.llm?.outputTokens,
+      tokensPerSec: output.llm?.tokensPerSec,
+      memoryRefs: output.result.memoryRefs?.map(item => item.canonicalId),
+      capabilities: traceCapabilitiesFromTurn({
+        actionResults: output.result.actionResults,
+        toolResults: output.result.toolResults,
+      }),
+      modelProfileId: spec.layers.intelligence.modelProfileId,
+      engine: spec.layers.engine.interactiveProfile,
+      success: !(output.result.actionResults ?? []).some(item => item.status === 'failed' || item.status === 'denied'),
+    });
+    center.noteLatestRequest({
+      route,
+      objective: String(input.text || ''),
+      requestId: output.request.requestId,
+    });
   }
 
   private rememberAfterTurn(
@@ -934,10 +1359,10 @@ async function resolveLabActionTurn(text: string, input: {
   return { capabilities: [], resolution };
 }
 
-function tryDefaultMemory(): { service: JarvisMemoryService; schemaVersion?: number } | undefined {
+function tryDefaultMemory(): { service: JarvisMemoryService; store: SqliteJarvisMemoryStore; schemaVersion?: number } | undefined {
   try {
     const store = SqliteJarvisMemoryStore.open();
-    return { service: new JarvisMemoryRetrieval(store), schemaVersion: store.schemaVersion() };
+    return { service: new JarvisMemoryRetrieval(store), store, schemaVersion: store.schemaVersion() };
   } catch (error) {
     console.warn(`[JarvisLab] Memory store not attached: ${error instanceof Error ? error.message : error}`);
     return undefined;

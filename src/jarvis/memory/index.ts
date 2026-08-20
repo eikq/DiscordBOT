@@ -13,3 +13,5 @@ export type {
   MemoryTurnQuery,
 } from './service';
 export { compactMemoryTokens, extractFactKeys, wantsSupersededHistory } from './intent';
+export { fuseMemoryRetrieval } from './fusionRetrieval';
+export type { FusionHit, FusionResult } from './fusionRetrieval';

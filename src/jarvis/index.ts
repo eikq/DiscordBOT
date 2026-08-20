@@ -17,7 +17,7 @@ export type {
 } from './core/types';
 export { PassThroughJarvisCore, UnavailableJarvisCore } from './core/JarvisCore';
 export { createJarvisRequest } from './core/request';
-export { JarvisMemoryRetrieval } from './memory';
+export { JarvisMemoryRetrieval, fuseMemoryRetrieval } from './memory';
 export type {
   CompactMemoryItem,
   JarvisMemoryService,
@@ -47,6 +47,8 @@ export type {
 export { LocalLlmJarvisCore } from './standalone/LocalLlmJarvisCore';
 export type { LocalLlmJarvisCoreOptions, StandaloneLlm, TimedCoreResult } from './standalone/LocalLlmJarvisCore';
 export { applyJarvisInteractiveProfile, describeJarvisRuntimeProfile } from './standalone/runtimeProfile';
+export { defaultRuntimeSpec, RuntimeSpecRegistry, diffRuntimeSpec } from './standalone/runtimeSpec';
+export type { JarvisRuntimeSpec } from './standalone/runtimeSpec';
 export { compactTurnTimings } from './standalone/turnTimings';
 export type { TurnTimings, LlmTurnMetrics } from './standalone/turnTimings';
 export {
@@ -81,6 +83,12 @@ export {
   DESKTOP_OPEN_PROJECT,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_FOCUS_JARVIS_WINDOW,
+  DESKTOP_GET_JARVIS_WINDOW,
+  DESKTOP_LIST_DISPLAYS,
+  DESKTOP_MOVE_JARVIS_WINDOW,
+  DESKTOP_SET_JARVIS_LAYOUT,
+  DESKTOP_SET_JARVIS_WINDOW_BOUNDS,
   SYSTEM_STATUS,
   JARVIS_RUNTIME_STATUS,
   JARVIS_START_SERVICE,
@@ -137,6 +145,19 @@ export {
   ELEMISU_VOICE_ID,
 } from './presentation/types';
 export type { PresentationEngine } from './presentation/PresentationEngine';
+export {
+  applyBriefingFollowUp,
+  applySpokenDuration,
+  buildMotionTimeline,
+  estimateNarrationMs,
+  FORBIDDEN_PRESENTATION_KEYS,
+  planPresentation,
+  presentationHasForbiddenKeys,
+  runPresentationPipeline,
+  sanitizePlannedPresentation,
+  spokenTextFor,
+} from './presentation/briefing';
+export type { PlannedPresentation, PresentationModel } from './presentation/briefing';
 export { FactPreservingPresentationEngine } from './presentation/PresentationEngine';
 export { FileBehaviorPersonaProvider } from './presentation/filePersonaProvider';
 export { StandalonePresentationSessions } from './presentation/standaloneSession';
@@ -226,15 +247,67 @@ export {
   createCandidateSandbox,
   rejectProductionWrite,
   resolveMemoryContradiction,
+  ClaimStore,
+  reflectStructured,
+  FailureLedger,
+  CapabilitySelfModel,
+  GrowthPlanner,
+  PracticeEngine,
+  BenchmarkBank,
+  NightCycle,
+  AffectEngine,
+  CandidateManager,
+  RuntimeSpecOptimizer,
+  ModelAdaptationRegistry,
+  buildJournal,
+  buildEvolutionGraph,
+  affectCannotAuthorize,
+  applyTaskOutcome,
 } from './evolution';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
+export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, realModelCertificationBlocked } from './models';
+export { ArtifactWorkflow } from './artifacts';
+export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';
+export { THAI_COMBINING_FIXTURE } from './i18n/thaiIntegrity';
+export { OwnerControl } from './control';
+export { ProactiveMonitor } from './monitor';
+export { SimulatedDeviceProvider } from './devices';
+export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
+export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
+export type { CommandCenterSnapshot } from './standalone/commandCenter';
+export type { DemoScenarioId } from './standalone/commandCenterHttp';
+export { presentCommandCenter } from './standalone/commandCenterView';
+export {
+  inferDesktopPresenceIntent,
+  JarvisPresenceStore,
+  sharedJarvisPresenceStore,
+  FakeNativeJarvisHelper,
+  parseNativeHelperRequest,
+  NATIVE_HELPER_PROTOCOL_VERSION,
+} from './desktop';
+export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
+export {
+  parseDemoScenario,
+  parseControlPatch,
+  applyOwnerControl,
+  parseTaskId,
+  parseObjective,
+  parseNightAction,
+  parsePermissionGrant,
+  DEMO_SCENARIOS,
+} from './standalone/commandCenterHttp';
 export {
   classifyActionability,
   compactCapabilityCatalog,
   resolveUserIntent,
   validateIntentResolution,
   InteractionContextStore,
+  routeJarvisRequest,
+  shouldUseWorkAgent,
+  classifyComparisonIntent,
 } from './intent';
-export type { IntentResolution, InteractionContext, CompactCapability } from './intent';
+export type { IntentResolution, InteractionContext, CompactCapability, RouteDecision, JarvisRequestRoute } from './intent';
 export type { ResearchResult, ResearchRuntime, ResearchSnapshot, SourceRecord } from './research';
 export {
   WORKSPACE_CURRENT,

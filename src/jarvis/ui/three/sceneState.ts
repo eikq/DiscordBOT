@@ -68,6 +68,41 @@ export function sceneMoodFor(phase: LabCorePhase, options: { nightActive?: boole
       mood.nucleusIntensity = 1.65;
       mood.ringSpeed = 1.35;
       break;
+    case 'planning':
+      mood.primary = '#a5b4fc';
+      mood.accent = '#818cf8';
+      mood.particleSpeed = 1.1;
+      mood.contract = 0.45;
+      mood.nucleusIntensity = 1.4;
+      mood.ringSpeed = 1.15;
+      break;
+    case 'searching':
+      mood.primary = '#22d3ee';
+      mood.accent = '#38bdf8';
+      mood.particleSpeed = 0.95;
+      mood.nucleusIntensity = 1.28;
+      mood.ringSpeed = 1.05;
+      break;
+    case 'permission':
+      mood.primary = '#fbbf24';
+      mood.accent = '#f59e0b';
+      mood.particleSpeed = 0.4;
+      mood.nucleusIntensity = 1.1;
+      mood.pulse = 'listening';
+      break;
+    case 'executing':
+      mood.primary = '#2dd4bf';
+      mood.accent = '#fbbf24';
+      mood.particleSpeed = 0.86;
+      mood.nucleusIntensity = 1.3;
+      mood.ringSpeed = 1.05;
+      break;
+    case 'verifying':
+      mood.primary = '#86efac';
+      mood.accent = '#22d3ee';
+      mood.particleSpeed = 0.7;
+      mood.nucleusIntensity = 1.22;
+      break;
     case 'memory':
       mood.primary = '#8b5cf6';
       mood.accent = '#22d3ee';
@@ -99,6 +134,20 @@ export function sceneMoodFor(phase: LabCorePhase, options: { nightActive?: boole
       mood.nucleusIntensity = 1.62;
       mood.pulse = 'speaking';
       mood.ringSpeed = 1;
+      break;
+    case 'reflecting':
+      mood.primary = '#c4b5fd';
+      mood.accent = '#22d3ee';
+      mood.particleSpeed = 0.5;
+      mood.contract = 0.28;
+      mood.nucleusIntensity = 1.18;
+      break;
+    case 'evolving':
+      mood.primary = '#a78bfa';
+      mood.accent = '#f0abfc';
+      mood.particleSpeed = 0.62;
+      mood.nucleusIntensity = 1.3;
+      mood.ringSpeed = 0.7;
       break;
     case 'degraded':
       mood.primary = '#94a3b8';

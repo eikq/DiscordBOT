@@ -45,7 +45,11 @@ export function resolveCursorLaunch(executable: string): { command: string; pref
   const versionsDir = path.join(dir, 'versions');
   const latest = latestCursorVersionDir(versionsDir);
   if (latest) {
-    const node = path.join(versionsDir, latest, process.platform === 'win32' ? 'node.exe' : 'node');
+    const preferred = process.platform === 'win32' ? 'node.exe' : 'node';
+    const fallback = preferred === 'node.exe' ? 'node' : 'node.exe';
+    const preferredNode = path.join(versionsDir, latest, preferred);
+    const fallbackNode = path.join(versionsDir, latest, fallback);
+    const node = fs.existsSync(preferredNode) ? preferredNode : fallbackNode;
     const index = path.join(versionsDir, latest, 'index.js');
     if (fs.existsSync(node) && fs.existsSync(index)) {
       return { command: node, prefixArgs: [index] };
