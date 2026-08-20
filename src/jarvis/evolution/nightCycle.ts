@@ -192,15 +192,23 @@ export class NightCycle {
         if (existing.has(experience.id)) continue;
         this.options.skills?.propose({
           skillId: `night_${(experience.domain || 'task').replace(/[^a-z0-9]+/giu, '_').slice(0, 32)}`,
+          name: experience.goal,
           purpose: experience.goal,
+          goal: experience.goal,
           trigger: experience.situation,
+          triggerConditions: [experience.situation],
+          requiredCapabilities: experience.tools.filter(Boolean),
           prerequisites: [],
           workflow: experience.actions,
+          steps: experience.actions,
           failureModes: experience.cause ? [experience.cause] : [],
           recovery: ['Retry with structured verification'],
-          safetyConstraints: ['scriptsAllowed=false', 'no production promotion'],
+          safetyConstraints: ['scriptsAllowed=false', 'no production promotion', 'no auto-promote'],
+          securityScope: 'instruction-only plan; CapabilityHost/ActionGate remain authority',
           verification: ['structured_check'],
           evidence: [experience.id],
+          trustStatus: 'DRAFT',
+          status: 'CANDIDATE',
         });
         existing.add(experience.id);
         proposed += 1;

@@ -32,7 +32,7 @@ Current priority: standalone Jarvis first (`JARVIS_FIRST_TASKS.md`). Discord fea
 - `JF-014` safe local workspace intelligence — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process jarvis-project search/symbol/retrieve/compare; HTTP Command Center not separately live-QA'd this turn). Historical CCTV id is `JF-014-CCTV`. Owner product sign-off still optional.
 - `JF-014.6` realtime operations telemetry — IMPLEMENTED + UNIT_VERIFIED (SSE replay + lab EventSource). Browser SSE live-QA **BLOCKED_LOCAL_ACCEPTANCE**.
 - `JF-015` multi-step work agent — IMPLEMENTED + UNIT_VERIFIED (DAG + simulated demos). Live Ollama/tool runs **BLOCKED_LOCAL_ACCEPTANCE**.
-- `EVO-001`–`EVO-010` evolution runtime — IMPLEMENTED + UNIT_VERIFIED fail-closed (no auto-promote; LoRA registry only). Live night cycle **BLOCKED_LOCAL_ACCEPTANCE**.
+- `EVO-001`–`EVO-010` evolution runtime — IMPLEMENTED + UNIT_VERIFIED fail-closed. Queue 04 Procedural Skills V2: reviewable candidates, trusted-only retrieval, no self-approval, no auto-promote. Live night cycle **BLOCKED_LOCAL_ACCEPTANCE**.
 - `JF-016`/`JF-017`/`JF-018` vision / monitor / devices — IMPLEMENTED + UNIT_VERIFIED simulated architecture. Live capture/CCTV **BLOCKED_LOCAL_ACCEPTANCE**.
 - Next READY after this layer: owner product sign-off, browser Command Center QA, or a later write-boundary / open-document task. No generic process/shell, no scheduled CapabilityHost execution, no unattended web monitoring, no Qdrant-as-canonical.
 - Still blocked: live Qdrant / MEMORY-003 as a running index; Discord JARVIS-006+; rewriting the Digital Me dashboard; UI-R9 WebGL until asked

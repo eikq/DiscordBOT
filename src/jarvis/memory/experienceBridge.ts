@@ -44,6 +44,7 @@ export function writeExperienceEpisode(
       tools: experience.tools,
       untrustedResearch: untrusted,
       trustedSemanticWrite: false,
+      lesson: experience.lessons[0],
     },
   });
   writeSemanticCandidateFromEpisode(store, episode);

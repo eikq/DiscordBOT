@@ -37,9 +37,9 @@ export function reflectStructured(
     experienceId: experience.id,
     outcome: experience.outcome,
     failureCategory: failed ? (experience.cause || 'unclassified') : undefined,
-    skillCandidateAllowed: experience.outcome === 'success' && experience.confidence >= 0.7,
+    skillCandidateAllowed: experience.outcome === 'success' && experience.confidence >= 0.7 && experience.verified !== false,
     skillChange: experience.outcome === 'success'
-      ? base.skillChange
+      ? 'Draft skill candidate may be recorded; not trusted and not auto-promoted.'
       : 'No trusted-success skill is generated from a failure.',
   };
 }

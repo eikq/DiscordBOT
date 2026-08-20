@@ -1,5 +1,6 @@
 import type { FailureLedger } from '../evolution/failureLearning';
 import type { ProceduralSkillVersion } from '../evolution/types';
+import { isAutoSelectableSkill } from '../evolution/skillTrust';
 import type { PlanStep } from './types';
 
 export function adaptPlanForFailures(
@@ -7,9 +8,10 @@ export function adaptPlanForFailures(
   ledger?: FailureLedger,
   skills: ProceduralSkillVersion[] = [],
 ): PlanStep[] {
-  if (!ledger) return annotateTrustedSkills(plan, skills);
+  const trustedOnly = skills.filter(isAutoSelectableSkill);
+  if (!ledger) return annotateTrustedSkills(plan, trustedOnly);
   const recurring = ledger.recurring(2);
-  if (recurring.length === 0) return annotateTrustedSkills(plan, skills);
+  if (recurring.length === 0) return annotateTrustedSkills(plan, trustedOnly);
   const adapted = plan.map(step => {
     const hit = recurring.find(item => item.tool && item.tool === step.capability);
     if (!hit) return step;
@@ -19,22 +21,17 @@ export function adaptPlanForFailures(
         ...step.retryPolicy,
         maxAttempts: Math.min(step.retryPolicy.maxAttempts, 1),
       },
-      title: `${step.title} (known ${hit.errorClass}; extra verify)`,
+      title: `${step.title} (known ${hit.errorClass}; ${hit.kind}; extra verify)`,
     };
   });
-  return annotateTrustedSkills(adapted, skills);
+  return annotateTrustedSkills(adapted, trustedOnly);
 }
 
 function annotateTrustedSkills(plan: PlanStep[], skills: ProceduralSkillVersion[]): PlanStep[] {
-  const trusted = skills.filter(skill => (
-    skill.knownGood
-    || skill.status === 'ACTIVE'
-    || skill.status === 'TRUSTED_INSTRUCTION'
-  ));
-  if (trusted.length === 0) return plan;
+  if (skills.length === 0) return plan;
   return plan.map(step => {
     if (step.kind !== 'verify') return step;
-    const hint = trusted[0]?.verification[0];
+    const hint = skills[0]?.verification[0];
     if (!hint) return step;
     return {
       ...step,

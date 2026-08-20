@@ -89,6 +89,30 @@ Cloud evidence: `npx tsc --noEmit` PASS; `npm run test:cloud` **541/541**.
 
 Handoff: ADR-025, `tests/jarvis_memory_v2.test.ts`.
 
+## Queue 04 — Safe Evolution + Procedural Skills V2
+
+Status: **IN PROGRESS** (cloud-safe software). Not LIVE_VERIFIED.
+
+Preserve `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE`.
+Jarvis may never approve its own privilege expansion.
+`autoPromote=false`. Skill instructions are plans, not authority.
+
+Shipped:
+
+- One idempotent task lifecycle: experience → verify → classify →
+  reflection → memory candidate → skill candidate → isolated benchmark
+- Skill candidate fields: id, name, goal, trigger conditions, required
+  capabilities, steps, preconditions, verification, failure modes,
+  security scope, evidence, version, trust status
+- Trust states: DRAFT, REVIEW_REQUIRED, TRUSTED, REJECTED, DEPRECATED
+- Trusted-only retrieval; rejected/deprecated excluded
+- Structured failure knowledge; planning may avoid known failures
+  without new authority
+- Isolated benchmark never sets TRUSTED
+- No uncontrolled recursive self-modification
+
+Cloud evidence: targeted skills/evolution tests green; full suite next.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution

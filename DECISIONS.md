@@ -1022,6 +1022,59 @@ SQLite store or starting Qdrant as a source of truth.
 - Live embedding/Qdrant index and owner-memory quality:
   NEEDS_LOCAL_VERIFY. Do not start Qdrant from Cloud.
 
+## ADR-026 — Procedural Skills V2 are reviewable plans, not authority
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live night-cycle skill quality remains BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 04 needed safer learning from completed work: turn successful
+workflows into reviewable procedural skill candidates without
+uncontrolled self-modification or self-approved privilege expansion.
+
+### Decision
+
+- Keep SQLite canonical memory. Evolution stays in isolated
+  `evolution.db`. Do not start Qdrant. Do not replace SQLite.
+- One idempotent lifecycle per task:
+  task → experience → outcome verification → classification →
+  structured reflection → memory candidate → skill candidate →
+  isolated benchmark candidate.
+- Skill candidates carry id, name, goal, trigger conditions, required
+  capabilities, steps, preconditions, verification, failure modes,
+  security scope, evidence, version, and trust status.
+- Trust states: DRAFT, REVIEW_REQUIRED, TRUSTED, REJECTED, DEPRECATED.
+  `DISCOVER != INSTALL != REVIEW != TRUST != EXECUTE`.
+- Only TRUSTED skills may be automatically selected. Retrieved skill
+  text is a plan (`authority: plan_only`) and cannot override
+  CapabilityHost / ActionGate.
+- Failures store structured knowledge (capability unavailable, provider
+  timeout, unsupported host, known bad plan, owner denied, verification
+  failed). Future plans may avoid known failures without gaining new
+  authority.
+- Reflection is structured observable analysis. No chain-of-thought.
+- Isolated benchmarks and regression checks can move a candidate to
+  REVIEW_REQUIRED. They never set TRUSTED. `autoPromote=false`.
+  Jarvis, model, and skill actors cannot trust a skill.
+- Failed or unverified tasks do not mint skill candidates.
+
+### Alternatives considered
+
+- Auto-promoting successful tasks to TRUSTED production skills —
+  rejected.
+- Letting Jarvis trust its own candidates — rejected.
+- Using retrieved skill text as execution authority — rejected.
+- Recursive self-modification to escape failures — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit) after the Queue 04 suite.
+- Owner must still explicitly trust REVIEW_REQUIRED skills.
+- Live night/Ollama skill quality: BLOCKED_LOCAL_ACCEPTANCE.
+
+
 
 
 

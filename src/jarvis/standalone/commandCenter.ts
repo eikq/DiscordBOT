@@ -8,7 +8,6 @@ import { synthesizeTaskResponse } from '../agent/synthesize';
 import { ArtifactWorkflow, type ArtifactTask } from '../artifacts';
 import { routeJarvisRequest, type RouteDecision } from '../intent/requestRouter';
 import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
-import { writeExperienceEpisode } from '../memory/experienceBridge';
 import { CapabilityCertificationBank, ModelProfileRegistry } from '../models';
 import type { CertificationRun, ModelProfile } from '../models/types';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
@@ -324,7 +323,7 @@ export class CommandCenterRuntime {
   }
 
   public recordTaskExperience(task: WorkTask): void {
-    const result = applyTaskOutcome(task, {
+    applyTaskOutcome(task, {
       experiences: this.experiences,
       reflections: this.reflectionLedger,
       failures: this.failures,
@@ -333,10 +332,9 @@ export class CommandCenterRuntime {
       growth: this.growth,
       affect: this.affect,
       events: this.events,
+      memoryStore: this.memoryStore,
+      benchmarks: this.benchmarks,
     });
-    if (result.experience && !result.duplicate && this.memoryStore) {
-      writeExperienceEpisode(this.memoryStore, result.experience, task);
-    }
   }
 
   public async runObjective(objective: string, options: {

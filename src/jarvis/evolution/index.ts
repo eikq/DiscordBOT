@@ -5,7 +5,7 @@ export { reflectOnExperience } from './reflection';
 export { SkillVersionRegistry } from './skillVersions';
 export { EvolutionPersistence, defaultEvolutionDbPath } from './persist';
 export { ReflectionLedger } from './reflectionLedger';
-export { applyTaskOutcome } from './lifecycle';
+export { applyTaskOutcome, runExperiencePipeline } from './lifecycle';
 export { ClaimStore } from './claims';
 export { rankRetrieval, measureRetrieval } from './retrievalQuality';
 export { reflectStructured, shouldReflect } from './reflectionEngine';
@@ -24,13 +24,20 @@ export { CandidateManager } from './candidateManager';
 export { RuntimeSpecOptimizer } from './runtimeSpecOptimizer';
 export { ModelAdaptationRegistry, MODEL_ADAPTATION_ORDER } from './modelAdaptation';
 export { buildEvolutionGraph } from './graph';
-export { SKILL_LIFECYCLE } from './skillLifecycleConstants';
+export { SKILL_LIFECYCLE, SKILL_TRUST_STATES, SKILL_AUTHORITY_STAGES } from './skillLifecycleConstants';
+export { autoPromoteSkill, jarvisMaySelfApproveSkill, isAutoSelectableSkill } from './skillTrust';
+export { runIsolatedSkillBenchmark } from './skillBenchmark';
+export { retrieveRelevantSkills } from './skillRetrieval';
+export { classifyFailureKnowledge } from './failureKinds';
+export { verifyTaskOutcome } from './outcomeVerification';
 export type {
   ExperienceOutcome,
   ExperienceRecord,
+  FailureKnowledgeKind,
   MemoryKind,
   ProceduralSkillVersion,
   SkillLifecycleStatus,
+  SkillTrustStatus,
   StructuredReflection,
 } from './types';
 export type { DurableClaim } from './claims';

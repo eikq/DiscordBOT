@@ -3,7 +3,34 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 03 Canonical Memory Intelligence V2
+## This turn — Queue 04 Safe Evolution + Procedural Skills V2
+
+Labels: IMPLEMENTED (unit tests green). Full `test:cloud` running after push.
+Not LIVE_VERIFIED. SQLite remains canonical. Qdrant is not started.
+`autoPromote=false`. Jarvis cannot self-approve skill trust.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-026.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 03 Canonical Memory Intelligence V2
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+SQLite remains canonical. Qdrant is not started and is not a source of
+truth. Research/web claims are not owner-trusted memory.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `7b8b19dd08f3fc8db350c116a7c598fdd443bf47`
+Implementation: `b7b9e49dc6c637fef4ea847d39254bd8693b55f2`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_memory_v2.test.ts` + sqlite/core memory tests green;
+`npm run test:cloud` **541/541**.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
 
 Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
 SQLite remains canonical. Qdrant is not started and is not a source of
