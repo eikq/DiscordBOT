@@ -1,0 +1,167 @@
+import { AUTONOMY_LABELS } from '../control';
+import { liveOpsSteps, capabilityBar, systemNodeState, visualStatusLine, windowedEvents, type LiveOpsStep } from '../ui/operationsView';
+import type { CommandCenterSnapshot } from './commandCenter';
+// Snapshot type only — keep this module import-safe for the Express lab server.
+
+const ACTIVE_TASK = new Set([
+  'RECEIVED',
+  'UNDERSTANDING',
+  'PLANNING',
+  'READY',
+  'EXECUTING',
+  'OBSERVING',
+  'ADAPTING',
+  'VERIFYING',
+  'WAITING_PERMISSION',
+  'PAUSED',
+  'DEGRADED',
+]);
+
+export type CommandCenterClientSnapshot = {
+  simulationMode: boolean;
+  visualState: string;
+  visualLabel: string;
+  fresh: boolean;
+  operations: Array<{
+    id: string;
+    seq: number;
+    type: string;
+    at: string;
+    level: string;
+    summary: string;
+    simulated?: boolean;
+    visualState?: string;
+    taskId?: string;
+    progress?: { current: number; total: number; unit?: string };
+    errorCode?: string;
+  }>;
+  task: {
+    id: string;
+    objective: string;
+    status: string;
+    simulated?: boolean;
+    waitingPermission: boolean;
+    active: boolean;
+    steps: LiveOpsStep[];
+  } | null;
+  evolution: {
+    experiences: number;
+    reflections: number;
+    skills: number;
+    failures: number;
+    goals: string[];
+    lessons: string[];
+    affect: { valence: number; confidence: number };
+    selfModel: Array<{ label: string; text: string; pct: number | null }>;
+    night: { status: string; stage: string | null; pausedFor?: string };
+    candidates: Array<{ id: string; hypothesis: string; status: string; simulated?: boolean }>;
+    productionPromotionAllowed: false;
+  };
+  devices: Array<{
+    id: string;
+    label: string;
+    kind: string;
+    status: string;
+    node: ReturnType<typeof systemNodeState>;
+    simulated: boolean;
+  }>;
+  notifications: Array<{ id: string; summary: string; severity: string; simulated: boolean }>;
+  control: CommandCenterSnapshot['control'] & { autonomyLabel: string; maxAutonomyLabel: string };
+  vision: { title: string; simulated: boolean; elements: number } | null;
+};
+
+export function presentCommandCenter(
+  snapshot: CommandCenterSnapshot,
+  now: () => number = Date.now,
+): CommandCenterClientSnapshot {
+  const operations = windowedEvents(snapshot.operations, 40).map(event => ({
+    id: event.id,
+    seq: event.seq,
+    type: event.type,
+    at: event.at,
+    level: event.level,
+    summary: event.summary,
+    ...(event.simulated ? { simulated: true } : {}),
+    ...(event.visualState ? { visualState: event.visualState } : {}),
+    ...(event.taskId ? { taskId: event.taskId } : {}),
+    ...(event.progress ? { progress: event.progress } : {}),
+    ...(event.errorCode ? { errorCode: event.errorCode } : {}),
+  }));
+  const lastAt = operations.at(-1)?.at;
+  const fresh = Boolean(lastAt && now() - Date.parse(lastAt) < 15_000);
+  const task = snapshot.task;
+  return {
+    simulationMode: snapshot.simulationMode,
+    visualState: snapshot.visualState,
+    visualLabel: visualStatusLine(snapshot.visualState, snapshot.operations.at(-1)?.progress),
+    fresh,
+    operations,
+    task: task
+      ? {
+          id: task.id,
+          objective: task.objective,
+          status: task.status,
+          simulated: task.simulated,
+          waitingPermission: task.status === 'WAITING_PERMISSION' || task.plan.some(step => step.status === 'waiting_permission'),
+          active: ACTIVE_TASK.has(task.status),
+          steps: liveOpsSteps(task),
+        }
+      : null,
+    evolution: {
+      experiences: snapshot.evolution.experiences,
+      reflections: snapshot.evolution.reflections,
+      skills: snapshot.evolution.skills,
+      failures: snapshot.evolution.failures,
+      goals: snapshot.evolution.goals.slice(0, 3),
+      lessons: snapshot.evolution.journal.newLessons.slice(0, 4),
+      affect: {
+        valence: snapshot.evolution.affect.valence,
+        confidence: snapshot.evolution.affect.confidence,
+      },
+      selfModel: snapshot.evolution.selfModel.slice(0, 6).map(capabilityBar),
+      night: {
+        status: snapshot.evolution.night.status,
+        stage: snapshot.evolution.night.stage,
+        pausedFor: snapshot.evolution.night.pausedFor,
+      },
+      candidates: snapshot.evolution.candidates.slice(0, 6).map(item => ({
+        id: item.id,
+        hypothesis: item.hypothesis,
+        status: item.status,
+        simulated: item.simulated,
+      })),
+      productionPromotionAllowed: false,
+    },
+    devices: snapshot.devices.map(device => ({
+      id: device.id,
+      label: device.label,
+      kind: device.kind,
+      status: device.status,
+      node: systemNodeState({
+        attached: device.status !== 'offline',
+        healthy: device.status === 'online',
+        reachable: device.status !== 'offline',
+        blocked: false,
+      }),
+      simulated: device.simulated,
+    })),
+    notifications: snapshot.notifications.slice(0, 8).map(item => ({
+      id: item.id,
+      summary: item.summary,
+      severity: item.severity,
+      simulated: Boolean(item.simulated),
+    })),
+    control: {
+      ...snapshot.control,
+      autonomyLabel: AUTONOMY_LABELS[snapshot.control.currentAutonomy],
+      maxAutonomyLabel: AUTONOMY_LABELS[snapshot.control.maxAutonomy],
+    },
+    vision: snapshot.vision
+      ? {
+          title: snapshot.vision.windowTitle,
+          simulated: snapshot.vision.simulated,
+          elements: snapshot.vision.elements.length,
+        }
+      : null,
+  };
+}

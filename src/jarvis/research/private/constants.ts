@@ -58,7 +58,7 @@ export const BLOCKED_DOWNLOAD_EXTENSIONS = [
   '.wsf',
 ] as const;
 
-export const RESEARCH_DEPTHS = ['quick', 'standard', 'deep', 'forensic'] as const;
+export const RESEARCH_DEPTHS = ['none', 'quick', 'standard', 'deep', 'forensic'] as const;
 
 export function isPrivateResearchCapabilityId(id: string): boolean {
   return (PRIVATE_RESEARCH_CAPABILITY_IDS as readonly string[]).includes(id);

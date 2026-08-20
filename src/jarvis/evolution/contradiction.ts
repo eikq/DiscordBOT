@@ -27,6 +27,12 @@ export function resolveMemoryContradiction(
       reason: 'Different memory kinds stay separate until the owner reviews the contradiction.',
     };
   }
+  if (incomingActor === 'owner') {
+    return {
+      action: 'prefer_newer_if_same_kind',
+      reason: 'Owner-confirmed fact supersedes the previous active claim.',
+    };
+  }
   return {
     action: 'keep_both_pending_review',
     reason: 'Contradicting memories are not auto-merged.',
