@@ -232,7 +232,7 @@ claims.
 
 Implementation: `c6c22ef0de4c51368d2759e73eea59d5a8268d32`
 (feat `95a60584071a735fba016702ce3e4c5f2be384c1` + budget-pause test fix)
-Queue 08 HEAD: pending pin after this docs commit
+Queue 08 HEAD: `4b123835e3ad078c25be743da861ec3a66d032ed`
 
 Unified proactive work around the three existing schedulers. Did **not**
 add a fourth scheduler.

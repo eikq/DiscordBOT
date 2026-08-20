@@ -10,6 +10,7 @@ No live GPU / timer / unattended Night coding claims.
 SQLite remains canonical. Qdrant is not started.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `4b123835e3ad078c25be743da861ec3a66d032ed`
 Implementation: `c6c22ef0de4c51368d2759e73eea59d5a8268d32`
 Feat: `95a60584071a735fba016702ce3e4c5f2be384c1`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
