@@ -493,11 +493,11 @@ Status: IMPLEMENTED + UNIT_VERIFIED (`JarvisEventBus` seq/id, bounded buffer, SS
 
 ## JF-015 — Multi-step work agent
 Depends on JF-014.5 / JF-014.55*
-Status: INTEGRATED + UNIT_VERIFIED (CapabilityHost invoker, isolated SQLite `work.db`, restart/resume, permission wait). Live Ollama/hardware execution **BLOCKED_LOCAL_ACCEPTANCE**.
+Status: INTEGRATED + UNIT_VERIFIED. `/api/jarvis/ask` now routes CONVERSATION/INFORMATION vs RESEARCH/WORK/CAPABILITY. Agentic routes use WorkAgent → CapabilityHost. ActionGate grants resume the same step with a scoped lease (no self-approve, no token reuse). Live Ollama/hardware execution **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## EVO-001–010 — Evolution runtime (fail-closed)
 Depends on JF-015
-Status: INTEGRATED + UNIT_VERIFIED lifecycle and durable `evolution.db`. Task outcomes write experiences/reflections/failures/self-model/growth. Night cycle persists reflections and proposes success-only skill candidates. No autonomous production writes. Failure cannot mint trusted skills. Candidates never auto-promote. LoRA is registry-only (`trained: false`). Affect cannot authorize. Night cycle pauses on `realtime_voice`. Live night/Ollama **BLOCKED_LOCAL_ACCEPTANCE**.
+Status: INTEGRATED + UNIT_VERIFIED lifecycle and durable `evolution.db`. One experience per task (`exp_task_<id>`). Canonical SQLite episodes are written with provenance; research text stays untrusted. Night cycle includes BENCHMARK, persists reflections, and proposes success-only skill candidates. No autonomous production writes. Failure cannot mint trusted skills. Candidates never auto-promote. LoRA is registry-only (`trained: false`). Affect cannot authorize. Night cycle pauses on `realtime_voice`. Live night/Ollama **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## JF-016 / JF-017 / JF-018 — Vision, monitor, devices
 Depends on JF-015
