@@ -30,6 +30,11 @@ export class ExperienceStore {
     return { ...record };
   }
 
+  public createIfSignificant(input: CreateExperienceInput, actor: PrivilegeActor = 'system'): ExperienceRecord | null {
+    if ((input.significance ?? 0.5) < 0.2) return null;
+    return this.create(input, actor);
+  }
+
   public get(id: string): ExperienceRecord | undefined {
     const item = this.items.get(id);
     return item ? { ...item } : undefined;

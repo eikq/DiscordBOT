@@ -24,6 +24,10 @@ export type ExperienceRecord = {
   confidence: number;
   privacyClass: 'public' | 'private' | 'sensitive';
   cause?: string;
+  domain?: string;
+  significance?: number;
+  evidenceRefs?: string[];
+  ownerFeedback?: string;
 };
 
 export type StructuredReflection = {
@@ -38,6 +42,15 @@ export type StructuredReflection = {
   needsMoreEvidence: boolean;
 };
 
+export type SkillLifecycleStatus =
+  | 'CANDIDATE'
+  | 'TESTED'
+  | 'TRUSTED_INSTRUCTION'
+  | 'ACTIVE'
+  | 'DEPRECATED'
+  | 'REJECTED'
+  | 'ROLLED_BACK';
+
 export type ProceduralSkillVersion = {
   skillId: string;
   version: number;
@@ -51,4 +64,7 @@ export type ProceduralSkillVersion = {
   verification: string[];
   evidence: string[];
   knownGood: boolean;
+  status: SkillLifecycleStatus;
+  parentVersion?: number;
+  scriptsAllowed: false;
 };

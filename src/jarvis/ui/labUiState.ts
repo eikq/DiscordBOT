@@ -8,10 +8,17 @@ export type LabCorePhase =
   | 'listening'
   | 'transcribing'
   | 'thinking'
+  | 'planning'
+  | 'searching'
+  | 'permission'
+  | 'executing'
+  | 'verifying'
   | 'memory'
   | 'tool'
   | 'responding'
   | 'speaking'
+  | 'reflecting'
+  | 'evolving'
   | 'degraded'
   | 'error';
 
@@ -108,7 +115,10 @@ export function deriveLabCorePhase(input: {
   toolCount: number;
   micState?: 'idle' | 'listening' | 'transcribing';
   speechState?: 'idle' | 'loading' | 'speaking';
+  visualState?: string;
 }): LabCorePhase {
+  const fromVisual = labPhaseFromVisual(input.visualState);
+  if (fromVisual) return fromVisual;
   if (input.error) return 'error';
   if (input.micState === 'transcribing') return 'transcribing';
   if (input.busy) return 'thinking';
@@ -123,8 +133,46 @@ export function deriveLabCorePhase(input: {
   return 'responding';
 }
 
-export function labCorePhaseLabel(phase: LabCorePhase): string {
-  return phase;
+export function labPhaseFromVisual(state?: string): LabCorePhase | null {
+  if (!state || state === 'IDLE') return null;
+  switch (state) {
+    case 'LISTENING':
+      return 'listening';
+    case 'UNDERSTANDING':
+    case 'MODEL_GENERATING':
+      return 'thinking';
+    case 'PLANNING':
+      return 'planning';
+    case 'WEB_SEARCH':
+    case 'WORKSPACE_SEARCH':
+    case 'PRIVATE_RESEARCH':
+    case 'FETCHING':
+    case 'COMPARING':
+      return 'searching';
+    case 'WAITING_PERMISSION':
+      return 'permission';
+    case 'EXECUTING':
+      return 'executing';
+    case 'VERIFYING':
+      return 'verifying';
+    case 'MEMORY_RETRIEVAL':
+      return 'memory';
+    case 'RESPONDING':
+      return 'responding';
+    case 'SPEAKING':
+      return 'speaking';
+    case 'REFLECTING':
+    case 'LEARNING':
+      return 'reflecting';
+    case 'EVOLVING':
+      return 'evolving';
+    case 'ERROR':
+      return 'error';
+    case 'DEGRADED':
+      return 'degraded';
+    default:
+      return null;
+  }
 }
 
 export function deriveSystemRibbon(input: {
@@ -338,7 +386,7 @@ export function formatTurnTimingsLine(timings?: {
   return parts.length ? parts.join(' · ') : null;
 }
 
-function compactModelName(model?: string): string {
+function timelineState(
   if (!model) return 'ready';
   return model.length > 32 ? `${model.slice(0, 30)}…` : model;
 }

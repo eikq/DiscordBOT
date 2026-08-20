@@ -877,6 +877,9 @@
 .jcc-timeline__stage.is-active strong { color: var(--ice); text-shadow: 0 0 0.6rem rgb(125 211 252 / 0.8); animation: jcc-breathe 1.6s ease-in-out infinite; }
 .jcc-timeline__stage.is-empty strong { color: var(--degraded); }
 .jcc-timeline__stage.is-failed strong { color: var(--red); }
+.jcc-timeline__stage.is-pending strong,
+.jcc-timeline__stage.is-waiting strong,
+.jcc-timeline__stage.is-blocked strong { color: var(--muted); }
 .jcc-timeline__arrow { opacity: 0.4; }
 
 /* dock */
@@ -1332,3 +1335,74 @@
   border-color: rgb(45 212 191 / 0.35);
   background: rgb(45 212 191 / 0.06);
 }
+
+.jcc-sim-banner {
+  position: absolute;
+  top: 3.1rem;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgb(250 204 21 / 0.35);
+  background: rgb(64 48 8 / 0.72);
+  color: #fde68a;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.jcc-sim-inline {
+  margin: 0 0 0.4rem;
+  color: #fde68a;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
+.jcc-ops {
+  list-style: none;
+  margin: 0.4rem 0 0.7rem;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.jcc-ops__step {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #bfe0ee;
+}
+
+.jcc-ops__step em {
+  font-style: normal;
+  color: var(--faint);
+  letter-spacing: 0.08em;
+}
+
+.jcc-ops__step.is-active span { color: var(--ice); }
+.jcc-ops__step.is-done span { color: var(--cyan); }
+.jcc-ops__step.is-failed span { color: var(--red); }
+.jcc-ops__step.is-waiting span { color: #fde68a; }
+
+.jcc-source-graph {
+  display: block;
+  width: 100%;
+  max-width: 12rem;
+  margin: 0.4rem auto 0;
+  overflow: visible;
+}
+
+.jcc-source-graph__core { fill: rgb(125 211 252 / 0.9); }
+.jcc-source-graph__node { fill: rgb(45 212 191 / 0.85); }
+.jcc-source-graph__edge { stroke: rgb(125 211 252 / 0.28); stroke-width: 0.6; }
+.jcc-source-graph text {
+  fill: rgb(158 210 234 / 0.7);
+  font-size: 4px;
+  letter-spacing: 0.04em;
+}
+
+.jcc-permit--task { margin-top: 0.55rem; }
