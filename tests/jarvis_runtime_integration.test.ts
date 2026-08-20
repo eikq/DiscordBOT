@@ -168,7 +168,7 @@ test('interrupted mutating apply is not retried after restart', () => {
   const root = tempRoot('jarvis-work-int-');
   const dbPath = path.join(root, 'work.db');
   const store = new WorkTaskStore({ dbPath });
-  const task = store.create({
+  const created = store.create({
     objective: 'mutate',
     plan: [{
       id: 'apply_mut',
@@ -181,10 +181,14 @@ test('interrupted mutating apply is not retried after restart', () => {
       retryPolicy: { maxAttempts: 2, attempted: 1 },
     }],
   });
-  store.save({ ...task, status: 'EXECUTING' });
+  store.restore([{
+    ...created,
+    status: 'EXECUTING',
+    plan: created.plan.map(step => ({ ...step, status: 'running' as const })),
+  }]);
   store.close();
   const restored = new WorkTaskStore({ dbPath });
-  assert.equal(restored.get(task.id)?.plan[0]?.status, 'failed');
+  assert.equal(restored.get(created.id)?.plan[0]?.status, 'failed');
   restored.close();
 });
 

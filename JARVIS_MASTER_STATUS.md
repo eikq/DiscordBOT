@@ -15,7 +15,9 @@ Accepted standalone packs still in force:
 - JF-SKILLS-001 instruction/reference only (`scriptsAllowed=false`)
 
 This continuation added the security-first layer **on top of** those packs,
-then the cloud-safe work-agent / evolution / command-center layer.
+then the cloud-safe work-agent / evolution / command-center layer,
+then a runtime-integration pass: CapabilityHost work-agent invocation,
+isolated SQLite task/evolution stores, and night-cycle consolidation.
 It did not restart the project or rewrite Discord.
 
 See `JARVIS_SECURITY_STATUS.md` for SEC/JF-014.5+ labels.
