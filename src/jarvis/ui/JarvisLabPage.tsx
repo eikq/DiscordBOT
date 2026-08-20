@@ -9,6 +9,7 @@ import {
 } from '../presentation/types';
 import { BrowserMicrophoneInput } from './browserMicrophone';
 import JarvisCoreVisual from './JarvisCoreVisual';
+import CommandCenterPanels from './CommandCenterPanels';
 import { graphCategoriesOf, graphCategoryColor, type GraphSnapshot } from './graph/graphTypes';
 import { shortestGraphPath } from './graph/graphLayout';
 import {
@@ -56,6 +57,8 @@ import {
 import { sceneMoodFor } from './three/sceneState';
 import type { CameraAction, CoreSceneLayers } from './three/CoreScene';
 import { webglAvailable } from './three/webglAvailability';
+import type { CommandCenterClientSnapshot } from '../standalone/commandCenterView';
+import type { DemoScenarioId } from '../standalone/commandCenterHttp';
 import './jarvis-lab.css';
 
 const CoreScene = lazy(() => import('./three/CoreScene'));
@@ -255,6 +258,8 @@ export default function JarvisLabPage() {
   const [webglLost, setWebglLost] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [toolPanelOpen, setToolPanelOpen] = useState(false);
+  const [commandCenter, setCommandCenter] = useState<CommandCenterClientSnapshot | null>(null);
+  const [opsBusy, setOpsBusy] = useState(false);
 
   const askForm = useRef<HTMLFormElement>(null);
   const askField = useRef<HTMLTextAreaElement>(null);
@@ -340,6 +345,33 @@ export default function JarvisLabPage() {
     }
   }, []);
 
+  const refreshCommandCenter = useCallback(async () => {
+    try {
+      const reply = await fetch('/api/jarvis/command-center');
+      if (reply.ok) setCommandCenter(await reply.json() as CommandCenterClientSnapshot);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const postCommandCenter = async (url: string, body: Record<string, unknown>) => {
+    setOpsBusy(true);
+    try {
+      const reply = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const payload = await reply.json() as CommandCenterClientSnapshot & { error?: string };
+      if (!reply.ok) throw new Error(payload.error || `Command center ${reply.status}`);
+      setCommandCenter(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpsBusy(false);
+    }
+  };
+
   useEffect(() => {
     void refreshStatus().catch(err => setError(err instanceof Error ? err.message : String(err)));
     void refreshGraph();
@@ -348,6 +380,7 @@ export default function JarvisLabPage() {
     void refreshReminders();
     void refreshResearch();
     void refreshWorkspace();
+    void refreshCommandCenter();
     try {
       setQualityMode(parseQualityMode(window.localStorage.getItem(QUALITY_STORAGE_KEY)));
     } catch {
@@ -367,6 +400,7 @@ export default function JarvisLabPage() {
       void refreshReminders();
       void refreshResearch();
       void refreshWorkspace();
+      void refreshCommandCenter();
     }, 5_000);
     const nightTimer = window.setInterval(() => { void refreshNight(); }, 30_000);
     return () => {
@@ -374,7 +408,7 @@ export default function JarvisLabPage() {
       window.clearInterval(systemTimer);
       window.clearInterval(nightTimer);
     };
-  }, [documentHidden, refreshSystem, refreshNight, refreshReminders, refreshResearch, refreshWorkspace]);
+  }, [documentHidden, refreshSystem, refreshNight, refreshReminders, refreshResearch, refreshWorkspace, refreshCommandCenter]);
 
   useEffect(() => {
     const syncHidden = () => setDocumentHidden(document.hidden);
@@ -389,6 +423,47 @@ export default function JarvisLabPage() {
       media.removeEventListener('change', syncMotion);
     };
   }, []);
+
+  useEffect(() => {
+    if (documentHidden) return;
+    let lastSeq = 0;
+    let source: EventSource | null = null;
+    let retry: number | undefined;
+    let refreshSoon: number | undefined;
+    const scheduleRefresh = () => {
+      if (refreshSoon) return;
+      refreshSoon = window.setTimeout(() => {
+        refreshSoon = undefined;
+        void refreshCommandCenter();
+      }, 120);
+    };
+    const connect = () => {
+      const url = lastSeq > 0
+        ? `/api/jarvis/events?stream=1&after=${lastSeq}`
+        : '/api/jarvis/events?stream=1';
+      source = new EventSource(url);
+      source.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data) as { seq?: number };
+          if (typeof payload.seq === 'number') lastSeq = payload.seq;
+        } catch {
+          return;
+        }
+        scheduleRefresh();
+      };
+      source.onerror = () => {
+        source?.close();
+        source = null;
+        retry = window.setTimeout(connect, 1_500);
+      };
+    };
+    connect();
+    return () => {
+      source?.close();
+      if (retry) window.clearTimeout(retry);
+      if (refreshSoon) window.clearTimeout(refreshSoon);
+    };
+  }, [documentHidden, refreshCommandCenter]);
 
   useEffect(() => {
     return () => {
@@ -558,6 +633,7 @@ export default function JarvisLabPage() {
     toolCount: observableToolCount,
     micState: micState === 'listening' || micState === 'transcribing' ? micState : 'idle',
     speechState,
+    visualState: commandCenter?.task?.active || commandCenter?.fresh ? commandCenter.visualState : undefined,
   });
 
   const nightRunning = night?.available === true && night.status === 'running';
@@ -1056,10 +1132,17 @@ export default function JarvisLabPage() {
       case 'listening': return 'Listening';
       case 'transcribing': return 'Transcribing audio';
       case 'thinking': return 'Processing request';
+      case 'planning': return 'Building a structured plan';
+      case 'searching': return 'Searching sources';
+      case 'permission': return 'Waiting for owner permission';
+      case 'executing': return 'Executing the next safe step';
+      case 'verifying': return 'Verifying the outcome';
       case 'memory': return 'Memory evidence attached';
       case 'tool': return 'Tool activity detected';
       case 'responding': return 'Preparing response';
       case 'speaking': return 'Speaking';
+      case 'reflecting': return 'Recording a structured reflection';
+      case 'evolving': return 'Background evolution cycle';
       case 'degraded': return 'Operating with limited services';
       case 'error': return 'Attention required';
       default: return 'Awaiting a request';
@@ -1419,6 +1502,10 @@ export default function JarvisLabPage() {
               {night?.counts ? <p className="jcc-hint">{night.counts.pass}/{night.counts.total} pass</p> : null}
             </div>
 
+            {commandCenter?.simulationMode || commandCenter?.task?.simulated ? (
+              <p className="jcc-sim-banner" role="status">SIMULATION — events are tagged and not live hardware</p>
+            ) : null}
+
             <div className="jcc-answer" data-state={busy ? 'busy' : response || draftText ? 'ready' : 'empty'}>
               {draftText || response?.presented.text ? (
                 <p>{draftText || response?.presented.text}</p>
@@ -1431,7 +1518,11 @@ export default function JarvisLabPage() {
             </div>
 
             <ol className="jcc-timeline" aria-label="Observable pipeline">
-              {pipeline.map((stage, index) => (
+              {(commandCenter?.task?.steps.length ? commandCenter.task.steps.map(step => ({
+                id: step.id,
+                label: `${step.index} ${step.title}`,
+                state: step.state === 'active' ? 'active' : step.state === 'failed' ? 'failed' : step.state === 'done' ? 'done' : 'pending',
+              })) : pipeline).map((stage, index) => (
                 <li key={stage.id} className={`jcc-timeline__stage is-${stage.state}`}>
                   {index > 0 ? <span className="jcc-timeline__arrow" aria-hidden="true">→</span> : null}
                   <strong>{stage.label}</strong>
@@ -1558,6 +1649,19 @@ export default function JarvisLabPage() {
             </button>
             {rightOpen ? (
               <div className="jcc-rail__body">
+                <CommandCenterPanels
+                  snapshot={commandCenter}
+                  domains={(research?.last?.sources ?? []).map(item => item.domain).filter(Boolean)}
+                  busy={opsBusy}
+                  onDemo={(scenario: DemoScenarioId) => { void postCommandCenter('/api/jarvis/command-center/demo', { scenario }); }}
+                  onCancel={() => {
+                    if (commandCenter?.task?.id) void postCommandCenter('/api/jarvis/command-center/cancel', { taskId: commandCenter.task.id });
+                  }}
+                  onGrant={() => {
+                    if (commandCenter?.task?.id) void postCommandCenter('/api/jarvis/command-center/grant', { taskId: commandCenter.task.id });
+                  }}
+                  onSimulation={enabled => { void postCommandCenter('/api/jarvis/command-center/control', { simulationMode: enabled }); }}
+                />
                 <section className="jcc-block">
                   <h2>Tool activity</h2>
                   {response?.intent ? (

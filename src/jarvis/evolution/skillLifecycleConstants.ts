@@ -1,0 +1,9 @@
+export const SKILL_LIFECYCLE = [
+  'CANDIDATE',
+  'TESTED',
+  'TRUSTED_INSTRUCTION',
+  'ACTIVE',
+  'DEPRECATED',
+  'REJECTED',
+  'ROLLED_BACK',
+] as const;

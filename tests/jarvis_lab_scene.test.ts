@@ -21,8 +21,9 @@ import {
 import { nightAgentSnapshot, systemHealthSnapshot } from '../src/jarvis/standalone/labSystem';
 
 const ALL_PHASES: LabCorePhase[] = [
-  'idle', 'listening', 'transcribing', 'thinking', 'memory', 'tool',
-  'responding', 'speaking', 'degraded', 'error',
+  'idle', 'listening', 'transcribing', 'thinking', 'planning', 'searching', 'permission',
+  'executing', 'verifying', 'memory', 'tool', 'responding', 'speaking', 'reflecting', 'evolving',
+  'degraded', 'error',
 ];
 
 test('scene mood maps every observable phase without inventing state', () => {

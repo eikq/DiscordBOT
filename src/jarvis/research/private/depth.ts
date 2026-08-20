@@ -9,6 +9,14 @@ export function planResearchDepth(
   freshness: 'any' | 'latest' = 'any',
 ): ResearchPlan {
   const base = planResearch(query, officialOnly, freshness === 'latest' || depth === 'deep' || depth === 'forensic' ? 'latest' : freshness);
+  if (depth === 'none') {
+    return {
+      ...base,
+      queries: [],
+      maxFetches: 0,
+      maxRounds: 0,
+    };
+  }
   if (depth === 'quick') {
     return {
       ...base,

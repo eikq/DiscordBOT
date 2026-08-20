@@ -14,6 +14,7 @@ import {
   formatLatencyMs,
   formatTurnTimingsLine,
   isExplicitActionConfirmation,
+  labPhaseFromVisual,
 } from '../src/jarvis/ui/labUiState';
 
 test('lab core phase is driven by observable UI state only', () => {
@@ -98,6 +99,25 @@ test('lab core phase is driven by observable UI state only', () => {
     memoryCount: 1,
     toolCount: 1,
   }), 'responding');
+});
+
+test('lab visual states map to observable core phases', () => {
+  assert.equal(labPhaseFromVisual('PLANNING'), 'planning');
+  assert.equal(labPhaseFromVisual('WEB_SEARCH'), 'searching');
+  assert.equal(labPhaseFromVisual('WAITING_PERMISSION'), 'permission');
+  assert.equal(labPhaseFromVisual('EXECUTING'), 'executing');
+  assert.equal(labPhaseFromVisual('VERIFYING'), 'verifying');
+  assert.equal(labPhaseFromVisual('REFLECTING'), 'reflecting');
+  assert.equal(labPhaseFromVisual('EVOLVING'), 'evolving');
+  assert.equal(labPhaseFromVisual('IDLE'), null);
+  assert.equal(deriveLabCorePhase({
+    busy: true,
+    error: null,
+    hasResponse: false,
+    memoryCount: 0,
+    toolCount: 0,
+    visualState: 'PLANNING',
+  }), 'planning');
 });
 
 test('unknown status does not invent Qwen offline', () => {
@@ -221,6 +241,7 @@ test('jarvis lab page is a command center and stays Discord-free', () => {
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'JarvisCoreVisual.tsx'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'labUiState.ts'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'browserMicrophone.ts'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'CommandCenterPanels.tsx'),
   ];
   const discord = /from\s+['"](?:discord(?:\.js)?|@discordjs\/)['"]/u;
   const page = fs.readFileSync(files[0]!, 'utf8');
@@ -236,8 +257,14 @@ test('jarvis lab page is a command center and stays Discord-free', () => {
   assert.match(page, /jcc-permit/);
   assert.match(page, /Allow once/);
   assert.match(page, /speak: shouldSpeak/);
+  assert.match(page, /EventSource/);
+  assert.match(page, /\/api\/jarvis\/command-center/);
+  assert.match(page, /jcc-sim-banner/);
   assert.doesNotMatch(page, /Microphone is not enabled yet/);
   assert.doesNotMatch(page, /<select/);
+  const panels = fs.readFileSync(files[4]!, 'utf8');
+  assert.match(panels, /SIMULATION/);
+  assert.doesNotMatch(panels, /Discord/);
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');
     assert.equal(discord.test(source), false, file);

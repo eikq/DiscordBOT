@@ -4,12 +4,18 @@ export class SkillVersionRegistry {
   private readonly versions = new Map<string, ProceduralSkillVersion[]>();
   private readonly knownGood = new Map<string, number>();
 
-  public propose(skill: Omit<ProceduralSkillVersion, 'version' | 'knownGood'>): ProceduralSkillVersion {
+  public propose(skill: Omit<ProceduralSkillVersion, 'version' | 'knownGood' | 'status' | 'scriptsAllowed'> & {
+    status?: ProceduralSkillVersion['status'];
+    parentVersion?: number;
+  }): ProceduralSkillVersion {
     const existing = this.versions.get(skill.skillId) ?? [];
     const next: ProceduralSkillVersion = {
       ...skill,
       version: (existing.at(-1)?.version ?? 0) + 1,
       knownGood: false,
+      status: skill.status ?? 'CANDIDATE',
+      scriptsAllowed: false,
+      parentVersion: skill.parentVersion ?? existing.at(-1)?.version,
     };
     this.versions.set(skill.skillId, [...existing, next]);
     return { ...next };
@@ -17,7 +23,17 @@ export class SkillVersionRegistry {
 
   public markTested(skillId: string, version: number, passed: boolean): ProceduralSkillVersion {
     const skill = this.require(skillId, version);
-    if (!passed) return { ...skill };
+    skill.status = passed ? 'TESTED' : 'REJECTED';
+    return { ...skill };
+  }
+
+  public reject(skillId: string, version: number, reason: string): ProceduralSkillVersion {
+    const skill = this.require(skillId, version);
+    if (skill.knownGood) {
+      throw Object.assign(new Error('Cannot reject the only known-good skill without rollback.'), { reasonCode: 'CANDIDATE_REJECTED' });
+    }
+    skill.status = 'REJECTED';
+    skill.evidence = [...skill.evidence, `rejected:${reason}`];
     return { ...skill };
   }
 
@@ -34,6 +50,7 @@ export class SkillVersionRegistry {
       previous.knownGood = true;
     }
     this.knownGood.set(skillId, version);
+    skill.status = 'ACTIVE';
     return { ...skill };
   }
 
@@ -55,6 +72,10 @@ export class SkillVersionRegistry {
   public knownGoodVersion(skillId: string): ProceduralSkillVersion | undefined {
     const version = this.knownGood.get(skillId);
     return version === undefined ? undefined : this.get(skillId, version);
+  }
+
+  public list(): ProceduralSkillVersion[] {
+    return [...this.versions.values()].flatMap(items => items.map(item => ({ ...item })));
   }
 
   private require(skillId: string, version: number): ProceduralSkillVersion {
