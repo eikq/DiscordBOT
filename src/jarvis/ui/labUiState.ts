@@ -386,7 +386,7 @@ export function formatTurnTimingsLine(timings?: {
   return parts.length ? parts.join(' · ') : null;
 }
 
-function timelineState(
+function compactModelName(model?: string): string {
   if (!model) return 'ready';
   return model.length > 32 ? `${model.slice(0, 30)}…` : model;
 }

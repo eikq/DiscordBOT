@@ -14,6 +14,7 @@ import {
   visionActionAllowed,
 } from '../src/jarvis';
 import { liveOpsSteps, sourceGraphLayout, systemNodeState } from '../src/jarvis/ui/operationsView';
+import { mayPerformVisionAction } from '../src/jarvis/vision/policy';
 import { planResearchDepth } from '../src/jarvis/research/private/depth';
 import { isStaleKnowledge, knowledgeTtlClass } from '../src/jarvis/research/staleness';
 import { buildEvidenceGraph } from '../src/jarvis/research/evidenceGraph';

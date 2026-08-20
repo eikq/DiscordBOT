@@ -29,6 +29,7 @@ import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus'
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
 import type { JarvisOperationEvent } from '../security/types';
 import { presentCommandCenter } from './commandCenterView';
+import type { DemoScenarioId } from './commandCenterHttp';
 
 export type CommandCenterSnapshot = {
   simulationMode: boolean;
@@ -332,7 +333,7 @@ export class CommandCenterRuntime {
   }
 }
 
-export type DemoScenarioId = 'research' | 'coding' | 'evolution' | 'monitoring';
+export type { DemoScenarioId } from './commandCenterHttp';
 
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 40) || 'task';

@@ -248,7 +248,8 @@ export { ProactiveMonitor } from './monitor';
 export { SimulatedDeviceProvider } from './devices';
 export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
 export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
-export type { CommandCenterSnapshot, DemoScenarioId } from './standalone/commandCenter';
+export type { CommandCenterSnapshot } from './standalone/commandCenter';
+export type { DemoScenarioId } from './standalone/commandCenterHttp';
 export { presentCommandCenter } from './standalone/commandCenterView';
 export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
 export {

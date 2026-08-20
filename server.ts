@@ -1051,7 +1051,7 @@ async function startServer() {
       return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
     }
     const parsed = parseControlPatch(req.body);
-    if (!parsed.ok) return res.status(400).json({ error: parsed.error, reasonCode: 'PLAN_INVALID' });
+    if (parsed.ok === false) return res.status(400).json({ error: parsed.error, reasonCode: 'PLAN_INVALID' });
     try {
       const center = sharedCommandCenter();
       applyOwnerControl(center.control, parsed.patch);

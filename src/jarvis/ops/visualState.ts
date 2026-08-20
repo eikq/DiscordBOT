@@ -1,5 +1,5 @@
 import type { JarvisOperationEvent, JarvisOperationEventType } from '../security/types';
-import type { JarvisVisualState } from './types';
+import { JARVIS_VISUAL_STATES, type JarvisVisualState } from './types';
 
 const TYPE_TO_STATE: Partial<Record<JarvisOperationEventType, JarvisVisualState>> = {
   UNDERSTANDING: 'UNDERSTANDING',
@@ -48,7 +48,9 @@ const TYPE_TO_STATE: Partial<Record<JarvisOperationEventType, JarvisVisualState>
 };
 
 export function visualStateFromEvent(event: Pick<JarvisOperationEvent, 'type' | 'level' | 'visualState'>): JarvisVisualState {
-  if (event.visualState) return event.visualState;
+  if (event.visualState && (JARVIS_VISUAL_STATES as readonly string[]).includes(event.visualState)) {
+    return event.visualState as JarvisVisualState;
+  }
   if (event.level === 'error') return 'ERROR';
   return TYPE_TO_STATE[event.type] ?? 'IDLE';
 }

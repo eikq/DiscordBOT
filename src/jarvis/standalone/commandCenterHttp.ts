@@ -4,7 +4,8 @@ import {
   type OwnerControl,
   type OwnerControlState,
 } from '../control';
-import type { DemoScenarioId } from './commandCenter';
+
+export type DemoScenarioId = 'research' | 'coding' | 'evolution' | 'monitoring';
 
 export const DEMO_SCENARIOS: DemoScenarioId[] = ['research', 'coding', 'evolution', 'monitoring'];
 
