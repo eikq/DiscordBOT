@@ -19,7 +19,7 @@ export function redactSecrets(value: string): string {
 
 function isRedactedObjectKey(key: string): boolean {
   if (/^(tokens|tokensPerSec)$/iu.test(key)) return false;
-  return /password|secret|token|cookie|authorization|api[_-]?key|\.env/iu.test(key);
+  return /password|secret|token|cookie|authorization|api[_-]?key|\.env|rvc|consent|wavPath|rawAudio|datasetPath/iu.test(key);
 }
 
 export function redactDeep(value: unknown, depth = 0): unknown {

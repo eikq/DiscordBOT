@@ -1,6 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import { NativeOwnershipRegistry, type OwnedJarvisWindow } from './nativeOwnership';
 import {
   NATIVE_HELPER_PROTOCOL_VERSION,
+  NativeHelperReplayGuard,
+  authorizeNativeHelperCommand,
+  extractNativeHelperAuth,
   parseNativeHelperRequest,
   type NativeHelperHealth,
   type NativeHelperRequest,
@@ -13,6 +17,8 @@ export type FakeNativeHelperOptions = {
   sessionId?: string;
   available?: boolean;
   displays?: DisplayInfo[];
+  /** Test-only ephemeral token. Never logged or persisted. */
+  authToken?: string;
 };
 
 /**
@@ -20,6 +26,8 @@ export type FakeNativeHelperOptions = {
  */
 export class FakeNativeJarvisHelper {
   public readonly ownership: NativeOwnershipRegistry;
+  public readonly authToken: string;
+  private readonly replay = new NativeHelperReplayGuard();
   private windows = new Map<string, { role: NativeWindowRole; bounds: DisplayBounds; displayId?: string }>();
 
   constructor(private readonly options: FakeNativeHelperOptions = {}) {
@@ -27,6 +35,8 @@ export class FakeNativeJarvisHelper {
       options.runtimeId || 'jarvis-runtime',
       options.sessionId || 'jarvis-lab',
     );
+    this.authToken = options.authToken
+      || (options.available ? randomBytes(16).toString('hex') : '');
   }
 
   public health(): NativeHelperHealth {
@@ -62,6 +72,17 @@ export class FakeNativeJarvisHelper {
     }
     if (!this.options.available) {
       return { ok: false, reasonCode: 'UNSUPPORTED_HOST', message: 'Native Jarvis helper is unavailable. Fail-closed.' };
+    }
+    const authorized = authorizeNativeHelperCommand({
+      command: parsed.value.command,
+      auth: extractNativeHelperAuth(body),
+      expectedRuntimeId: this.ownership.runtimeId,
+      expectedSessionId: this.ownership.sessionId,
+      expectedToken: this.authToken,
+      replay: this.replay,
+    });
+    if (authorized.ok === false) {
+      return { ok: false, reasonCode: authorized.reasonCode, message: 'Native helper rejected the request.' };
     }
     return this.dispatch(parsed.value);
   }

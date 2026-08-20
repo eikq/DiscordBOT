@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 /**
  * Local-only native helper protocol. Not a network API.
  * Cloud scaffolds the contract only. Do not install a helper from this module.
@@ -78,15 +80,22 @@ export type NativeHelperResponse = {
   message: string;
 };
 
+const AUTH_OPTIONAL_COMMANDS = new Set<NativeHelperCommand>(['HELLO', 'HEALTH']);
+
+export type NativeHelperAuthFields = {
+  token?: string;
+  nonce?: string;
+  runtimeId?: string;
+  sessionId?: string;
+};
+
 export function parseNativeHelperRequest(body: unknown): { ok: true; value: NativeHelperRequest } | { ok: false; reasonCode: string } {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { ok: false, reasonCode: 'INVALID_ARGUMENT' };
   }
   const raw = body as Record<string, unknown>;
-  for (const key of Object.keys(raw)) {
-    if ((FORBIDDEN_NATIVE_ARGUMENT_KEYS as readonly string[]).includes(key)) {
-      return { ok: false, reasonCode: 'FORBIDDEN_ARGUMENT' };
-    }
+  if (containsForbiddenNativeKey(raw)) {
+    return { ok: false, reasonCode: 'FORBIDDEN_ARGUMENT' };
   }
   if (raw.protocolVersion !== NATIVE_HELPER_PROTOCOL_VERSION) {
     return { ok: false, reasonCode: 'PROTOCOL_MISMATCH' };
@@ -94,7 +103,16 @@ export function parseNativeHelperRequest(body: unknown): { ok: true; value: Nati
   if (typeof raw.command !== 'string' || !(NATIVE_HELPER_COMMANDS as readonly string[]).includes(raw.command)) {
     return { ok: false, reasonCode: 'INVALID_ARGUMENT' };
   }
-  if (raw.command === 'HELLO' || raw.command === 'HEALTH' || raw.command === 'LIST_OWNED') {
+  if (raw.command === 'HELLO' || raw.command === 'HEALTH') {
+    return {
+      ok: true,
+      value: {
+        protocolVersion: NATIVE_HELPER_PROTOCOL_VERSION,
+        command: raw.command,
+      },
+    };
+  }
+  if (raw.command === 'LIST_OWNED') {
     return {
       ok: true,
       value: {
@@ -121,14 +139,82 @@ export function parseNativeHelperRequest(body: unknown): { ok: true; value: Nati
   };
 }
 
+export function extractNativeHelperAuth(body: unknown): NativeHelperAuthFields {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return {};
+  const raw = body as Record<string, unknown>;
+  const token = typeof raw.token === 'string'
+    ? raw.token
+    : typeof raw.authToken === 'string'
+      ? raw.authToken
+      : undefined;
+  return {
+    ...(token ? { token } : {}),
+    ...(typeof raw.nonce === 'string' ? { nonce: raw.nonce } : {}),
+    ...(typeof raw.runtimeId === 'string' ? { runtimeId: raw.runtimeId } : {}),
+    ...(typeof raw.sessionId === 'string' ? { sessionId: raw.sessionId } : {}),
+  };
+}
+
+export class NativeHelperReplayGuard {
+  private readonly used = new Set<string>();
+
+  public consume(nonce: string, max = 2_048): { ok: true } | { ok: false; reasonCode: string } {
+    const value = nonce.trim();
+    if (!value || value.length > 128) return { ok: false, reasonCode: 'INVALID_ARGUMENT' };
+    if (this.used.has(value)) return { ok: false, reasonCode: 'REPLAY_DETECTED' };
+    this.used.add(value);
+    if (this.used.size > max) {
+      const first = this.used.values().next().value;
+      if (typeof first === 'string') this.used.delete(first);
+    }
+    return { ok: true };
+  }
+}
+
+export function authorizeNativeHelperCommand(input: {
+  command: NativeHelperCommand;
+  auth: NativeHelperAuthFields;
+  expectedRuntimeId: string;
+  expectedSessionId: string;
+  expectedToken: string;
+  replay: NativeHelperReplayGuard;
+}): { ok: true } | { ok: false; reasonCode: string } {
+  if (AUTH_OPTIONAL_COMMANDS.has(input.command)) return { ok: true };
+  if (!input.expectedToken) return { ok: false, reasonCode: 'HELPER_UNAVAILABLE' };
+  if (!input.auth.token || !nativeTokensEqual(input.auth.token, input.expectedToken)) {
+    return { ok: false, reasonCode: 'FORGED_IPC' };
+  }
+  if (input.auth.runtimeId !== input.expectedRuntimeId || input.auth.sessionId !== input.expectedSessionId) {
+    return { ok: false, reasonCode: 'HELPER_IMPERSONATION' };
+  }
+  if (!input.auth.nonce) return { ok: false, reasonCode: 'AUTH_REQUIRED' };
+  return input.replay.consume(input.auth.nonce);
+}
+
 export function nativeHelperLogSafe(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (/token|secret|cookie|password|confirm/iu.test(key)) continue;
+    if (/token|secret|cookie|password|confirm|nonce/iu.test(key)) continue;
     out[key] = item;
   }
   return out;
+}
+
+function containsForbiddenNativeKey(value: unknown, depth = 0): boolean {
+  if (!value || typeof value !== 'object' || depth > 4) return false;
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if ((FORBIDDEN_NATIVE_ARGUMENT_KEYS as readonly string[]).includes(key)) return true;
+    if (containsForbiddenNativeKey(nested, depth + 1)) return true;
+  }
+  return false;
+}
+
+function nativeTokensEqual(left: string, right: string): boolean {
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 function isBounds(value: unknown): value is { x: number; y: number; width: number; height: number } {

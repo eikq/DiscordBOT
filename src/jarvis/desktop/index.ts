@@ -36,6 +36,9 @@ export { NativeOwnershipRegistry, rejectForeignWindowTarget } from './nativeOwne
 export {
   FORBIDDEN_NATIVE_ARGUMENT_KEYS,
   NATIVE_HELPER_PROTOCOL_VERSION,
+  NativeHelperReplayGuard,
+  authorizeNativeHelperCommand,
+  extractNativeHelperAuth,
   nativeHelperLogSafe,
   parseNativeHelperRequest,
 } from './nativeProtocol';

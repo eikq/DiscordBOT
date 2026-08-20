@@ -205,6 +205,16 @@ export const HARD_PRIVATE_PATHS = [
   'data/jarvis/jarvis.db',
   'data/voice_consents.json',
   'data/personas.json',
+  'config/jarvis/displays.json',
+  'traces.jsonl',
+  '*.gguf',
+  '*.ggml',
+  '*.safetensors',
+  '*.pth',
+  '*.onnx',
+  '*.ckpt',
+  '*.pem',
+  '*.key',
 ] as const;
 
 export const DEFAULT_FALLBACK_ON: ProviderFailureCode[] = [

@@ -70,7 +70,7 @@ export class TraceStore {
 }
 
 function isSecretTraceKey(key: string): boolean {
-  return /^(password|secret|token|confirmToken|confirmationToken|rawConfirmationToken|cookie|cookies|authorization|api[_-]?key)$/iu.test(key)
+  return /^(password|secret|token|confirmToken|confirmationToken|rawConfirmationToken|cookie|cookies|authorization|api[_-]?key|dotenv|envFile|rvc|rvcModel|voiceSecret|consentToken|rawAudio|datasetPath|wavPath)$/iu.test(key)
     || /\.env/iu.test(key);
 }
 

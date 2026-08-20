@@ -375,6 +375,9 @@ export {
   FakeNativeJarvisHelper,
   parseNativeHelperRequest,
   NATIVE_HELPER_PROTOCOL_VERSION,
+  nativeHelperLogSafe,
+  authorizeNativeHelperCommand,
+  extractNativeHelperAuth,
 } from './desktop';
 export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
 export {

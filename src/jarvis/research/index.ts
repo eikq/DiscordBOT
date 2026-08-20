@@ -38,7 +38,7 @@ export {
   trySharedResearchRuntime,
 } from './researchHost';
 export { createResearchStore, defaultResearchDbPath, newSessionId, newSourceId } from './researchStore';
-export { classifyResearchUrl, assertPublicDestination, canonicalizeUrl, isBlockedIpLiteral } from './networkPolicy';
+export { classifyResearchUrl, assertPublicDestination, canonicalizeUrl, isBlockedIpLiteral, resolveRedirect } from './networkPolicy';
 export { SourceFetcher, nodeResearchGet } from './sourceFetcher';
 export { classifySource } from './sourceClass';
 export { webpageTextAsData } from './htmlText';

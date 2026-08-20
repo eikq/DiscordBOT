@@ -44,8 +44,8 @@ export class SkillVersionRegistry {
       ...skill,
       version: (existing.at(-1)?.version ?? 0) + 1,
       knownGood: false,
-      status: skill.status ?? 'CANDIDATE',
-      trustStatus: skill.trustStatus ?? 'DRAFT',
+      status: 'CANDIDATE',
+      trustStatus: 'DRAFT',
       scriptsAllowed: false,
       parentVersion: skill.parentVersion ?? existing.at(-1)?.version,
     });

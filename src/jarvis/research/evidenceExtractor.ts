@@ -6,9 +6,12 @@ import type { EvidenceKind, EvidenceRecord, SourceRecord } from './types';
 const INJECTION_CUES = [
   'ignore previous',
   'ignore system',
+  'ignore owner policy',
   'run powershell',
   'open localhost',
   'read .env',
+  'confirmation token',
+  'install this program',
   'create a reminder',
   'desktop.openapplication',
   'use capability',

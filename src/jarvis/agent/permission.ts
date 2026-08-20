@@ -23,10 +23,12 @@ export function validatePermissionGrant(
   grant: PermissionGrantInput,
   now = Date.now(),
 ): { lease: PermissionLease; token?: string } {
-  if (grant.actor === 'jarvis' || grant.actor === 'system') {
+  if (grant.actor !== 'owner') {
     throw new PermissionDeniedError(
-      'Jarvis cannot approve its own permission request.',
-      'SELF_APPROVAL_DENIED',
+      grant.actor === 'jarvis' || grant.actor === 'system'
+        ? 'Jarvis cannot approve its own permission request.'
+        : 'Untrusted content cannot grant permission.',
+      grant.actor === 'jarvis' || grant.actor === 'system' ? 'SELF_APPROVAL_DENIED' : 'UNTRUSTED_ACTOR',
     );
   }
   if (step.deniedPermission) {
