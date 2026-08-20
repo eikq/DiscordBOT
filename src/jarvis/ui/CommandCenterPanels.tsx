@@ -315,6 +315,14 @@ export default function CommandCenterPanels({
             {snapshot.vision.simulated ? ' · SIMULATION' : ''}
           </p>
         ) : null}
+        {snapshot?.perception ? (
+          <p className="jcc-hint">
+            Perception {snapshot.perception.label} · {snapshot.perception.devices} devices
+            {snapshot.perception.liveCamera ? '' : ' · no live camera'}
+            {snapshot.perception.visionAuthoritative ? '' : ' · vision untrusted'}
+            {snapshot.perception.lastObservation ? ` · ${snapshot.perception.lastObservation}` : ''}
+          </p>
+        ) : null}
       </section>
 
       <section className="jcc-block">

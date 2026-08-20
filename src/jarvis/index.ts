@@ -275,6 +275,41 @@ export { OwnerControl } from './control';
 export { ProactiveMonitor } from './monitor';
 export { SimulatedDeviceProvider } from './devices';
 export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
+export {
+  PerceptionRuntime,
+  MockScreenCapture,
+  MockCctvPort,
+  DeviceRegistry,
+  AnomalyPipeline,
+  interpretVisionModel,
+  interpretVisualContext,
+  visionMayAuthorizeAction,
+  cctvActionAllowed,
+  defaultCctvGrant,
+  sanitizeDeviceTrace,
+  identityFromRecord,
+  retentionForPrivacy,
+  toPerceptualMemoryCandidate,
+  candidateIsExpired,
+  seeImpliesClick,
+  viewImpliesControl,
+  controlImpliesAdmin,
+  observationGrantsAuthority,
+  visionOutputIsAuthoritative,
+  physicalAutoActAllowed,
+  CCTV_ACTIONS,
+  DEFAULT_CCTV_JARVIS_ACTIONS,
+  SCREEN_CAPTURE_TARGETS,
+} from './perception';
+export type {
+  PerceptionSnapshot,
+  PerceptualEvent,
+  DeviceIdentity,
+  CctvAction,
+  ScreenCaptureResult,
+  VisionInterpretation,
+  PerceptualMemoryCandidate,
+} from './perception';
 export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
 export type { CommandCenterSnapshot } from './standalone/commandCenter';
 export {

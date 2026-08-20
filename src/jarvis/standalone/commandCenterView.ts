@@ -107,6 +107,15 @@ export type CommandCenterClientSnapshot = {
   notifications: Array<{ id: string; summary: string; severity: string; simulated: boolean }>;
   control: CommandCenterSnapshot['control'] & { autonomyLabel: string; maxAutonomyLabel: string };
   vision: { title: string; simulated: boolean; elements: number } | null;
+  perception: {
+    simulated: true;
+    label: 'SIMULATION';
+    liveCamera: false;
+    visionAuthoritative: false;
+    lastObservation?: string;
+    devices: number;
+    memoryCandidates: number;
+  };
   intelligence: {
     traces: { count: number; lastRoute?: string; lastInput?: string; lastModelProfileId?: string; lastWorkload?: string; lastFallbackReason?: string };
     analyzer: { status: string; reason?: string; samples: number };
@@ -251,6 +260,15 @@ export function presentCommandCenter(
           elements: snapshot.vision.elements.length,
         }
       : null,
+    perception: {
+      simulated: true,
+      label: 'SIMULATION',
+      liveCamera: false,
+      visionAuthoritative: false,
+      lastObservation: snapshot.perception.lastEvent?.observation,
+      devices: snapshot.perception.devices.length,
+      memoryCandidates: snapshot.perception.memoryCandidates,
+    },
     intelligence: {
       traces: {
         count: snapshot.intelligence.traces.count,

@@ -60,6 +60,8 @@ import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
 import { RuntimeSpecRegistry, type JarvisRuntimeSpec } from './runtimeSpec';
 import { VoiceInteractionRuntime } from '../realtime';
+import { PerceptionRuntime } from '../perception';
+import type { PerceptionSnapshot } from '../perception';
 
 export type CommandCenterSnapshot = {
   simulationMode: boolean;
@@ -100,6 +102,7 @@ export type CommandCenterSnapshot = {
   control: OwnerControlState;
   notifications: MonitorSignal[];
   intelligence: IntelligenceSnapshot;
+  perception: PerceptionSnapshot;
 };
 
 export type IntelligenceSnapshot = {
@@ -175,6 +178,7 @@ export class CommandCenterRuntime {
   public readonly certifications: CapabilityCertificationBank;
   public readonly artifacts: ArtifactWorkflow;
   public readonly voice: VoiceInteractionRuntime;
+  public readonly perception: PerceptionRuntime;
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
@@ -232,6 +236,11 @@ export class CommandCenterRuntime {
       onTerminal: task => this.recordTaskExperience(task),
     });
     this.voice = new VoiceInteractionRuntime({ agent: this.agent, simulated });
+    this.perception = new PerceptionRuntime({
+      devices: this.devices,
+      monitor: this.monitor,
+      simulated,
+    });
     this.night = new NightCycle({
       experiences: this.experiences,
       skills: this.skills,
@@ -316,6 +325,7 @@ export class CommandCenterRuntime {
       control: this.control.snapshot(),
       notifications: [...this.notifications],
       intelligence: this.intelligenceSnapshot(),
+      perception: this.perception.snapshot(),
     };
   }
 
@@ -533,6 +543,7 @@ export class CommandCenterRuntime {
   public async simulateVision(fixtureId = 'settings_panel'): Promise<VisualContext> {
     const captured = await this.visionCapture.capture(fixtureId);
     this.vision = await this.visionAnalyzer.analyze(captured.imageId);
+    this.perception.interpret(this.vision);
     this.events.emit('VISION', `Vision fixture ${fixtureId}`, { fixtureId, simulated: true }, 'info', {
       simulated: true,
       visualState: 'UNDERSTANDING',
