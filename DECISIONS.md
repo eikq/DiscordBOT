@@ -1475,6 +1475,44 @@ fields.
 - LA-001/002 remain PARTIAL. LA-026 remains PARTIAL.
   LA-027 remains PARTIAL — NATIVE_SHELL_REQUIRED.
 
+## ADR-034 — Cloud sequential queue ends; physical-machine acceptance is next
+
+Date: 2026-08-20
+Status: **APPROVED** as the Cloud stop-line. Not LIVE_VERIFIED.
+
+### Context
+
+Queues 01–11 delivered cloud-safe software on
+`cursor/jarvis-cloud-evolution-2026-08-20` from base
+`8aba6b019c436b1e636f32274607015a4dc23e38`. Queue 12 is a final audit
+and handoff. Cloud Linux cannot verify Windows displays, native HWND,
+Ollama/GPU, mic/STT/TTS/RVC, Discord, Whonix/Tor, cameras, or phones.
+
+### Decision
+
+- Do not start another Cloud feature queue automatically.
+- Classify remaining work as CLOUD_COMPLETE, LOCAL_VERIFY_REQUIRED,
+  LOCAL_IMPLEMENTATION_REQUIRED, OWNER_DECISION_REQUIRED, or
+  BLOCKED_EXTERNAL. Never promote LIVE_VERIFIED without host evidence.
+- Native helper: contracts only. Build/install only after owner approval.
+- Ordered host tests live in `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
+- Do not merge to `main`. Push only the dedicated Cloud branch.
+
+### Alternatives considered
+
+- Continuing Cloud with more architecture (Command Center rewrite,
+  Qdrant, helper binary, model downloads) — rejected.
+- Marking LA-001/002/026/027 LIVE_VERIFIED from unit tests or older
+  agent-browser notes — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit) for Queues 01–11 software.
+  Queue 12 is documentation/handoff only.
+- Host: LA-001/002 PARTIAL; LA-026 PARTIAL; LA-027 PARTIAL —
+  NATIVE_SHELL_REQUIRED. Whonix/Tor, Discord, live voice, cameras remain
+  LOCAL_VERIFY_REQUIRED or BLOCKED_EXTERNAL.
+
 
 
 

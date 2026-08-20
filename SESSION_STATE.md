@@ -3,7 +3,27 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 11 Full-System Cloud Integration Pass
+## This turn — Queue 12 Final Cloud Audit and Physical-Machine Handoff
+
+Labels: IMPLEMENTED (handoff docs). Not LIVE_VERIFIED.
+No new architecture. Cloud feature queues stop here.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: _pending pin after docs commit_
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+Handoff: `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
+ADR: ADR-034.
+
+Cloud can no longer verify Windows displays, native HWND, Ollama/GPU,
+mic/STT/TTS/RVC, Discord, Whonix/Tor, cameras, or phones. Remaining
+work is classified; exact host tests are in the handoff document.
+Native helper is not installed. Build/install only after owner approval.
+
+Do not merge. Do not mark LIVE_VERIFIED. Do not start Queue 13+.
+STOP after this queue.
+
+## Previous — Queue 11 Full-System Cloud Integration Pass
 
 Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
 Do not claim live Tor, native helper, camera, mic, STT, TTS, or GPU.

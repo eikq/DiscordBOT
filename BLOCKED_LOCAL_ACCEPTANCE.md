@@ -3,6 +3,12 @@
 Authoritative local-machine queue for work that Cursor Cloud cannot complete.
 Cloud may prepare interfaces, diagnostics, UI states, and fail-closed mocks only.
 
+**Queue 12 ordered return-to-host plan:** `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`.
+Use that file for classification (CLOUD_COMPLETE / LOCAL_VERIFY_REQUIRED /
+LOCAL_IMPLEMENTATION_REQUIRED / OWNER_DECISION_REQUIRED / BLOCKED_EXTERNAL)
+and the dependency-ordered Windows tests. This file keeps per-item scripts
+and historical local notes. Do not mark LIVE_VERIFIED from Cloud.
+
 Labels: **BLOCKED_LOCAL_ACCEPTANCE**. Do not mark these LIVE_VERIFIED until the owner
 runs them on the physical Windows machine.
 

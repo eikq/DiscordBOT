@@ -378,6 +378,35 @@ host-only as before.
 
 Handoff: ADR-033, `tests/jarvis_cloud_integration.test.ts`.
 
+## Queue 12 — Final Cloud Audit and Physical-Machine Handoff
+
+Status: **COMPLETE** (handoff). Not LIVE_VERIFIED.
+No new architecture. Cloud feature queues stop here.
+
+Queue 12 HEAD: _pending pin after docs commit_
+
+Handoff document: `CURSOR_LOCAL_ACCEPTANCE_NEXT.md`
+
+Shipped:
+
+- Classification of remaining work (CLOUD_COMPLETE /
+  LOCAL_VERIFY_REQUIRED / LOCAL_IMPLEMENTATION_REQUIRED /
+  OWNER_DECISION_REQUIRED / BLOCKED_EXTERNAL)
+- Ordered Windows local tests (dependency order)
+- Native window return test (build/install only after owner approval)
+- Voice return test (mic / STT / TTS / barge-in / Presenter / independence)
+- Explicit Cloud stop-line (ADR-034)
+
+Labels stay:
+
+- LA-001 **PARTIAL**
+- LA-002 **PARTIAL**
+- LA-026 **PARTIAL**
+- LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**
+
+Do not start another Cloud feature automatically. Do not merge.
+Do not push `main`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution

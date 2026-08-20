@@ -210,6 +210,7 @@ Evidence:
 - Queue 09 Command Center V2: six operational modes, one primary body at a time; global REAL/SIMULATION/DEGRADED/OFFLINE chip; Presenter fullscreen-ready; owner memory corrections via Ask (`tests/jarvis_command_center_v2.test.ts`, ADR-031)
 - Queue 10 Security Hardening: untrusted content stays data; SSRF includes IPv4-mapped IPv6; native helper forged/replay/impersonation fail-closed; no self-trust of memory/skills (`tests/jarvis_security_hardening.test.ts`, ADR-032)
 - Queue 11 Full-System Cloud Integration: 14 offline fixtures; independent correlation ids; distinct failure codes not collapsed (`tests/jarvis_cloud_integration.test.ts`, ADR-033). CLOUD_VERIFIED (unit); not LIVE_VERIFIED.
+- Queue 12 Cloud stop-line: remaining work classified; host tests in `CURSOR_LOCAL_ACCEPTANCE_NEXT.md` (ADR-034). No further Cloud feature queues automatically.
 - `createJarvisLabRuntime({ attachDefaultMemory: true })` on the server; tests pass `attachDefaultMemory: false` so they never open `data/jarvis/jarvis.db`
 - Live lab UI verified 2026-08-19 on `:3010` with `JARVIS_STANDALONE=1`; not Discord; speech inactive
 

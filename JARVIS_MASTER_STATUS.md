@@ -34,8 +34,10 @@ Presenter/Desktop Queue 01 on
 `cursor/jarvis-cloud-evolution-2026-08-20` (base `8aba6b0`):
 structured briefing facts, TTS-driven narration timeline, repeat/back,
 intersection display matching, native-helper contracts/mocks, comparison
-routing. Evidence: `npx tsc --noEmit` PASS; targeted 48/48; `npm run test:cloud`
-**517/517**. Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). LA-026/LA-027 remain
+routing. Later queues 02–11 on the same branch are CLOUD_COMPLETE as
+software (unit). Queue 12 is the physical-machine handoff:
+`CURSOR_LOCAL_ACCEPTANCE_NEXT.md`. Labels: IMPLEMENTED + CLOUD_VERIFIED
+(unit) for Cloud software. LA-001/002 remain PARTIAL. LA-026/LA-027 remain
 PARTIAL / NATIVE_SHELL_REQUIRED. Native helper is not installed.
 
 Queue 02 Research Intelligence V2 on the same branch: structured query
