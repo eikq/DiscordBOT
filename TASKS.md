@@ -301,7 +301,7 @@ Safe first pieces after baseline:
 - `MEMORY-001` interfaces/schema — DONE
 - `MEMORY-002` / `JF-003` SQLite adapter — DONE (optional dual-write; JSON/JSONL still live)
 - `JF-004B` Core memory integration — DONE
-- `JF-006` isolated `/jarvis-lab` shell — DONE (command-center UI; Digital Me dashboard unchanged). Queue 09 Command Center V2 modes **IMPLEMENTED + UNIT_VERIFIED** (cloud); not LIVE_VERIFIED. Queue 10 privilege-boundary hardening **IMPLEMENTED + UNIT_VERIFIED** (`tests/jarvis_security_hardening.test.ts`, ADR-032); not LIVE_VERIFIED.
+- `JF-006` isolated `/jarvis-lab` shell — DONE (command-center UI; Digital Me dashboard unchanged). Queue 09 Command Center V2 modes **IMPLEMENTED + UNIT_VERIFIED** (cloud); not LIVE_VERIFIED. Queue 10 privilege-boundary hardening **IMPLEMENTED + UNIT_VERIFIED** (`tests/jarvis_security_hardening.test.ts`, ADR-032); not LIVE_VERIFIED. Queue 11 full-system cloud integration **IMPLEMENTED + CLOUD_VERIFIED** (unit, `tests/jarvis_cloud_integration.test.ts`, ADR-033); not LIVE_VERIFIED.
 - `UI-R1`–`UI-R8` CSS/SVG command center — DONE (live lab UI verified 2026-08-19)
 - `UI-001` / `UI-R9` WebGL/3D core — not started; keep 2D fallback if ever started
 

@@ -3,7 +3,32 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 10 Security Hardening Pass
+## This turn — Queue 11 Full-System Cloud Integration Pass
+
+Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
+Do not claim live Tor, native helper, camera, mic, STT, TTS, or GPU.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: _pending pin after docs commit_
+Implementation: `3768a1d25f0dd4b75e618bdeedc805ba99dcba50`
+TurnId test fix: `0d2bdd835182ed8346bdb52e8fb2626169d999f7`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-033.
+Evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_cloud_integration.test.ts` +
+`tests/jarvis_local_acceptance.test.ts` + `tests/jarvis_ops.test.ts`
+**30/30**; `npm run test:cloud` **633/633**.
+
+Fourteen offline/simulated fixtures cover conversation, research,
+diagnostics, WorkAgent permission, Presenter, memory, skills, mock
+voice interruption, simulated perception, Night review, missing native
+helper, and restricted-model non-selection. Default `turnId` is not a
+copy of `requestId`. Distinct failure codes are not collapsed.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 10 Security Hardening Pass
 
 Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
 Do not claim live Tor, native helper, or host-browser verification.

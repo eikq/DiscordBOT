@@ -1411,6 +1411,70 @@ authority. LLM output is not execution.
 - Live Tor, native helper install, and host browser: host-only.
   LA-026/027 remain PARTIAL. Do not mark LIVE_VERIFIED from Cloud.
 
+## ADR-033 — Cloud integration keeps distinct failures and independent correlation ids
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Host native helper, live mic/STT/TTS, cameras, and Whonix remain
+host-only / BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 11 is a full-system Cloud integration pass over Queues 01–10.
+It must not start a Command Center rewrite, Qdrant, native-helper
+install, model downloads, or a fourth scheduler. The audit found one
+real semantic drift: lab/Command Center traces had started treating
+`turnId` as an alias of `requestId`. Speech turns may seed
+`requestId` from a mic `turnId`; typed asks must keep independent
+fields.
+
+### Decision
+
+- Operational failure codes stay distinct. Do not collapse
+  `UNSUPPORTED_HOST`, `PERMISSION_REQUIRED`, `DENIED`, `TIMEOUT`,
+  `PROVIDER_UNAVAILABLE`, `INSUFFICIENT_DATA`, `UNKNOWN_DISPLAY`, or
+  `VERIFICATION_FAILED` into `STEP_FAILED`.
+- Keep `CAPABILITY_DENIED` and `RESEARCH_TIMEOUT` as additional
+  codes. `PERMISSION_REQUIRED` means a grant is still needed;
+  `DENIED` means a reject/self-approval; `CAPABILITY_DENIED` means
+  host/policy block. Research capability timeouts stay
+  `RESEARCH_TIMEOUT`; other capability timeouts are `TIMEOUT`.
+- `classifyFailureKnowledge()` may map several operational codes onto
+  coarser Night/evolution kinds (`owner_denied`, `provider_timeout`,
+  `unsupported_host`). That mapping is for learning, not UI/ops.
+- Correlation ids are `sessionId`, `turnId`, `requestId`, `taskId`,
+  `stepId`, `traceId`, `presentationId`. Default `turnId` is minted,
+  not copied from `requestId`. `createSpeechJarvisRequest` may still
+  set `requestId` from a mic `turnId`.
+- Fourteen offline/simulated fixtures cover casual conversation,
+  informational ask, deep research, system diagnostic, safe
+  capability, permission-gated WorkAgent, Presenter briefing,
+  memory-assisted turn, skill-assisted task, mock voice interruption,
+  simulated screen/device observation, Night benchmark/review, native
+  helper unavailable, and restricted-model non-selection.
+- Simulation is never LIVE. Discord 004/005 adapters stay compiling.
+  SQLite stays canonical.
+
+### Alternatives considered
+
+- Restoring `turnId = requestId` so the local-acceptance assertion
+  passed unchanged — rejected. The test name requires request
+  correlation, not aliased ids.
+- Collapsing `DENIED` into `PERMISSION_REQUIRED` — rejected.
+- Collapsing `TIMEOUT` into `RESEARCH_TIMEOUT` — rejected.
+- Deleting unused Discord adapters as dead code — rejected
+  (Jarvis-first: keep compiling, do not delete).
+
+### Consequences
+
+- Cloud: IMPLEMENTED + CLOUD_VERIFIED (unit)
+  (`tests/jarvis_cloud_integration.test.ts`; local-acceptance
+  research-trace correlation; `npx tsc --noEmit` PASS;
+  `npm run test:cloud` **633/633**).
+  Not LIVE_VERIFIED.
+- LA-001/002 remain PARTIAL. LA-026 remains PARTIAL.
+  LA-027 remains PARTIAL — NATIVE_SHELL_REQUIRED.
+
 
 
 

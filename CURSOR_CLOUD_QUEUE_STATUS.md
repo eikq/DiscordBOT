@@ -336,6 +336,48 @@ Labels stay:
 
 Handoff: ADR-032, `tests/jarvis_security_hardening.test.ts`.
 
+## Queue 11 — Full-System Cloud Integration Pass
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+No new architecture. Integrates Queues 01–10.
+
+Queue 11 HEAD: _pending pin after docs commit_
+
+Implementation: `3768a1d25f0dd4b75e618bdeedc805ba99dcba50`
+TurnId test fix: `0d2bdd835182ed8346bdb52e8fb2626169d999f7`
+
+Shipped:
+
+- Distinct ops codes: `UNSUPPORTED_HOST`, `PERMISSION_REQUIRED`,
+  `DENIED`, `TIMEOUT`, `PROVIDER_UNAVAILABLE`, `INSUFFICIENT_DATA`,
+  `UNKNOWN_DISPLAY`, `VERIFICATION_FAILED` (plus existing
+  `CAPABILITY_DENIED` / `RESEARCH_TIMEOUT`)
+- Correlation helper: independent default `turnId`; traces may carry
+  `stepId` / `presentationId`
+- 14 offline/simulated end-to-end fixtures
+- Lab research traces keep `requestId`/`sessionId`/`taskId`; `turnId`
+  is independent and coherent
+- Simulation/live confusion stays labeled: native helper fixtures,
+  perception, and Night benchmarks are not LIVE
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted integration +
+local-acceptance + ops **30/30**; `npm run test:cloud` **633/633**
+on `0d2bdd835182ed8346bdb52e8fb2626169d999f7`.
+
+Labels stay:
+
+- LA-001 **PARTIAL**
+- LA-002 **PARTIAL**
+- LA-026 **PARTIAL**
+- LA-027 **PARTIAL — NATIVE_SHELL_REQUIRED**
+
+Evidence labels for this queue: **IMPLEMENTED** + **CLOUD_VERIFIED**
+(unit). Not **LIVE_VERIFIED**. Existing LA-026/027 / Whonix / native
+helper / live mic-STT-TTS remain **NEEDS_LOCAL_VERIFY** /
+host-only as before.
+
+Handoff: ADR-033, `tests/jarvis_cloud_integration.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution
