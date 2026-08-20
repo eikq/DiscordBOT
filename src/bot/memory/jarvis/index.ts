@@ -11,6 +11,7 @@ export type {
   EntityRecord,
   EpisodeRecord,
   IdentitySettingRecord,
+  MemoryClass,
   MemoryFeedbackRecord,
   MemoryKind,
   MemoryLinkRecord,
@@ -21,11 +22,14 @@ export type {
   QdrantMemoryPayload,
   RelationshipRecord,
   RetentionClass,
+  SemanticCandidate,
   SemanticFactRecord,
 } from './types';
 export { canonicalMemoryId, isCanonicalMemoryId, parseCanonicalMemoryId } from './ids';
 export { assertCanonicalSchemaSql, canonicalSchemaSqlPath, listSchemaMigrations, loadCanonicalSchemaSql } from './schema';
 export { applyForget, applySupersession, canSupersede, defaultRetention, isRetrievable } from './semantics';
+export { inferMemoryClass, isMemoryClass, storageFactMemoryType } from './memoryClass';
+export { isUntrustedMemorySource, ownerTrustedForWrite } from './trust';
 export { assertQdrantIsIndexOnly, qdrantPayloadFor, qdrantPointId } from './qdrant';
 export { projectFact, projectObservation, projectPersonEntity, projectRelationship } from './socialProjection';
 export { SqliteJarvisMemoryStore } from './SqliteJarvisMemoryStore';

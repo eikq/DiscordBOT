@@ -285,6 +285,9 @@ export class LocalLlmJarvisCore implements JarvisCore {
     }
     const started = Date.now();
     try {
+      if (this.options.memory.applyOwnerCorrection) {
+        await this.options.memory.applyOwnerCorrection(text);
+      }
       const context = await this.options.memory.retrieveForTurn({ text });
       timings.memoryRetrievalMs = Date.now() - started;
       return {

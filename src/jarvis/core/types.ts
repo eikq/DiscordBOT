@@ -66,6 +66,11 @@ export interface MemoryRef {
   confidence?: number;
   sourceRefs?: string[];
   status?: string;
+  text?: string;
+  sourceSystem?: string;
+  memoryClass?: string;
+  ownerTrusted?: boolean;
+  derived?: boolean;
 }
 
 export interface SkillRef {

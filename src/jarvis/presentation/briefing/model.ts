@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { defaultFollowUps } from './followUp';
+import { describeMemoryProvenance, shouldAttachMemoryProvenance } from './memoryProvenance';
 import { buildMotionTimeline, type MotionOptions } from './motion';
 import { buildNarrationSegments, spokenSummaryFrom } from './narration';
 import { createPlayback } from './playback';
@@ -151,13 +152,24 @@ function cardsFor(
       body: clip(`${input.displays.count} display${input.displays.count === 1 ? '' : 's'}${names ? `: ${names}` : ''}`, 220),
       kind: 'note',
     });
-  } else if (input.displays?.currentName || input.displays?.currentId) {
+  } else   if (input.displays?.currentName || input.displays?.currentId) {
     cards.push({
       id: 'desktop.displays',
       title: 'Current display',
       body: clip(`Jarvis is on ${input.displays.currentName || input.displays.currentId}.`, 220),
       kind: 'note',
     });
+  }
+  if (shouldAttachMemoryProvenance(input)) {
+    for (const item of (input.memoryProvenance ?? []).slice(0, 6)) {
+      cards.push({
+        id: `memory.${item.canonicalId}`,
+        title: item.canonicalId,
+        body: clip(`${describeMemoryProvenance(item)} ${item.text}`, 220),
+        kind: 'note',
+        refs: item.sourceRefs,
+      });
+    }
   }
   if (cards.length === 0 && evidence[0]) {
     cards.push({
@@ -179,8 +191,11 @@ function sectionsFor(
   plan: PresentationPlan,
 ): PresentationSection[] {
   const metricCards = cards.filter(item => item.id.startsWith('system.') || item.id === 'desktop.displays');
+  const memoryCards = cards.filter(item => item.id.startsWith('memory.'));
   const findingCards = cards
-    .filter(item => (item.kind === 'finding' || item.kind === 'note') && !metricCards.some(metric => metric.id === item.id))
+    .filter(item => (item.kind === 'finding' || item.kind === 'note')
+      && !metricCards.some(metric => metric.id === item.id)
+      && !memoryCards.some(memory => memory.id === item.id))
     .map(item => item.id);
   const sections: PresentationSection[] = [
     { id: 'sec-summary', title: 'Executive summary', kind: 'summary', body: summary },
@@ -201,6 +216,15 @@ function sectionsFor(
       kind: 'findings',
       body: cards.filter(item => findingCards.includes(item.id)).map(item => item.body).slice(0, 3).join(' '),
       cards: findingCards,
+    });
+  }
+  if (shouldAttachMemoryProvenance(input) && memoryCards.length > 0) {
+    sections.push({
+      id: 'sec-memory',
+      title: 'Memory provenance',
+      kind: 'evidence',
+      body: clip(memoryCards.map(item => item.body).join(' '), 360),
+      cards: memoryCards.map(item => item.id),
     });
   }
   if (plan.mode === 'comparison' && evidence.length >= 2) {

@@ -152,6 +152,17 @@ export type PlainPresentation = {
 
 export type PlannedPresentation = PresentationModel | PlainPresentation;
 
+export type MemoryProvenanceItem = {
+  canonicalId: string;
+  text: string;
+  status?: string;
+  sourceSystem?: string;
+  sourceRefs?: string[];
+  memoryClass?: string;
+  ownerTrusted?: boolean;
+  derived?: boolean;
+};
+
 export type PresentationInput = {
   text: string;
   replyText?: string;
@@ -197,6 +208,8 @@ export type PresentationInput = {
     hostKind?: string;
     reason?: string;
   };
+  showMemoryProvenance?: boolean;
+  memoryProvenance?: MemoryProvenanceItem[];
 };
 
 export const FORBIDDEN_PRESENTATION_KEYS = [

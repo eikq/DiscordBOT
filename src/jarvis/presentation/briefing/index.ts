@@ -15,6 +15,7 @@ export type {
 export { FORBIDDEN_PRESENTATION_KEYS, PRESENTATION_DENSITIES, PRESENTATION_MODES } from './types';
 export { planPresentation, shouldBuildRichPresentation } from './planner';
 export { buildPresentationModel } from './model';
+export { describeMemoryProvenance, shouldAttachMemoryProvenance, wantsMemoryProvenanceView } from './memoryProvenance';
 export { buildNarrationSegments, estimateNarrationMs, scaleNarrationToSpeech, spokenSummaryFrom } from './narration';
 export { activeMotionCues, buildMotionTimeline, motionTargetsOf } from './motion';
 export { applyBriefingFollowUp, defaultFollowUps, isPresentationFollowUp } from './followUp';

@@ -1,4 +1,4 @@
-export const JARVIS_MEMORY_SCHEMA_VERSION = 2;
+export const JARVIS_MEMORY_SCHEMA_VERSION = 3;
 
 export const MEMORY_KINDS = [
   'entity',
@@ -13,9 +13,26 @@ export const MEMORY_KINDS = [
   'permission',
   'link',
   'feedback',
+  'candidate',
 ] as const;
 
 export type MemoryKind = typeof MEMORY_KINDS[number];
+
+/** Product memory classes. Orthogonal to storage kinds (fact/episode/…). */
+export const MEMORY_CLASSES = [
+  'working',
+  'episodic',
+  'semantic',
+  'procedural',
+  'social',
+  'identity',
+  'perceptual',
+] as const;
+
+export type MemoryClass = typeof MEMORY_CLASSES[number];
+
+export const CANDIDATE_STATUSES = ['candidate', 'accepted', 'rejected'] as const;
+export type CandidateStatus = typeof CANDIDATE_STATUSES[number];
 
 export const MEMORY_STATUSES = ['active', 'superseded', 'forgotten', 'expired'] as const;
 export type MemoryStatus = typeof MEMORY_STATUSES[number];
@@ -60,6 +77,13 @@ export interface CanonicalMemoryRecord {
   provenance: Provenance;
   retention: RetentionPolicy;
   supersededBy?: string;
+  supersedes?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  ownerTrusted?: boolean;
+  derived?: boolean;
+  memoryClass?: MemoryClass;
+  memoryRefs?: string[];
 }
 
 export interface EntityRecord extends CanonicalMemoryRecord {
@@ -131,6 +155,8 @@ export interface IdentitySettingRecord {
   updatedAt: number;
   sourceSystem: string;
   status: MemoryStatus;
+  ownerTrusted?: boolean;
+  memoryClass?: MemoryClass;
 }
 
 export interface MemoryFeedbackRecord {
@@ -148,6 +174,21 @@ export interface MemoryLinkRecord {
   toId: string;
   relation: string;
   createdAt: number;
+}
+
+export interface SemanticCandidate {
+  id: string;
+  episodeId?: string;
+  factKey: string;
+  value: string;
+  significance: number;
+  status: CandidateStatus;
+  reason: string;
+  ownerTrusted: boolean;
+  derived: boolean;
+  sourceSystem: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export class MemoryConflictError extends Error {

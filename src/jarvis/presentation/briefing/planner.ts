@@ -1,4 +1,5 @@
 import type { PresentationDensity, PresentationInput, PresentationMode } from './types';
+import { shouldAttachMemoryProvenance } from './memoryProvenance';
 
 export type PresentationPlan = {
   density: PresentationDensity;
@@ -75,6 +76,10 @@ export function planPresentation(input: PresentationInput): PresentationPlan {
     return { density: 'rich', mode: 'report', reason: 'structured_evidence' };
   }
 
+  if (shouldAttachMemoryProvenance(input)) {
+    return { density: 'rich', mode: 'report', reason: 'memory_provenance' };
+  }
+
   return { density: 'plain', mode: 'summary', reason: 'lightweight_reply' };
 }
 
@@ -104,7 +109,8 @@ function hasStructuredEvidence(input: PresentationInput): boolean {
     || Boolean(input.workOutcome?.observations?.length)
     || Boolean(input.systemSnapshot?.parts?.length)
     || Boolean(input.systemSnapshot?.cpu || input.systemSnapshot?.ram || input.systemSnapshot?.disk || input.systemSnapshot?.gpu)
-    || Boolean(typeof input.displays?.count === 'number' && input.displays.count > 0);
+    || Boolean(typeof input.displays?.count === 'number' && input.displays.count > 0)
+    || shouldAttachMemoryProvenance(input);
 }
 
 function isDesktopPresenceCapability(id?: string): boolean {

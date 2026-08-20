@@ -70,6 +70,7 @@ import {
   applySpokenDuration,
   runPresentationPipeline,
   spokenTextFor,
+  wantsMemoryProvenanceView,
   type PlannedPresentation,
 } from '../presentation/briefing';
 import { sharedJarvisPresenceStore, type ClientWindowReport } from '../desktop';
@@ -618,6 +619,7 @@ export class JarvisLabRuntime {
       route,
       capabilityId: prepared.resolution.capabilityId,
       toolResults: adjusted.result.toolResults,
+      memoryRefs: adjusted.result.memoryRefs,
     });
     const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak, briefing);
     const presentedBriefing = this.withSpokenDuration(briefing, speech);
@@ -671,6 +673,7 @@ export class JarvisLabRuntime {
       route,
       capabilityId: prepared.resolution.capabilityId,
       toolResults: adjusted.result.toolResults,
+      memoryRefs: adjusted.result.memoryRefs,
     });
     const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak, briefing);
     const presentedBriefing = this.withSpokenDuration(briefing, speech);
@@ -956,6 +959,18 @@ export class JarvisLabRuntime {
         displays?: NonNullable<Parameters<typeof runPresentationPipeline>[0]['displays']>;
       };
     }>;
+    memoryRefs?: Array<{
+      canonicalId: string;
+      type?: string;
+      status?: string;
+      confidence?: number;
+      sourceRefs?: string[];
+      text?: string;
+      sourceSystem?: string;
+      memoryClass?: string;
+      ownerTrusted?: boolean;
+      derived?: boolean;
+    }>;
   }): PlannedPresentation {
     const research = this.researchSnapshot();
     const presence = this.presenceStatus();
@@ -1000,6 +1015,17 @@ export class JarvisLabRuntime {
         currentName: merged.displays?.currentName,
         currentId: merged.displays?.currentId,
       } : undefined,
+      showMemoryProvenance: wantsMemoryProvenanceView(input.text),
+      memoryProvenance: (input.memoryRefs ?? []).slice(0, 8).map(item => ({
+        canonicalId: item.canonicalId,
+        text: item.text || item.canonicalId,
+        status: item.status,
+        sourceSystem: item.sourceSystem,
+        sourceRefs: item.sourceRefs,
+        memoryClass: item.memoryClass,
+        ownerTrusted: item.ownerTrusted,
+        derived: item.derived,
+      })),
     });
   }
 

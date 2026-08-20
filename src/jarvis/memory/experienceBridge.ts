@@ -4,6 +4,7 @@ import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
 import type { EpisodeRecord } from '../../bot/memory/jarvis/types';
 import type { ExperienceRecord } from '../evolution/types';
 import type { WorkTask } from '../agent/types';
+import { writeSemanticCandidateFromEpisode } from './candidateLearning';
 
 export function experienceEpisodeId(taskId: string): string {
   return canonicalMemoryId('episode', `task_${taskId.replace(/^task_/u, '')}`);
@@ -17,7 +18,7 @@ export function writeExperienceEpisode(
   const now = Date.parse(experience.createdAt) || Date.now();
   const untrusted = (task?.evidence ?? []).some(item => item.startsWith('untrusted:'))
     || experience.tools.some(tool => tool.startsWith('research.'));
-  return store.putEpisode({
+  const episode = store.putEpisode({
     id: experienceEpisodeId(task?.id || experience.id),
     kind: 'episode',
     status: 'active',
@@ -45,6 +46,8 @@ export function writeExperienceEpisode(
       trustedSemanticWrite: false,
     },
   });
+  writeSemanticCandidateFromEpisode(store, episode);
+  return episode;
 }
 
 export function researchTextIsUntrustedMemory(_text: string): true {
