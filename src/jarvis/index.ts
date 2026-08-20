@@ -277,6 +277,41 @@ export { SimulatedDeviceProvider } from './devices';
 export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
 export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
 export type { CommandCenterSnapshot } from './standalone/commandCenter';
+export {
+  VoiceInteractionRuntime,
+  MockSttPort,
+  MockTtsPort,
+  classifyInterruption,
+  decideBargeIn,
+  isMutatingWork,
+  workIsWaitingOwner,
+  decideStreaming,
+  PlaybackClock,
+  syncPresenterPlayback,
+  shouldRunEstimateTimer,
+  resourcePriorityForVoice,
+  higherResourcePriority,
+  VoicePriorityBroker,
+  assertIndependentPersonaVoice,
+  defaultIndependentProfiles,
+  canTransitionVoiceTurn,
+  transitionVoiceTurn,
+  visualStateForVoiceTurn,
+  VOICE_TURN_STATES,
+  INTERRUPTION_KINDS,
+} from './realtime';
+export type {
+  BargeInDecision,
+  InterruptionKind,
+  PlaybackClockSource,
+  SttPort,
+  StreamingDecision,
+  TtsPort,
+  VoiceTurnSnapshot,
+  VoiceTurnState,
+  VoiceInteractionOptions,
+  VoiceTurnResult,
+} from './realtime';
 export type { DemoScenarioId } from './standalone/commandCenterHttp';
 export { presentCommandCenter } from './standalone/commandCenterView';
 export {

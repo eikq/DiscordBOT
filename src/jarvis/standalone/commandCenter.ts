@@ -59,6 +59,7 @@ import type { JarvisOperationEvent } from '../security/types';
 import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
 import { RuntimeSpecRegistry, type JarvisRuntimeSpec } from './runtimeSpec';
+import { VoiceInteractionRuntime } from '../realtime';
 
 export type CommandCenterSnapshot = {
   simulationMode: boolean;
@@ -173,6 +174,7 @@ export class CommandCenterRuntime {
   public readonly models: ModelProfileRegistry;
   public readonly certifications: CapabilityCertificationBank;
   public readonly artifacts: ArtifactWorkflow;
+  public readonly voice: VoiceInteractionRuntime;
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
@@ -229,6 +231,7 @@ export class CommandCenterRuntime {
       simulated,
       onTerminal: task => this.recordTaskExperience(task),
     });
+    this.voice = new VoiceInteractionRuntime({ agent: this.agent, simulated });
     this.night = new NightCycle({
       experiences: this.experiences,
       skills: this.skills,
@@ -240,6 +243,7 @@ export class CommandCenterRuntime {
       events: this.events,
       now: options.now,
       simulated,
+      resource: () => this.voice.resourcePriority(),
       runBenchmarks: () => runCloudBenchmarkBank(this.benchmarks, now).length,
       traces: this.traces,
       analyzer: this.analyzer,
