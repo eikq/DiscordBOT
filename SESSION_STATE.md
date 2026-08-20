@@ -14,7 +14,7 @@ The previous cloud pass wrote work-agent / evolution / ops libraries and then st
 - EVO-001–010: claims, retrieval rank, structured reflection (failure cannot mint trusted skills), skill lifecycle, failure ledger, self-model `INSUFFICIENT DATA` until n≥3, growth planner cap 3, practice/benchmarks, night cycle pause on `realtime_voice`, affect cannot authorize, identity overlay, journal, candidate manager (no auto-promote), LoRA registry only (`trained: false`).
 - JF-016/017/018: simulated vision (see ≠ click/type/submit), proactive monitor, VIEW-only devices, owner autonomy 0–5 (Jarvis cannot raise max).
 - Lab: `/api/jarvis/command-center` GET + demo/control/cancel/grant POSTs (loopback + mutation guard). Simulation banner, live ops steps, evolution rail, source graph, devices.
-- Local acceptance queue (do not mark live): Whonix/Tor PRIVATE_BROWSER, Ollama multi-step, Discord voice, mic/STT on host, screen capture, CCTV, Command Center SSE in a real browser, UI-R9 owner visual sign-off.
+- Verification this turn: targeted Jarvis tests **48/48** pass; `npx tsc --noEmit` PASS; `npm run test:cloud` **425/427** pass. The two failures are pre-existing `night_agent_grok_only` Windows-path assertions on Linux (`path.basename` of `C:\\...` and `node.exe` vs `node`). Not claimed as this change. Browser SSE / Ollama / Whonix / mic / CCTV remain **BLOCKED_LOCAL_ACCEPTANCE**.
 
 ## This turn — cloud-safe Jarvis checkpoint for Cursor Cloud Agents
 
