@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { assertIsolated, rejectProductionWrite } from './candidateSandbox';
+import type { JsonCollection } from './persistTypes';
 
 export const CANDIDATE_STATUSES = [
   'CREATED',
@@ -31,6 +32,10 @@ export type ImprovementCandidate = {
 export class CandidateManager {
   private readonly items = new Map<string, ImprovementCandidate>();
 
+  constructor(private readonly persist?: JsonCollection<ImprovementCandidate>) {
+    for (const item of persist?.load() ?? []) this.items.set(item.id, item);
+  }
+
   public create(input: {
     hypothesis: string;
     sandboxPath: string;
@@ -60,6 +65,7 @@ export class CandidateManager {
       simulated: input.simulated,
     };
     this.items.set(candidate.id, candidate);
+    this.flush();
     return { ...candidate };
   }
 
@@ -82,12 +88,14 @@ export class CandidateManager {
     } else {
       candidate.status = 'PROMOTION_CANDIDATE';
     }
+    this.flush();
     return { ...candidate };
   }
 
   public archive(id: string): ImprovementCandidate {
     const candidate = this.require(id);
     candidate.status = 'ARCHIVED';
+    this.flush();
     return { ...candidate };
   }
 
@@ -108,5 +116,9 @@ export class CandidateManager {
     const item = this.items.get(id);
     if (!item) throw Object.assign(new Error('Unknown candidate.'), { reasonCode: 'CANDIDATE_REJECTED' });
     return item;
+  }
+
+  private flush(): void {
+    this.persist?.replace(this.list());
   }
 }

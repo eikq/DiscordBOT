@@ -17,6 +17,8 @@ type Props = {
   onCancel: () => void;
   onGrant: () => void;
   onSimulation: (enabled: boolean) => void;
+  onRunTask: (objective: string) => void;
+  onNight: () => void;
 };
 
 export default function CommandCenterPanels({
@@ -27,6 +29,8 @@ export default function CommandCenterPanels({
   onCancel,
   onGrant,
   onSimulation,
+  onRunTask,
+  onNight,
 }: Props) {
   const graph = sourceGraphLayout(domains);
   const simulation = Boolean(snapshot?.simulationMode || snapshot?.task?.simulated);
@@ -46,11 +50,17 @@ export default function CommandCenterPanels({
             {snapshot.task.steps.map(step => (
               <li key={step.id} className={`jcc-ops__step is-${step.state}`}>
                 <em>{step.index}</em>
-                <span>{step.title}</span>
+                <span>
+                  {step.title}
+                  {step.capability ? <small> · {step.capability}</small> : null}
+                  {step.summary ? <small>{step.summary}</small> : null}
+                </span>
               </li>
             ))}
           </ol>
         )}
+        {snapshot?.task?.evidence[0] ? <p className="jcc-hint">Evidence: {snapshot.task.evidence[0]}</p> : null}
+        {snapshot?.task?.errors[0] ? <p className="jcc-error">{snapshot.task.errors[0]}</p> : null}
         {snapshot?.task?.waitingPermission ? (
           <div className="jcc-permit jcc-permit--task">
             <p className="jcc-permit__kicker">Work agent waiting</p>
@@ -65,6 +75,22 @@ export default function CommandCenterPanels({
             <button type="button" className="jcc-ghost" disabled={busy} onClick={onCancel}>Cancel task</button>
           </p>
         ) : null}
+        <form
+          className="jcc-task-form"
+          onSubmit={event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const input = form.elements.namedItem('objective') as HTMLInputElement | null;
+            const objective = input?.value.trim() ?? '';
+            if (objective) onRunTask(objective);
+          }}
+        >
+          <label>
+            <span className="jcc-hint">Run a real work task</span>
+            <input name="objective" maxLength={240} placeholder="system status" disabled={busy} />
+          </label>
+          <button type="submit" className="jcc-ghost" disabled={busy}>Run task</button>
+        </form>
         <div className="jcc-seg jcc-seg--tight" role="group" aria-label="Simulated demos">
           {DEMOS.map(demo => (
             <button key={demo.id} type="button" disabled={busy} onClick={() => onDemo(demo.id)}>{demo.label}</button>
@@ -84,6 +110,12 @@ export default function CommandCenterPanels({
           Night {snapshot?.evolution.night.status || 'idle'}
           {snapshot?.evolution.night.stage ? ` · ${snapshot.evolution.night.stage}` : ''}
           {snapshot?.evolution.night.pausedFor ? ` · paused for ${snapshot.evolution.night.pausedFor}` : ''}
+          {snapshot?.evolution.night.experiencesProcessed
+            ? ` · ${snapshot.evolution.night.experiencesProcessed} digested`
+            : ''}
+        </p>
+        <p>
+          <button type="button" className="jcc-ghost" disabled={busy} onClick={onNight}>Night cycle</button>
         </p>
         {(snapshot?.evolution.selfModel.length ?? 0) === 0 ? (
           <p className="jcc-empty">INSUFFICIENT DATA — no capability trend yet.</p>

@@ -1,8 +1,17 @@
+import type { JsonCollection } from './persistTypes';
 import type { ProceduralSkillVersion } from './types';
 
 export class SkillVersionRegistry {
   private readonly versions = new Map<string, ProceduralSkillVersion[]>();
   private readonly knownGood = new Map<string, number>();
+
+  constructor(private readonly persist?: JsonCollection<ProceduralSkillVersion>) {
+    for (const skill of persist?.load() ?? []) {
+      const existing = this.versions.get(skill.skillId) ?? [];
+      this.versions.set(skill.skillId, [...existing, skill]);
+      if (skill.knownGood) this.knownGood.set(skill.skillId, skill.version);
+    }
+  }
 
   public propose(skill: Omit<ProceduralSkillVersion, 'version' | 'knownGood' | 'status' | 'scriptsAllowed'> & {
     status?: ProceduralSkillVersion['status'];
@@ -18,12 +27,14 @@ export class SkillVersionRegistry {
       parentVersion: skill.parentVersion ?? existing.at(-1)?.version,
     };
     this.versions.set(skill.skillId, [...existing, next]);
+    this.flush();
     return { ...next };
   }
 
   public markTested(skillId: string, version: number, passed: boolean): ProceduralSkillVersion {
     const skill = this.require(skillId, version);
     skill.status = passed ? 'TESTED' : 'REJECTED';
+    this.flush();
     return { ...skill };
   }
 
@@ -34,6 +45,7 @@ export class SkillVersionRegistry {
     }
     skill.status = 'REJECTED';
     skill.evidence = [...skill.evidence, `rejected:${reason}`];
+    this.flush();
     return { ...skill };
   }
 
@@ -51,6 +63,7 @@ export class SkillVersionRegistry {
     }
     this.knownGood.set(skillId, version);
     skill.status = 'ACTIVE';
+    this.flush();
     return { ...skill };
   }
 
@@ -82,5 +95,9 @@ export class SkillVersionRegistry {
     const found = this.versions.get(skillId)?.find(item => item.version === version);
     if (!found) throw Object.assign(new Error('Unknown skill version.'), { reasonCode: 'UNKNOWN_SKILL_VERSION' });
     return found;
+  }
+
+  private flush(): void {
+    this.persist?.replace(this.list());
   }
 }

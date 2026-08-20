@@ -1,3 +1,5 @@
+import type { JsonCollection } from './persistTypes';
+
 export type CompetenceTrend = 'improving' | 'stable' | 'declining' | 'insufficient_data';
 
 export type CapabilityAssessment = {
@@ -14,8 +16,14 @@ export type CapabilityAssessment = {
 
 export class CapabilitySelfModel {
   private readonly byId = new Map<string, CapabilityAssessment>();
+  private readonly now: () => number;
+  private readonly persist?: JsonCollection<CapabilityAssessment>;
 
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(now: () => number = () => Date.now(), persist?: JsonCollection<CapabilityAssessment>) {
+    this.now = now;
+    this.persist = persist;
+    for (const item of persist?.load() ?? []) this.byId.set(item.capability, item);
+  }
 
   public observe(capability: string, outcome: 'success' | 'partial' | 'failure', weakness?: string): CapabilityAssessment {
     const current = this.byId.get(capability) ?? {
@@ -46,6 +54,7 @@ export class CapabilitySelfModel {
       current.recentTrend = recentRatio >= 0.75 ? 'improving' : recentRatio <= 0.4 ? 'declining' : 'stable';
     }
     this.byId.set(capability, current);
+    this.persist?.replace(this.matrix());
     return { ...current, recurringWeaknesses: [...current.recurringWeaknesses] };
   }
 

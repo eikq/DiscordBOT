@@ -240,8 +240,9 @@ export {
   buildJournal,
   buildEvolutionGraph,
   affectCannotAuthorize,
+  applyTaskOutcome,
 } from './evolution';
-export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor } from './agent';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker } from './agent';
 export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
 export { OwnerControl } from './control';
 export { ProactiveMonitor } from './monitor';
@@ -257,6 +258,8 @@ export {
   parseControlPatch,
   applyOwnerControl,
   parseTaskId,
+  parseObjective,
+  parseNightAction,
   DEMO_SCENARIOS,
 } from './standalone/commandCenterHttp';
 export {

@@ -4,7 +4,7 @@ import { mergeBudgets } from '../ops/budgets';
 import type { JarvisBudgets } from '../ops/types';
 import { assertAcyclic, blockedByFailedDep, readySteps } from './dag';
 import { canRetry, classifyStepFailure } from './recovery';
-import { WorkTaskStore, newStepId } from './store';
+import { WorkTaskStore } from './store';
 import { isTerminalStatus } from './transitions';
 import type {
   PlanStep,
@@ -14,6 +14,9 @@ import type {
   WorkTask,
   WorkTaskOutcome,
 } from './types';
+import { defaultPlanFor } from './plans';
+
+export { defaultPlanFor, planForObjective } from './plans';
 
 export type WorkAgentOptions = {
   store?: WorkTaskStore;
@@ -22,6 +25,7 @@ export type WorkAgentOptions = {
   invoke?: WorkStepInvoker;
   budgets?: Partial<JarvisBudgets>;
   simulated?: boolean;
+  onTerminal?: (task: WorkTask) => void;
 };
 
 const KIND_VISUAL: Record<PlanStepKind, string> = {
@@ -37,33 +41,13 @@ const KIND_VISUAL: Record<PlanStepKind, string> = {
   reflect: 'REFLECTING',
 };
 
-export function defaultPlanFor(objective: string): PlanStep[] {
-  const title = objective.trim() || 'Untitled task';
-  const step = (kind: PlanStepKind, deps: string[], titleText: string, capability?: string): PlanStep => ({
-    id: newStepId(kind),
-    title: titleText,
-    kind,
-    dependencies: deps,
-    status: 'pending',
-    capability,
-    riskLevel: kind === 'apply' ? 'MEDIUM' : 'LOW',
-    verificationMethod: kind === 'verify' || kind === 'test' ? 'structured_check' : 'observation',
-    retryPolicy: { maxAttempts: 2, attempted: 0 },
-  });
-  const understand = step('understand', [], `Understand: ${title.slice(0, 80)}`);
-  const plan = step('plan', [understand.id], 'Build a structured plan');
-  const apply = step('apply', [plan.id], 'Execute the next safe action');
-  const verify = step('verify', [apply.id], 'Verify the outcome');
-  const reflect = step('reflect', [verify.id], 'Record a structured reflection');
-  return [understand, plan, apply, verify, reflect];
-}
-
 export class WorkAgent {
   public readonly store: WorkTaskStore;
   private readonly events?: JarvisEventBus;
   private readonly invoke: WorkStepInvoker;
   private readonly budgets: JarvisBudgets;
   private readonly simulated: boolean;
+  private readonly onTerminal?: (task: WorkTask) => void;
   private readonly controllers = new Map<string, AbortController>();
 
   constructor(options: WorkAgentOptions = {}) {
@@ -72,9 +56,10 @@ export class WorkAgent {
     this.invoke = options.invoke ?? defaultInvoker;
     this.budgets = mergeBudgets(options.budgets);
     this.simulated = Boolean(options.simulated);
+    this.onTerminal = options.onTerminal;
   }
 
-  public receive(objective: string, plan?: PlanStep[]): WorkTask {
+  public receive(objective: string, plan?: PlanStep[], extra: { simulated?: boolean } = {}): WorkTask {
     const steps = plan && plan.length > 0 ? plan : defaultPlanFor(objective);
     assertAcyclic(steps);
     if (steps.length > this.budgets.taskSteps) {
@@ -84,7 +69,7 @@ export class WorkAgent {
       objective,
       plan: steps,
       retryBudget: this.budgets.retries,
-      simulated: this.simulated,
+      simulated: extra.simulated ?? this.simulated,
     });
     this.emit(task, 'TASK_RECEIVED', `Task received: ${task.objective}`, { visualState: 'UNDERSTANDING' });
     return this.store.setStatus(task.id, 'UNDERSTANDING');
@@ -306,7 +291,13 @@ export class WorkAgent {
       status,
       outcome,
     };
-    return this.store.save(next);
+    const saved = this.store.save(next);
+    try {
+      this.onTerminal?.(saved);
+    } catch {
+      // Evolution/recording failures must not mutate the terminal task outcome.
+    }
+    return saved;
   }
 
   private require(id: string): WorkTask {

@@ -3,6 +3,9 @@ export { rejectProductionWrite, assertIsolated, createCandidateSandbox } from '.
 export { ExperienceStore } from './experienceStore';
 export { reflectOnExperience } from './reflection';
 export { SkillVersionRegistry } from './skillVersions';
+export { EvolutionPersistence, defaultEvolutionDbPath } from './persist';
+export { ReflectionLedger } from './reflectionLedger';
+export { applyTaskOutcome } from './lifecycle';
 export { ClaimStore } from './claims';
 export { rankRetrieval, measureRetrieval } from './retrievalQuality';
 export { reflectStructured, shouldReflect } from './reflectionEngine';

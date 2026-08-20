@@ -9,6 +9,8 @@ export type LiveOpsStep = {
   index: string;
   title: string;
   state: 'done' | 'active' | 'pending' | 'failed' | 'blocked' | 'cancelled' | 'waiting';
+  capability?: string;
+  summary?: string;
 };
 
 export function liveOpsSteps(task: WorkTask | null): LiveOpsStep[] {
@@ -28,6 +30,8 @@ export function liveOpsSteps(task: WorkTask | null): LiveOpsStep[] {
             : step.status === 'blocked' || step.status === 'cancelled'
               ? 'blocked'
               : 'pending',
+    ...(step.capability ? { capability: step.capability } : {}),
+    ...(step.resultSummary ? { summary: step.resultSummary } : {}),
   }));
 }
 

@@ -20,7 +20,7 @@ import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants
 import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
 import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
 import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
-import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
+import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
 dotenv.config({ quiet: true });
 if (process.env.JARVIS_STANDALONE === '1') {
@@ -770,6 +770,8 @@ async function startServer() {
     attachDefaultSpeech: true,
     probeStt: probeStandaloneStt,
   });
+  const labCapabilities = jarvisLab.capabilities();
+  if (labCapabilities) sharedCommandCenter().attachCapabilities(labCapabilities);
   app.get('/api/jarvis/status', async (_req, res) => {
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
       return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
@@ -1070,6 +1072,37 @@ async function startServer() {
     try {
       sharedCommandCenter().agent.cancel(taskId);
       return res.json(sharedCommandCenter().present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/task', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const objective = parseObjective(req.body?.objective);
+    if (!objective) return res.status(400).json({ error: 'objective is required.', reasonCode: 'PLAN_INVALID' });
+    try {
+      const center = sharedCommandCenter();
+      await center.runObjective(objective, { simulated: req.body?.simulated === true });
+      return res.json(center.present());
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post('/api/jarvis/command-center/night', async (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const action = parseNightAction(req.body?.action) ?? 'run';
+    try {
+      const center = sharedCommandCenter();
+      if (action === 'pause') center.night.pause();
+      else if (action === 'cancel') center.night.cancel();
+      else center.runNight();
+      return res.json(center.present());
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }

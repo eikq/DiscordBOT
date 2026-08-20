@@ -1,4 +1,8 @@
+import path from 'node:path';
 import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type WorkStepInvoker, type WorkTask } from '../agent';
+import { createCapabilityWorkInvoker } from '../agent/capabilityInvoker';
+import { inferCapabilityFromObjective, planForObjective } from '../agent/capabilityResolve';
+import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
 import { SimulatedDeviceProvider, type DeviceRecord } from '../devices';
 import {
@@ -13,15 +17,19 @@ import {
   ModelAdaptationRegistry,
   NightCycle,
   PracticeEngine,
+  ReflectionLedger,
   SkillVersionRegistry,
+  applyTaskOutcome,
   buildEvolutionGraph,
   buildJournal,
   createCandidateSandbox,
+  EvolutionPersistence,
   reflectStructured,
   type EvolutionGraph,
   type JarvisJournal,
   type NightCycleReport,
 } from '../evolution';
+import { defaultRuntimeRoot } from '../storage/operationalDb';
 import { ProactiveMonitor, type MonitorSignal } from '../monitor';
 import { visualStateFromEvents } from '../ops/visualState';
 import type { JarvisVisualState } from '../ops/types';
@@ -62,35 +70,42 @@ export type CommandCenterOptions = {
   now?: () => number;
   simulated?: boolean;
   invoke?: WorkStepInvoker;
+  host?: CapabilityHost;
+  persistRoot?: string;
+  workDbPath?: string;
+  evolutionDbPath?: string;
 };
 
 export class CommandCenterRuntime {
   public readonly events: JarvisEventBus;
   public readonly control: OwnerControl;
   public readonly agent: WorkAgent;
-  public readonly experiences = new ExperienceStore();
-  public readonly claims = new ClaimStore();
-  public readonly skills = new SkillVersionRegistry();
-  public readonly failures = new FailureLedger();
-  public readonly selfModel = new CapabilitySelfModel();
-  public readonly growth = new GrowthPlanner();
+  public readonly experiences: ExperienceStore;
+  public readonly claims: ClaimStore;
+  public readonly skills: SkillVersionRegistry;
+  public readonly failures: FailureLedger;
+  public readonly selfModel: CapabilitySelfModel;
+  public readonly growth: GrowthPlanner;
   public readonly practice = new PracticeEngine();
   public readonly benchmarks = new BenchmarkBank();
   public readonly affect = new AffectEngine();
-  public readonly candidates = new CandidateManager();
+  public readonly candidates: CandidateManager;
   public readonly modelAdaptation = new ModelAdaptationRegistry();
   public readonly monitor = new ProactiveMonitor();
   public readonly devices = new SimulatedDeviceProvider();
   public readonly visionCapture = new SimulatedScreenCapture();
   public readonly visionAnalyzer = new SimulatedVisionAnalyzer();
   public readonly night: NightCycle;
+  public readonly reflectionLedger: ReflectionLedger;
+  public readonly persistence?: EvolutionPersistence;
+  private host?: CapabilityHost;
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
-  private readonly reflections: Array<{ experienceId: string; reusableLesson: string }> = [];
 
   constructor(options: CommandCenterOptions = {}) {
     const simulated = Boolean(options.simulated);
     this.events = options.events ?? sharedJarvisEventBus();
+    this.host = options.host;
     this.control = new OwnerControl({
       maxAutonomy: 2,
       currentAutonomy: 1,
@@ -100,12 +115,28 @@ export class CommandCenterRuntime {
       proactiveAlerts: true,
       simulationMode: simulated,
     });
+    const persistRoot = options.persistRoot;
+    const evolutionDb = options.evolutionDbPath ?? (persistRoot ? path.join(persistRoot, 'evolution.db') : undefined);
+    const workDb = options.workDbPath ?? (persistRoot ? path.join(persistRoot, 'work.db') : undefined);
+    this.persistence = evolutionDb ? new EvolutionPersistence(evolutionDb) : undefined;
+    const now = options.now ?? (() => Date.now());
+    this.experiences = new ExperienceStore(now, this.persistence?.experiences);
+    this.claims = new ClaimStore(now, this.persistence?.claims);
+    this.skills = new SkillVersionRegistry(this.persistence?.skills);
+    this.failures = new FailureLedger(this.persistence?.failures);
+    this.selfModel = new CapabilitySelfModel(now, this.persistence?.selfModel);
+    this.growth = new GrowthPlanner(this.persistence?.growth);
+    this.candidates = new CandidateManager(this.persistence?.candidates);
+    this.reflectionLedger = new ReflectionLedger(this.persistence?.reflections);
     this.agent = new WorkAgent({
-      store: new WorkTaskStore(options.now),
+      store: new WorkTaskStore({ now: options.now, dbPath: workDb }),
       events: this.events,
       now: options.now,
-      invoke: options.invoke,
+      invoke: options.invoke ?? createCapabilityWorkInvoker({
+        host: () => this.host,
+      }),
       simulated,
+      onTerminal: task => this.recordTaskExperience(task),
     });
     this.night = new NightCycle({
       experiences: this.experiences,
@@ -113,16 +144,23 @@ export class CommandCenterRuntime {
       failures: this.failures,
       selfModel: this.selfModel,
       growth: this.growth,
+      reflections: this.reflectionLedger,
+      persistReport: report => this.persistence?.night.replace([{ ...report, id: 'latest' }]),
       events: this.events,
       now: options.now,
       simulated,
     });
   }
 
+  public attachCapabilities(host: CapabilityHost): void {
+    this.host = host;
+  }
+
   public snapshot(): CommandCenterSnapshot {
     const tasks = this.agent.store.list();
     const active = this.agent.store.active()[0] ?? null;
     const experiences = this.experiences.list();
+    const reflections = this.reflectionLedger.list();
     return {
       simulationMode: this.control.snapshot().simulationMode,
       visualState: visualStateFromEvents(this.events.recent(12)),
@@ -131,7 +169,7 @@ export class CommandCenterRuntime {
       tasks,
       evolution: {
         experiences: experiences.length,
-        reflections: this.reflections.length,
+        reflections: reflections.length,
         skills: this.skills.list().length,
         failures: this.failures.list().length,
         goals: this.growth.active().map(item => item.title),
@@ -144,7 +182,7 @@ export class CommandCenterRuntime {
         }),
         graph: buildEvolutionGraph({
           experiences: experiences.map(item => ({ id: item.id, goal: item.goal, outcome: item.outcome })),
-          reflections: this.reflections,
+          reflections: reflections.map(item => ({ experienceId: item.experienceId, reusableLesson: item.reusableLesson })),
           skills: this.skills.list().map(item => ({ skillId: item.skillId, version: item.version, purpose: item.purpose })),
           goals: this.growth.list(),
           failures: this.failures.list(),
@@ -176,55 +214,28 @@ export class CommandCenterRuntime {
   }
 
   public recordTaskExperience(task: WorkTask): void {
-    const experience = this.experiences.createIfSignificant({
-      kind: 'episodic',
-      domain: 'task',
-      goal: task.objective,
-      situation: task.objective,
-      actions: task.plan.map(step => step.kind),
-      tools: task.toolResults.map(item => item.capability),
-      result: task.verification?.summary || task.outcome || task.status,
-      outcome: task.outcome === 'success' ? 'success' : task.outcome === 'cancelled' ? 'partial' : 'failure',
-      lessons: task.outcome === 'success' ? ['Reusable structured plan'] : ['Do not treat failure as success'],
-      confidence: task.outcome === 'success' ? 0.8 : 0.55,
-      privacyClass: 'private',
-      significance: 0.7,
-      cause: task.errors[0]?.code,
+    applyTaskOutcome(task, {
+      experiences: this.experiences,
+      reflections: this.reflectionLedger,
+      failures: this.failures,
+      skills: this.skills,
+      selfModel: this.selfModel,
+      growth: this.growth,
+      affect: this.affect,
+      events: this.events,
     });
-    if (!experience) return;
-    this.events.emit('EXPERIENCE_CREATED', 'Experience recorded', { experienceId: experience.id }, 'info', {
-      taskId: task.id,
-      simulated: task.simulated,
-      visualState: 'LEARNING',
-    });
-    if (experience.outcome === 'failure') this.failures.record(experience, experience.cause || 'STEP_FAILED');
-    const reflection = reflectStructured(
-      experience,
-      this.experiences.similarFailures(experience.cause || experience.result),
-      experience.outcome === 'failure' ? 'important_failure' : 'task_completed',
-    );
-    this.reflections.push({ experienceId: experience.id, reusableLesson: reflection.reusableLesson });
-    this.events.emit('REFLECTION', 'Structured reflection recorded', { experienceId: experience.id }, 'info', {
-      simulated: task.simulated,
-      visualState: 'REFLECTING',
-    });
-    if (reflection.skillCandidateAllowed) {
-      this.skills.propose({
-        skillId: slug(task.objective),
-        purpose: task.objective,
-        trigger: task.objective,
-        prerequisites: [],
-        workflow: task.plan.map(step => step.title),
-        failureModes: [],
-        recovery: [],
-        safetyConstraints: ['scriptsAllowed=false', 'no production writes'],
-        verification: [task.verification?.summary || 'structured'],
-        evidence: [experience.id],
-      });
-    }
-    const cap = task.toolResults[0]?.capability || 'task';
-    this.selfModel.observe(cap, experience.outcome === 'success' ? 'success' : 'failure', experience.cause);
-    this.affect.appraise({ kind: experience.outcome === 'success' ? 'success' : 'failure' });
+  }
+
+  public async runObjective(objective: string, options: { simulated?: boolean } = {}): Promise<WorkTask> {
+    const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
+    if (simulated) this.control.patch({ simulationMode: true }, 'owner');
+    const capabilityId = inferCapabilityFromObjective(objective, this.host);
+    const task = this.agent.receive(objective, planForObjective(objective, capabilityId), { simulated });
+    return this.agent.run(task.id);
+  }
+
+  public runNight(): NightCycleReport {
+    return this.night.run();
   }
 
   public async simulateVision(fixtureId = 'settings_panel'): Promise<VisualContext> {
@@ -244,9 +255,7 @@ export class CommandCenterRuntime {
   public async grantAndResume(taskId: string, stepId?: string) {
     const granted = this.agent.grantPermission(taskId, stepId);
     if (granted.status === 'READY' || granted.status === 'WAITING_PERMISSION' || granted.status === 'PAUSED') {
-      const done = await this.agent.resume(taskId);
-      if (done.outcome) this.recordTaskExperience(done);
-      return done;
+      return this.agent.resume(taskId);
     }
     return granted;
   }
@@ -269,9 +278,8 @@ export class CommandCenterRuntime {
       ['research', 'Search public sources'],
       ['verify', 'Compare evidence'],
     ]);
-    const task = this.agent.receive('What is the current official driver policy for the lab GPU?', plan);
-    const done = await this.agent.run(task.id);
-    this.recordTaskExperience(done);
+    const task = this.agent.receive('What is the current official driver policy for the lab GPU?', plan, { simulated: true });
+    await this.agent.run(task.id);
   }
 
   private async demoCoding(): Promise<void> {
@@ -280,9 +288,8 @@ export class CommandCenterRuntime {
     const apply = demoStep('apply', 'Apply a simulated patch', [search.id]);
     const test = demoStep('test', 'Run fixture tests', [apply.id]);
     const verify = demoStep('verify', 'Verify the fix', [test.id]);
-    const task = this.agent.receive('Fix a simulated voice latency regression', [understand, search, apply, test, verify]);
-    const done = await this.agent.run(task.id);
-    this.recordTaskExperience(done);
+    const task = this.agent.receive('Fix a simulated voice latency regression', [understand, search, apply, test, verify], { simulated: true });
+    await this.agent.run(task.id);
   }
 
   private async demoEvolution(): Promise<void> {
@@ -303,7 +310,7 @@ export class CommandCenterRuntime {
     });
     this.failures.record(failed, 'RESEARCH_TIMEOUT');
     const reflection = reflectStructured(failed, this.experiences.similarFailures('RESEARCH_TIMEOUT'), 'important_failure');
-    this.reflections.push({ experienceId: failed.id, reusableLesson: reflection.reusableLesson });
+    this.reflectionLedger.add(reflection);
     if (reflection.skillCandidateAllowed) {
       throw new Error('Failure must not produce a trusted skill candidate.');
     }
@@ -335,10 +342,6 @@ export class CommandCenterRuntime {
 
 export type { DemoScenarioId } from './commandCenterHttp';
 
-function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 40) || 'task';
-}
-
 function demoStep(kind: PlanStep['kind'], title: string, dependencies: string[] = []): PlanStep {
   return {
     id: newStepId(kind),
@@ -363,7 +366,11 @@ function demoSteps(items: Array<[PlanStep['kind'], string]>): PlanStep[] {
 let sharedCenter: CommandCenterRuntime | undefined;
 
 export function sharedCommandCenter(): CommandCenterRuntime {
-  sharedCenter ??= new CommandCenterRuntime({ events: sharedJarvisEventBus(), simulated: false });
+  sharedCenter ??= new CommandCenterRuntime({
+    events: sharedJarvisEventBus(),
+    simulated: false,
+    persistRoot: process.env.JARVIS_RUNTIME_DIR || defaultRuntimeRoot(),
+  });
   return sharedCenter;
 }
 

@@ -39,11 +39,15 @@ export type CommandCenterClientSnapshot = {
     id: string;
     objective: string;
     status: string;
+    outcome?: string;
     simulated?: boolean;
     waitingPermission: boolean;
     active: boolean;
     steps: LiveOpsStep[];
+    evidence: string[];
+    errors: string[];
   } | null;
+  recentTasks: Array<{ id: string; objective: string; status: string; simulated?: boolean }>;
   evolution: {
     experiences: number;
     reflections: number;
@@ -53,7 +57,14 @@ export type CommandCenterClientSnapshot = {
     lessons: string[];
     affect: { valence: number; confidence: number };
     selfModel: Array<{ label: string; text: string; pct: number | null }>;
-    night: { status: string; stage: string | null; pausedFor?: string };
+    night: {
+      status: string;
+      stage: string | null;
+      pausedFor?: string;
+      experiencesProcessed: number;
+      reflectionsCreated: number;
+      skillsProposed: number;
+    };
     candidates: Array<{ id: string; hypothesis: string; status: string; simulated?: boolean }>;
     productionPromotionAllowed: false;
   };
@@ -105,8 +116,17 @@ export function presentCommandCenter(
           waitingPermission: task.status === 'WAITING_PERMISSION' || task.plan.some(step => step.status === 'waiting_permission'),
           active: ACTIVE_TASK.has(task.status),
           steps: liveOpsSteps(task),
+          evidence: task.evidence.slice(0, 6),
+          errors: task.errors.map(item => item.message).slice(0, 4),
+          ...(task.outcome ? { outcome: task.outcome } : {}),
         }
       : null,
+    recentTasks: snapshot.tasks.slice(-5).reverse().map(item => ({
+      id: item.id,
+      objective: item.objective,
+      status: item.status,
+      simulated: item.simulated,
+    })),
     evolution: {
       experiences: snapshot.evolution.experiences,
       reflections: snapshot.evolution.reflections,
@@ -123,6 +143,9 @@ export function presentCommandCenter(
         status: snapshot.evolution.night.status,
         stage: snapshot.evolution.night.stage,
         pausedFor: snapshot.evolution.night.pausedFor,
+        experiencesProcessed: snapshot.evolution.night.experiencesProcessed,
+        reflectionsCreated: snapshot.evolution.night.reflectionsCreated,
+        skillsProposed: snapshot.evolution.night.skillsProposed,
       },
       candidates: snapshot.evolution.candidates.slice(0, 6).map(item => ({
         id: item.id,

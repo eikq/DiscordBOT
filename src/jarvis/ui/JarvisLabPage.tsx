@@ -1661,6 +1661,8 @@ export default function JarvisLabPage() {
                     if (commandCenter?.task?.id) void postCommandCenter('/api/jarvis/command-center/grant', { taskId: commandCenter.task.id });
                   }}
                   onSimulation={enabled => { void postCommandCenter('/api/jarvis/command-center/control', { simulationMode: enabled }); }}
+                  onRunTask={objective => { void postCommandCenter('/api/jarvis/command-center/task', { objective }); }}
+                  onNight={() => { void postCommandCenter('/api/jarvis/command-center/night', { action: 'run' }); }}
                 />
                 <section className="jcc-block">
                   <h2>Tool activity</h2>

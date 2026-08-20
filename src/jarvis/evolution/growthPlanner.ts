@@ -1,3 +1,5 @@
+import type { JsonCollection } from './persistTypes';
+
 export type GrowthGoal = {
   id: string;
   title: string;
@@ -13,10 +15,15 @@ const MAX_ACTIVE = 3;
 export class GrowthPlanner {
   private readonly goals: GrowthGoal[] = [];
 
+  constructor(private readonly persist?: JsonCollection<GrowthGoal>) {
+    if (persist) this.goals.push(...persist.load());
+  }
+
   public propose(goal: Omit<GrowthGoal, 'active'>): GrowthGoal {
     const activeCount = this.goals.filter(item => item.active).length;
     const next: GrowthGoal = { ...goal, active: activeCount < MAX_ACTIVE };
     this.goals.push(next);
+    this.flush();
     return { ...next };
   }
 
@@ -27,6 +34,7 @@ export class GrowthPlanner {
       throw Object.assign(new Error('Only a small number of growth goals may be active.'), { reasonCode: 'BUDGET_EXCEEDED' });
     }
     goal.active = true;
+    this.flush();
     return { ...goal };
   }
 
@@ -34,6 +42,7 @@ export class GrowthPlanner {
     const goal = this.goals.find(item => item.id === id);
     if (!goal) throw Object.assign(new Error('Unknown growth goal.'), { reasonCode: 'PLAN_INVALID' });
     goal.active = false;
+    this.flush();
     return { ...goal };
   }
 
@@ -43,5 +52,9 @@ export class GrowthPlanner {
 
   public list(): GrowthGoal[] {
     return this.goals.map(item => ({ ...item }));
+  }
+
+  private flush(): void {
+    this.persist?.replace(this.list());
   }
 }

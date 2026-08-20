@@ -27,6 +27,18 @@ export function parseDemoScenario(value: unknown): DemoScenarioId | undefined {
     : undefined;
 }
 
+export function parseObjective(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const objective = value.trim();
+  if (objective.length < 2 || objective.length > 240) return undefined;
+  if (/[\\/]|\.\./u.test(objective)) return undefined;
+  return objective;
+}
+
+export function parseNightAction(value: unknown): 'run' | 'pause' | 'cancel' | undefined {
+  return value === 'run' || value === 'pause' || value === 'cancel' ? value : undefined;
+}
+
 export function parseTaskId(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const id = value.trim();

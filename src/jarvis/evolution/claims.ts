@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { looksLikeSecret } from '../security/redaction';
+import type { JsonCollection } from './persistTypes';
 import { TTL_MS, ttlClassForFactKey, type ClaimStatus, type TtlClass } from './taxonomy';
 
 export type DurableClaim = {
@@ -18,8 +19,14 @@ export type DurableClaim = {
 
 export class ClaimStore {
   private readonly claims = new Map<string, DurableClaim>();
+  private readonly now: () => number;
+  private readonly persist?: JsonCollection<DurableClaim>;
 
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(now: () => number = () => Date.now(), persist?: JsonCollection<DurableClaim>) {
+    this.now = now;
+    this.persist = persist;
+    for (const item of persist?.load() ?? []) this.claims.set(item.id, item);
+  }
 
   public put(input: Omit<DurableClaim, 'id' | 'learnedAt' | 'lastVerifiedAt' | 'ttlClass' | 'supersededBy'> & {
     id?: string;
@@ -47,6 +54,7 @@ export class ClaimStore {
       this.claims.set(previous.id, previous);
     }
     this.claims.set(claim.id, claim);
+    this.persist?.replace(this.list());
     return { ...claim };
   }
 

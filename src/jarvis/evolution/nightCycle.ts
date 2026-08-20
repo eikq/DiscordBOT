@@ -5,6 +5,7 @@ import type { ExperienceStore } from './experienceStore';
 import { FailureLedger } from './failureLearning';
 import { GrowthPlanner } from './growthPlanner';
 import { reflectStructured } from './reflectionEngine';
+import type { ReflectionLedger } from './reflectionLedger';
 import type { CapabilitySelfModel } from './selfModel';
 import type { SkillVersionRegistry } from './skillVersions';
 
@@ -45,6 +46,8 @@ export type NightCycleOptions = {
   failures?: FailureLedger;
   selfModel?: CapabilitySelfModel;
   growth?: GrowthPlanner;
+  reflections?: ReflectionLedger;
+  persistReport?: (report: NightCycleReport) => void;
   events?: JarvisEventBus;
   budgets?: Partial<JarvisBudgets>;
   now?: () => number;
@@ -127,7 +130,9 @@ export class NightCycle {
     this.status = this.cancelRequested ? 'cancelled' : 'completed';
     this.report.status = this.status;
     this.stage = null;
-    return this.snapshot();
+    const snapshot = this.snapshot();
+    this.options.persistReport?.(snapshot);
+    return snapshot;
   }
 
   private step(stage: NightStage): void {
@@ -142,23 +147,67 @@ export class NightCycle {
     }
     if (stage === 'REFLECT') {
       let count = 0;
+      const seen = new Set(this.options.reflections?.list().map(item => `${item.experienceId}:night_consolidation`) ?? []);
       for (const experience of experiences.slice(0, this.budgets.reflectionCount)) {
-        reflectStructured(experience, this.options.experiences.similarFailures(experience.cause || experience.result), 'night_consolidation');
+        const key = `${experience.id}:night_consolidation`;
+        const reflection = reflectStructured(experience, this.options.experiences.similarFailures(experience.cause || experience.result), 'night_consolidation');
+        if (!seen.has(key)) {
+          this.options.reflections?.add(reflection);
+          seen.add(key);
+        }
         count += 1;
       }
       this.report.reflectionsCreated = count;
     }
     if (stage === 'DISTILL_SKILLS') {
-      this.report.skillsProposed = experiences.filter(item => item.outcome === 'success' && item.confidence >= 0.7).length;
+      let proposed = 0;
+      const existing = new Set((this.options.skills?.list() ?? []).flatMap(item => item.evidence));
+      for (const experience of experiences) {
+        if (experience.outcome !== 'success' || experience.confidence < 0.7) continue;
+        if (existing.has(experience.id)) continue;
+        this.options.skills?.propose({
+          skillId: `night_${(experience.domain || 'task').replace(/[^a-z0-9]+/giu, '_').slice(0, 32)}`,
+          purpose: experience.goal,
+          trigger: experience.situation,
+          prerequisites: [],
+          workflow: experience.actions,
+          failureModes: experience.cause ? [experience.cause] : [],
+          recovery: ['Retry with structured verification'],
+          safetyConstraints: ['scriptsAllowed=false', 'no production promotion'],
+          verification: ['structured_check'],
+          evidence: [experience.id],
+        });
+        existing.add(experience.id);
+        proposed += 1;
+      }
+      this.report.skillsProposed = proposed;
       this.report.skillsUpdated = 0;
     }
     if (stage === 'UPDATE_SELF_MODEL' && this.options.selfModel) {
+      const seen = new Map<string, number>();
       for (const experience of experiences) {
         const cap = experience.tools[0] || experience.domain || 'general';
+        seen.set(cap, (seen.get(cap) ?? 0) + 1);
+        const current = this.options.selfModel.get(cap);
+        if (current && current.attempts >= (seen.get(cap) ?? 0)) continue;
         this.options.selfModel.observe(cap, experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure', experience.cause);
       }
     }
     if (stage === 'SELECT_GROWTH_GOALS' && this.options.growth) {
+      for (const fail of this.options.failures?.recurring() ?? []) {
+        if (this.options.growth.active().length >= 3) break;
+        const id = `goal_${fail.signature.replace(/[^a-z0-9]+/giu, '_').slice(0, 24)}`;
+        if (!this.options.growth.list().some(item => item.id === id)) {
+          this.options.growth.propose({
+            id,
+            title: `Reduce ${fail.errorClass} in ${fail.domain || 'general'}`,
+            evidence: fail.signature,
+            practice: 'Rehearse the failing capability with fixtures',
+            metric: 'recurrence_count',
+            successCondition: 'No recurrence for 3 similar tasks',
+          });
+        }
+      }
       this.report.goalsUpdated = this.options.growth.active().length;
     }
     if (stage === 'CLEANUP') {

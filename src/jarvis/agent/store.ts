@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { PlanStep, WorkTask, WorkTaskStatus } from './types';
 import { assertTransition, isTerminalStatus } from './transitions';
+import { recoverInterruptedTask } from './recoveryState';
+import { SqliteWorkTaskPersistence } from './sqliteStore';
 
 export function newTaskId(): string {
   return `task_${randomBytes(6).toString('hex')}`;
@@ -10,10 +12,28 @@ export function newStepId(prefix = 'step'): string {
   return `${prefix}_${randomBytes(4).toString('hex')}`;
 }
 
+export type WorkTaskStoreOptions = {
+  now?: () => number;
+  dbPath?: string;
+};
+
 export class WorkTaskStore {
   private readonly tasks = new Map<string, WorkTask>();
+  private readonly now: () => number;
+  private readonly disk?: SqliteWorkTaskPersistence;
 
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(nowOrOptions?: (() => number) | WorkTaskStoreOptions, maybeOptions: WorkTaskStoreOptions = {}) {
+    if (typeof nowOrOptions === 'function') {
+      this.now = nowOrOptions;
+      this.disk = maybeOptions.dbPath ? new SqliteWorkTaskPersistence(maybeOptions.dbPath) : undefined;
+    } else {
+      this.now = nowOrOptions?.now ?? (() => Date.now());
+      this.disk = nowOrOptions?.dbPath ? new SqliteWorkTaskPersistence(nowOrOptions.dbPath) : undefined;
+    }
+    if (this.disk) {
+      for (const task of this.disk.load()) this.tasks.set(task.id, task);
+    }
+  }
 
   public create(input: {
     objective: string;
@@ -39,6 +59,7 @@ export class WorkTaskStore {
       simulated: input.simulated || undefined,
     };
     this.tasks.set(task.id, task);
+    this.write(task);
     return this.clone(task);
   }
 
@@ -72,14 +93,19 @@ export class WorkTaskStore {
       updatedAt: new Date(this.now()).toISOString(),
     };
     this.tasks.set(task.id, next);
+    this.write(next);
     return this.clone(next);
   }
 
   public setStatus(id: string, status: WorkTaskStatus): WorkTask {
     const task = this.require(id);
+    if (isTerminalStatus(task.status) && status !== task.status) {
+      return this.clone(task);
+    }
     assertTransition(task.status, status);
     task.status = status;
     task.updatedAt = new Date(this.now()).toISOString();
+    this.write(task);
     return this.clone(task);
   }
 
@@ -89,7 +115,19 @@ export class WorkTaskStore {
 
   public restore(tasks: WorkTask[]): void {
     this.tasks.clear();
-    for (const task of tasks) this.tasks.set(task.id, this.clone(task));
+    for (const task of tasks) {
+      const recovered = recoverInterruptedTask(this.clone(task));
+      this.tasks.set(recovered.id, recovered);
+      this.write(recovered);
+    }
+  }
+
+  public close(): void {
+    this.disk?.close();
+  }
+
+  private write(task: WorkTask): void {
+    this.disk?.upsert(task);
   }
 
   private require(id: string): WorkTask {

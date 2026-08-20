@@ -259,11 +259,14 @@ test('jarvis lab page is a command center and stays Discord-free', () => {
   assert.match(page, /speak: shouldSpeak/);
   assert.match(page, /EventSource/);
   assert.match(page, /\/api\/jarvis\/command-center/);
+  assert.match(page, /\/api\/jarvis\/command-center\/task/);
   assert.match(page, /jcc-sim-banner/);
   assert.doesNotMatch(page, /Microphone is not enabled yet/);
   assert.doesNotMatch(page, /<select/);
   const panels = fs.readFileSync(files[4]!, 'utf8');
   assert.match(panels, /SIMULATION/);
+  assert.match(panels, /Run task/);
+  assert.match(panels, /Night cycle/);
   assert.doesNotMatch(panels, /Discord/);
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');

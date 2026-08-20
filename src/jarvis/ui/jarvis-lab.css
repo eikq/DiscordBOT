@@ -1388,6 +1388,27 @@
 .jcc-ops__step.is-failed span { color: var(--red); }
 .jcc-ops__step.is-waiting span { color: #fde68a; }
 
+.jcc-ops__step small {
+  display: block;
+  color: var(--faint);
+  font-size: 0.64rem;
+}
+
+.jcc-task-form {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0.7rem;
+}
+
+.jcc-task-form input {
+  width: 100%;
+  margin-top: 0.2rem;
+  background: rgb(6 18 28 / 0.7);
+  border: 1px solid rgb(125 211 252 / 0.18);
+  color: inherit;
+  padding: 0.35rem 0.5rem;
+}
+
 .jcc-source-graph {
   display: block;
   width: 100%;

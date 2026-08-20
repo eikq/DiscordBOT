@@ -1,5 +1,6 @@
 import { failureSignature } from '../agent/recovery';
 import type { JarvisErrorCode } from '../ops/types';
+import type { JsonCollection } from './persistTypes';
 import type { ExperienceRecord } from './types';
 
 export type FailureRecord = {
@@ -14,6 +15,10 @@ export type FailureRecord = {
 
 export class FailureLedger {
   private readonly items = new Map<string, FailureRecord>();
+
+  constructor(private readonly persist?: JsonCollection<FailureRecord>) {
+    for (const item of persist?.load() ?? []) this.items.set(item.signature, item);
+  }
 
   public record(experience: ExperienceRecord, errorClass: JarvisErrorCode | string = 'STEP_FAILED'): FailureRecord {
     const signature = failureSignature({
@@ -34,6 +39,7 @@ export class FailureLedger {
       stage: experience.kind,
     };
     this.items.set(signature, next);
+    this.persist?.replace(this.list());
     return { ...next };
   }
 

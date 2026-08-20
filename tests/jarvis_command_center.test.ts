@@ -10,6 +10,8 @@ import {
   parseControlPatch,
   parseDemoScenario,
   parseTaskId,
+  parseObjective,
+  parseNightAction,
   presentCommandCenter,
   visionActionAllowed,
 } from '../src/jarvis';
@@ -138,6 +140,9 @@ test('command-center HTTP parsers stay fail-closed', () => {
   assert.equal(parseDemoScenario('discord'), undefined);
   assert.equal(parseTaskId('task_ab'), undefined);
   assert.ok(parseTaskId('task_aabbccddeeff'));
+  assert.equal(parseObjective('x'), undefined);
+  assert.ok(parseObjective('Read system status'));
+  assert.equal(parseNightAction('run'), 'run');
   const bad = parseControlPatch({ maxAutonomy: 9 });
   assert.equal(bad.ok, false);
   const ok = parseControlPatch({ simulationMode: true, currentAutonomy: 1 });

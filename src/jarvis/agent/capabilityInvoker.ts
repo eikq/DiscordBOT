@@ -1,0 +1,170 @@
+import type { CapabilityHost, CapabilityResult } from '../capabilities/types';
+import { classifyFailure } from '../ops/errors';
+import type { JarvisErrorCode } from '../ops/types';
+import { isBlockedCapabilityId, resolveStepCapability } from './capabilityResolve';
+import type { PlanStep, WorkStepInvoker, WorkStepResult, WorkTask } from './types';
+
+export type CapabilityInvokerOptions = {
+  host?: CapabilityHost | (() => CapabilityHost | undefined);
+  sessionId?: string;
+};
+
+export function createCapabilityWorkInvoker(options: CapabilityInvokerOptions = {}): WorkStepInvoker {
+  return async (task, step, signal) => invokeThroughHost(task, step, signal, options);
+}
+
+async function invokeThroughHost(
+  task: WorkTask,
+  step: PlanStep,
+  signal: AbortSignal,
+  options: CapabilityInvokerOptions,
+): Promise<WorkStepResult> {
+  if (signal.aborted) {
+    return { ok: false, summary: 'Cancelled.', errorCode: 'CANCELLED' };
+  }
+  if (step.kind === 'understand') {
+    return { ok: true, summary: `Understood objective: ${task.objective.slice(0, 160)}` };
+  }
+  if (step.kind === 'plan') {
+    return { ok: true, summary: `Structured plan has ${task.plan.length} steps.` };
+  }
+  if (step.kind === 'reflect') {
+    return { ok: true, summary: 'Structured reflection recorded. Failure cannot mint a trusted skill.' };
+  }
+  if (step.kind === 'permission') {
+    return {
+      ok: false,
+      permissionRequired: true,
+      summary: `Capability ${step.capability || step.id} requires owner permission.`,
+      errorCode: 'PERMISSION_REQUIRED',
+    };
+  }
+  if (step.kind === 'verify' || step.kind === 'test') {
+    if (!step.capability) return structuredVerify(task);
+  }
+
+  const host = typeof options.host === 'function' ? options.host() : options.host;
+  const resolved = resolveStepCapability(task, step, host);
+  if (!resolved) {
+    if (step.kind === 'apply' || step.kind === 'search' || step.kind === 'research' || step.kind === 'retrieve') {
+      return {
+        ok: true,
+        skipped: true,
+        summary: task.simulated
+          ? `${step.title} completed (simulation).`
+          : `No typed capability bound for ${step.kind}; step skipped.`,
+      };
+    }
+    return { ok: true, summary: `${step.title} completed.` };
+  }
+
+  if (isBlockedCapabilityId(resolved.id)) {
+    return {
+      ok: false,
+      summary: 'Unrestricted shell or exec capabilities are not allowed.',
+      errorCode: 'CAPABILITY_DENIED',
+    };
+  }
+  if (!host) {
+    return {
+      ok: false,
+      summary: 'Capability host is not attached.',
+      errorCode: 'PROVIDER_UNAVAILABLE',
+    };
+  }
+  if (!host.lookup(resolved.id)) {
+    return {
+      ok: false,
+      summary: `Capability ${resolved.id} is not registered.`,
+      errorCode: 'PLAN_INVALID',
+    };
+  }
+
+  const availability = await host.availability(resolved.id);
+  if (availability.availability !== 'up') {
+    return {
+      ok: false,
+      summary: availability.reason || `Capability ${resolved.id} is ${availability.availability}.`,
+      errorCode: availability.availability === 'unavailable' ? 'PROVIDER_UNAVAILABLE' : 'STEP_FAILED',
+    };
+  }
+
+  const result = await host.invoke({
+    id: resolved.id,
+    input: resolved.input,
+    source: 'system',
+    sessionId: options.sessionId || task.id,
+    requestId: `${task.id}:${step.id}`,
+  });
+  return mapCapabilityResult(result);
+}
+
+function structuredVerify(task: WorkTask): WorkStepResult {
+  const failed = task.toolResults.filter(item => item.status === 'error' || item.status === 'rejected' || item.status === 'timeout');
+  if (failed.length > 0) {
+    return {
+      ok: false,
+      summary: `Verification failed: ${failed.map(item => item.capability).join(', ')}.`,
+      errorCode: 'VERIFICATION_FAILED',
+    };
+  }
+  return {
+    ok: true,
+    summary: task.toolResults.length
+      ? 'Structured check of prior capability results passed.'
+      : 'No capability observations to verify; cognitive steps completed.',
+  };
+}
+
+function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
+  const summary = result.content?.trim() || result.error || result.status;
+  const toolResult = {
+    capability: result.capabilityId,
+    status: result.status,
+    summary: result.untrustedOutput && result.status === 'ok' ? 'untrusted external data' : summary.slice(0, 240),
+  };
+  const evidence = [
+    ...result.sourceUrls.slice(0, 6),
+    result.untrustedOutput ? `untrusted:${result.capabilityId}` : '',
+  ].filter(Boolean);
+
+  if (result.status === 'confirmation_required') {
+    return {
+      ok: false,
+      permissionRequired: true,
+      summary: result.error || `Owner permission required for ${result.capabilityId}.`,
+      errorCode: 'PERMISSION_REQUIRED',
+      toolResult,
+    };
+  }
+  if (result.status === 'rejected') {
+    return {
+      ok: false,
+      summary: result.error || 'Capability denied.',
+      errorCode: 'CAPABILITY_DENIED',
+      toolResult,
+    };
+  }
+  if (result.status === 'unavailable' || result.status === 'timeout') {
+    return {
+      ok: false,
+      summary: result.error || `Capability ${result.capabilityId} is ${result.status}.`,
+      errorCode: result.status === 'timeout' ? 'RESEARCH_TIMEOUT' : 'PROVIDER_UNAVAILABLE',
+      toolResult,
+    };
+  }
+  if (result.status !== 'ok') {
+    return {
+      ok: false,
+      summary: result.error || summary,
+      errorCode: classifyFailure({ message: result.error || summary }) as JarvisErrorCode,
+      toolResult,
+    };
+  }
+  return {
+    ok: true,
+    summary: toolResult.summary,
+    toolResult,
+    evidence,
+  };
+}
