@@ -26,6 +26,7 @@ import type { WorkspaceCapabilityDeps } from '../workspace/workspaceCapabilities
 import { registerWorkspaceCapabilities } from '../workspace/workspaceCapabilities';
 import { registerRuntimeCapabilities } from './actions/runtimeCapabilities';
 import { sharedJarvisServiceController, type JarvisServiceController } from './actions/services';
+import { createJarvisWindowHost, registerDesktopPresenceCapabilities, sharedJarvisPresenceStore } from '../desktop';
 import { CapabilityRegistry } from './CapabilityRegistry';
 import { createLabPingHandler } from './labPing';
 import { registerWorldIntelCapabilities, type WorldIntelCapabilityPort } from './worldIntel';
@@ -47,6 +48,8 @@ export type StandaloneCapabilityHostOptions = {
     services?: JarvisServiceController;
     leases?: PrivilegeLeaseStore;
     events?: JarvisEventBus;
+    windowHost?: import('../desktop').JarvisWindowHost;
+    presence?: import('../desktop').JarvisPresenceStore;
   };
 };
 
@@ -65,6 +68,13 @@ export function createStandaloneCapabilityHost(
       allowlists,
       systemStatus: options.actions?.systemStatus ?? { snapshot: systemHealthSnapshot },
     });
+    try {
+      const presence = options.actions?.presence ?? sharedJarvisPresenceStore();
+      const windowHost = options.actions?.windowHost ?? createJarvisWindowHost({ presence });
+      registerDesktopPresenceCapabilities(registry, { windowHost });
+    } catch (error) {
+      console.warn(`[Jarvis] Desktop presence capabilities unavailable: ${error instanceof Error ? error.message : error}`);
+    }
     try {
       registerRuntimeCapabilities(registry, {
         allowlists,

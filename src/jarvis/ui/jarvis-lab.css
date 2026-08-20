@@ -754,6 +754,156 @@
 .jcc-float--tool { right: 5%; top: 20%; border-color: rgb(45 212 191 / 0.3); }
 .jcc-float--task { right: 8%; bottom: 38%; border-color: rgb(139 92 246 / 0.4); }
 
+.jcc-presence {
+  position: absolute;
+  top: 3.05rem;
+  right: 1rem;
+  margin: 0;
+  max-width: min(28rem, 52vw);
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+}
+
+.jcc-presenter {
+  position: absolute;
+  left: 1rem;
+  top: 3.4rem;
+  width: min(24rem, 44vw);
+  max-height: calc(100% - 8.8rem);
+  overflow: auto;
+  z-index: 8;
+  border: 1px solid rgb(125 211 252 / 0.22);
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, rgb(6 18 30 / 0.88), rgb(3 10 18 / 0.78));
+  backdrop-filter: blur(18px) saturate(120%);
+  padding: 0.75rem 0.85rem 0.9rem;
+  box-shadow: inset 0 1px 0 rgb(215 246 255 / 0.05), 0 1.2rem 3rem rgb(0 0 0 / 0.32);
+}
+
+.jcc-presenter header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.jcc-presenter header h2 {
+  margin: 0;
+  flex: 1;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.jcc-presenter header button {
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.jcc-presenter__spoken {
+  margin: 0.45rem 0 0.7rem;
+  color: var(--ice);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.jcc-presenter__sections,
+.jcc-presenter__cards,
+.jcc-presenter__evidence,
+.jcc-presenter__actions {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0 0 0.7rem;
+  padding: 0;
+}
+
+.jcc-presenter__section,
+.jcc-presenter__cards li,
+.jcc-presenter__evidence li,
+.jcc-presenter__actions li {
+  list-style: none;
+  border: 1px solid rgb(125 211 252 / 0.08);
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  background: rgb(7 20 32 / 0.45);
+}
+
+.jcc-presenter__section.is-focused,
+.jcc-presenter__cards li.is-focused,
+.jcc-presenter__evidence li.is-focused,
+.jcc-presenter__actions li.is-focused {
+  border-color: rgb(125 211 252 / 0.45);
+  box-shadow: 0 0 0 1px rgb(125 211 252 / 0.18);
+}
+
+.jcc-presenter__section h3 {
+  margin: 0 0 0.28rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.jcc-presenter__section p,
+.jcc-presenter__cards span {
+  margin: 0;
+  color: #bfe0ee;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.jcc-presenter__follows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.jcc-presenter__follows button,
+.jcc-briefing-open {
+  border: 1px solid rgb(125 211 252 / 0.18);
+  background: rgb(125 211 252 / 0.08);
+  color: var(--ice);
+  border-radius: 999px;
+  padding: 0.22rem 0.62rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.jcc-briefing-open {
+  margin-top: 0.45rem;
+}
+
+.jcc-presenter__tables {
+  overflow: auto;
+  margin: 0 0 0.7rem;
+}
+
+.jcc-presenter__tables table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+}
+
+.jcc-presenter__tables th,
+.jcc-presenter__tables td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.28rem 0.35rem;
+  text-align: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jcc-presenter__section.is-focused,
+  .jcc-presenter__cards li.is-focused,
+  .jcc-presenter__evidence li.is-focused {
+    box-shadow: none;
+  }
+}
+
 .jcc-float header {
   display: flex;
   align-items: center;

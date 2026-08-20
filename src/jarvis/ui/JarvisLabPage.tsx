@@ -10,6 +10,8 @@ import {
 import { BrowserMicrophoneInput } from './browserMicrophone';
 import JarvisCoreVisual from './JarvisCoreVisual';
 import CommandCenterPanels from './CommandCenterPanels';
+import PresenterBriefing from './PresenterBriefing';
+import type { PlannedPresentation } from '../presentation/briefing/types';
 import { acceptSseSeq } from './operationsView';
 import { graphCategoriesOf, graphCategoryColor, type GraphSnapshot } from './graph/graphTypes';
 import { shortestGraphPath } from './graph/graphLayout';
@@ -118,6 +120,13 @@ type LabStatus = {
     documentCount?: number;
     indexStatus?: string;
   };
+  presence?: {
+    hostKind: string;
+    windowAvailable: boolean;
+    canMoveWindow: boolean;
+    reportedAt?: string;
+    bounds?: { x: number; y: number; width: number; height: number };
+  };
 };
 
 type LabAskResponse = {
@@ -143,6 +152,7 @@ type LabAskResponse = {
   route?: { route: string; socialAction: string; agentic: boolean; reason: string };
   taskId?: string;
   workOutcome?: { outcome: string; text: string };
+  briefing?: PlannedPresentation;
   pendingConfirmation?: LabPendingConfirmation;
   coreState: string;
   presentation?: LabStatus['presentation'];
@@ -264,6 +274,9 @@ export default function JarvisLabPage() {
   const [toolPanelOpen, setToolPanelOpen] = useState(false);
   const [commandCenter, setCommandCenter] = useState<CommandCenterClientSnapshot | null>(null);
   const [opsBusy, setOpsBusy] = useState(false);
+  const [viewMode, setViewMode] = useState<'core' | 'graph' | 'presenter'>('core');
+  const [briefing, setBriefing] = useState<PlannedPresentation | undefined>(undefined);
+  const [spokenAtMs, setSpokenAtMs] = useState(0);
 
   const askForm = useRef<HTMLFormElement>(null);
   const askField = useRef<HTMLTextAreaElement>(null);
@@ -711,6 +724,7 @@ export default function JarvisLabPage() {
       const payload = await reply.json() as LabAskResponse & { error?: string };
       if (!reply.ok) throw new Error(payload.error || 'Confirmation failed.');
       setResponse(payload);
+      if (payload.briefing) setBriefing(payload.briefing);
       setPendingConfirmation(payload.pendingConfirmation ?? null);
       if (payload.speech) playSpeech(payload.speech, payload.speech.turnId);
       setToolPanelOpen(true);
@@ -839,6 +853,7 @@ export default function JarvisLabPage() {
       setLatencyMs(performance.now() - started);
       setDraftText(null);
       setResponse(payload);
+      if (payload.briefing) setBriefing(payload.briefing);
       if (payload.research) setResearch(payload.research);
       setPendingConfirmation(payload.pendingConfirmation ?? null);
       setTurnTimings({
@@ -1101,7 +1116,44 @@ export default function JarvisLabPage() {
   const fireCamera = (kind: CameraAction['kind']) => {
     cameraSeq.current += 1;
     setCameraAction({ seq: cameraSeq.current, kind });
+    if (kind === 'presenter') setViewMode('presenter');
+    if (kind === 'core') setViewMode('core');
+    if (kind === 'graph') setViewMode('graph');
   };
+
+  useEffect(() => {
+    const report = () => {
+      void fetch('/api/jarvis/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenX: window.screenX,
+          screenY: window.screenY,
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+          availWidth: window.screen.availWidth,
+          availHeight: window.screen.availHeight,
+          screenWidth: window.screen.width,
+          screenHeight: window.screen.height,
+        }),
+      }).catch(() => undefined);
+    };
+    report();
+    window.addEventListener('resize', report);
+    return () => window.removeEventListener('resize', report);
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== 'presenter' || !briefing || briefing.density === 'plain' || reducedMotion) {
+      setSpokenAtMs(0);
+      return;
+    }
+    const started = performance.now();
+    const timer = window.setInterval(() => {
+      setSpokenAtMs(performance.now() - started);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [viewMode, briefing, reducedMotion]);
 
   const setQuality = (mode: QualityMode) => {
     setQualityMode(mode);
@@ -1452,8 +1504,9 @@ export default function JarvisLabPage() {
           <section className="jcc-center">
             <div className="jcc-camera" role="group" aria-label="Camera and quality">
               <button type="button" onClick={() => fireCamera('fit')}>Fit</button>
-              <button type="button" onClick={() => fireCamera('core')}>Core</button>
-              <button type="button" onClick={() => fireCamera('graph')}>Graph</button>
+              <button type="button" aria-pressed={viewMode === 'core'} onClick={() => fireCamera('core')}>Core</button>
+              <button type="button" aria-pressed={viewMode === 'graph'} onClick={() => fireCamera('graph')}>Graph</button>
+              <button type="button" aria-pressed={viewMode === 'presenter'} onClick={() => fireCamera('presenter')}>Presenter</button>
               <button type="button" onClick={() => fireCamera('reset')}>Reset</button>
               <span className="jcc-camera__divider" aria-hidden="true" />
               {(['auto', 'high', 'balanced', 'minimal', '2d'] as const).map(mode => (
@@ -1468,6 +1521,21 @@ export default function JarvisLabPage() {
                 </button>
               ))}
             </div>
+            {status?.presence ? (
+              <p className="jcc-presence" role="status">
+                {status.presence.hostKind}
+                {status.presence.windowAvailable ? ' · window reported' : ' · window unknown'}
+                {status.presence.canMoveWindow ? ' · native move ready' : ' · browser host cannot move this tab'}
+              </p>
+            ) : null}
+
+            <PresenterBriefing
+              briefing={briefing}
+              open={viewMode === 'presenter'}
+              spokenAtMs={spokenAtMs}
+              onClose={() => fireCamera('core')}
+              onBriefingChange={setBriefing}
+            />
 
             <div className="jcc-float jcc-float--evidence" data-open={evidenceOpen && memoryRefs.length > 0 ? 'true' : 'false'}>
               <header>
@@ -1526,6 +1594,11 @@ export default function JarvisLabPage() {
                     </p>
                   ) : response?.route ? (
                     <p className="jcc-hint">Route {response.route.route} · {response.route.socialAction}</p>
+                  ) : null}
+                  {briefing && briefing.density !== 'plain' && viewMode !== 'presenter' ? (
+                    <button type="button" className="jcc-briefing-open" onClick={() => fireCamera('presenter')}>
+                      Open briefing
+                    </button>
                   ) : null}
                 </>
               ) : (

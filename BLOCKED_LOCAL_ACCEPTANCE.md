@@ -355,6 +355,58 @@ LA-023 → LA-024 → LA-025.
 - Expected: owner visual check. Cloud unit tests are not live QA.
 - Failure evidence: screenshots, present() JSON.
 
+## LA-026 Presenter Mode briefing on `/jarvis-lab`
+
+- Status: **IMPLEMENTED_NEEDS_LIVE_VERIFY**
+- Purpose: Prove rich results render as a Presenter briefing with spoken
+  summary, focus cues, follow-ups, and reduced-motion behavior. Do not start
+  LA-003+ (Whonix / private browser) for this item.
+- Preconditions: local dashboard on loopback; optional Speak toggle; a
+  research or system-status turn that the planner marks rich/briefing.
+- Exact verification:
+  1. Presenter Mode basic rendering: after a research/comparison/report turn,
+     click **Presenter** or **Open briefing**. Executive summary, cards,
+     evidence, limits, and follow-up chips appear. Greetings stay lightweight.
+  2. Spoken summary: with Speak on, TTS uses `spokenSummary`, not the raw
+     full answer. Typed Speak stays default off.
+  3. Focus/highlight motion: section/card focus cues advance with segment
+     timing. No fake data animations or invented citations.
+  4. Reduced-motion: `prefers-reduced-motion: reduce` skips pulse/zoom and
+     uses instant/no animation. Core hidden-tab pause still applies.
+- Expected: no chain-of-thought / scratchpad / confirm tokens in the panel
+  or traces. Presentation never invokes tools.
+- Failure evidence: `/api/jarvis/ask` JSON `briefing`, screenshots, Speak
+  payload text.
+
+## LA-027 Desktop presence and Jarvis-window move
+
+- Status: **IMPLEMENTED_NEEDS_LIVE_VERIFY** / **BLOCKED_LOCAL_ACCEPTANCE**
+  for native window move on the browser host.
+- Purpose: Honest multi-monitor awareness and Jarvis-window-only movement.
+- Preconditions: Windows host; `/jarvis-lab` open; optional
+  `config/jarvis/displays.json` copied from `displays.example.json` for
+  owner-named notebook/external labels. Native helper or Electron adapter
+  required to actually move the window. The Express + React dashboard cannot
+  move Chrome/Edge.
+- Exact verification:
+  1. Display enumeration: `desktop.listDisplays` or “มีกี่จอ” lists attached
+     screens or returns `UNSUPPORTED_HOST` / empty honestly.
+  2. Identify current display: `desktop.getJarvisWindow` after the lab POST
+     `/api/jarvis/presence` reports which display the tab bounds sit on.
+  3. Move Jarvis window to another display: confirm
+     `desktop.moveJarvisWindow`. Browser host must report
+     `UNSUPPORTED_HOST` (not a fake success). Native helper may report
+     `moved`.
+  4. Restore to original display: `desktop.setJarvisLayout` `restore` after a
+     successful native move, or honest `WINDOW_UNAVAILABLE`.
+  5. Presenter mode on the second monitor: layout `presenter` + external
+     selector. Browser host fail-closed; native helper may place the Jarvis
+     window on that display.
+- Expected: other apps are never targeted. `hwnd` / `processName` /
+  `windowTitle` rejected. Confirm tokens never persist to work.db/ops.db.
+- Failure evidence: capability JSON `reasonCode`, presence status
+  `canMoveWindow`, confirmation prompt.
+
 ---
 
 ## Cloud-prepared but not live

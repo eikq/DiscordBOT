@@ -14,6 +14,7 @@ import { RESEARCH_COMPARE, RESEARCH_CURRENT, RESEARCH_PRIVATE_BROWSE } from '../
 import { WORKSPACE_COMPARE, WORKSPACE_CURRENT, WORKSPACE_GET, WORKSPACE_SEARCH } from '../workspace/constants';
 import { REMINDERS_CANCEL, REMINDERS_LIST, REMINDERS_RESCHEDULE } from '../automation/constants';
 import { classifyActionability, isTalkingAboutTopic, shouldTreatAsForbiddenRequest } from './classify';
+import { inferDesktopPresenceIntent } from '../desktop/intent';
 import { catalogHas } from './catalog';
 import { newClarificationId } from './context';
 import type { CompactCapability, IntentResolution, InteractionContext } from './types';
@@ -46,6 +47,14 @@ export function heuristicResolve(
   const actionClass = classifyActionability(raw);
   if (shouldTreatAsForbiddenRequest(raw)) {
     return forbidden('FORBIDDEN_REQUEST', 'ทำรายการนี้ไม่ได้ครับ');
+  }
+
+  const desktopPresence = inferDesktopPresenceIntent(raw);
+  if (desktopPresence.kind === 'clarify') {
+    return clarification(raw, desktopPresence.question, [], desktopPresence.reasonCode);
+  }
+  if (desktopPresence.kind === 'action' && catalogHas(options.catalog, desktopPresence.capabilityId)) {
+    return capability(desktopPresence.capabilityId, desktopPresence.arguments, desktopPresence.reasonCode, 'HIGH', true);
   }
 
   const fromClarification = resolveClarificationAnswer(raw, options.context, options.catalog);

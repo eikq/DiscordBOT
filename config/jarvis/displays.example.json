@@ -1,0 +1,14 @@
+{
+  "displays": [
+    {
+      "id": "\\\\.\\DISPLAY1",
+      "name": "notebook",
+      "aliases": ["laptop", "จอโน้ตบุ๊ก"]
+    },
+    {
+      "id": "\\\\.\\DISPLAY2",
+      "name": "external",
+      "aliases": ["studio", "จอภายนอก"]
+    }
+  ]
+}

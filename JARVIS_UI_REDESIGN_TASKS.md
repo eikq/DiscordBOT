@@ -83,7 +83,8 @@ Real Three.js/R3F Jarvis Core on `/jarvis-lab`:
 - interactive memory knowledge graph from the real SQLite store (`/api/jarvis/memory/graph`), instanced nodes, curved edges, hover/click/Shift-click path, search/filters/inspector
 - state-driven moods for idle/listening/transcribing/thinking/memory/tool/responding/speaking/degraded/error (+ night-agent violet tint)
 - memory pulses and tool arcs fired only from real turn evidence (PulseBus)
-- camera: OrbitControls drag/wheel/pinch + FIT/CORE/GRAPH/RESET eased presets
+- camera: OrbitControls drag/wheel/pinch + FIT/CORE/GRAPH/PRESENTER/RESET eased presets
+- Presenter Mode (2026-08-20): briefing panel on the existing `/jarvis-lab` command center (not a separate app). Rich turns can open a structured briefing; greetings stay plain. Quality `minimal`/`2d` still cover the Minimal view. Live visual QA of Presenter is LA-026.
 - quality: auto/high/balanced/minimal + explicit 2D mode; FPS auto-step; DPR caps; `prefers-reduced-motion`; hidden-tab pause; WebGL-lost fallback to the CSS core (kept in `JarvisCoreVisual`)
 - ops rails: real system health (`/api/jarvis/system`), model status, voice/STT, night agent (`/api/jarvis/night`)
 

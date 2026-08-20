@@ -65,6 +65,12 @@ import type {
 } from '../presentation/types';
 import { FileBehaviorPersonaProvider } from '../presentation/filePersonaProvider';
 import { FactPreservingPresentationEngine } from '../presentation/PresentationEngine';
+import {
+  runPresentationPipeline,
+  spokenTextFor,
+  type PlannedPresentation,
+} from '../presentation/briefing';
+import { sharedJarvisPresenceStore, type ClientWindowReport } from '../desktop';
 import { StandalonePresentationSessions } from '../presentation/standaloneSession';
 import { ProbeVoiceProfileResolver } from '../presentation/voiceAvailability';
 import { RouterVoiceResolver, StandaloneVoiceRouter } from '../speech';
@@ -170,6 +176,13 @@ export type JarvisLabStatus = {
     available: boolean;
     reasonCode: string;
     detail: string;
+  };
+  presence?: {
+    hostKind: 'browser' | 'electron' | 'native-helper' | 'test';
+    windowAvailable: boolean;
+    canMoveWindow: boolean;
+    reportedAt?: string;
+    bounds?: { x: number; y: number; width: number; height: number };
   };
 };
 
@@ -330,6 +343,31 @@ export class JarvisLabRuntime {
         summary: item.summary,
         level: item.level,
       })),
+      presence: this.presenceStatus(),
+    };
+  }
+
+  public reportPresence(report: ClientWindowReport): ReturnType<JarvisLabRuntime['presenceStatus']> {
+    sharedJarvisPresenceStore().reportClientWindow(report);
+    return this.presenceStatus();
+  }
+
+  public presenceStatus(): NonNullable<JarvisLabStatus['presence']> {
+    const report = sharedJarvisPresenceStore().currentReport();
+    const electron = typeof process.versions.electron === 'string';
+    return {
+      hostKind: electron ? 'electron' : 'browser',
+      windowAvailable: Boolean(report),
+      canMoveWindow: false,
+      ...(report?.reportedAt ? { reportedAt: report.reportedAt } : {}),
+      ...(report ? {
+        bounds: {
+          x: report.screenX,
+          y: report.screenY,
+          width: report.outerWidth,
+          height: report.outerHeight,
+        },
+      } : {}),
     };
   }
 
@@ -549,6 +587,7 @@ export class JarvisLabRuntime {
     taskId?: string;
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
+    briefing?: PlannedPresentation;
   }> {
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
@@ -561,7 +600,13 @@ export class JarvisLabRuntime {
     });
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
-    const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak);
+    const briefing = this.buildBriefing({
+      text: input.text,
+      replyText: adjusted.presented.text,
+      route,
+      capabilityId: prepared.resolution.capabilityId,
+    });
+    const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak, briefing);
     this.observeAskTurn(input, prepared.sessionId, route, adjusted);
     return {
       ...adjusted,
@@ -572,6 +617,7 @@ export class JarvisLabRuntime {
       intent: prepared.intent,
       route,
       affectStyle: this.workCenter()?.affect.style(),
+      briefing,
       ...(speech ? { speech } : {}),
     };
   }
@@ -587,6 +633,7 @@ export class JarvisLabRuntime {
     taskId?: string;
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
+    briefing?: PlannedPresentation;
   }> {
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
@@ -604,6 +651,12 @@ export class JarvisLabRuntime {
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     this.observeAskTurn(input, prepared.sessionId, route, adjusted);
+    const briefing = this.buildBriefing({
+      text: input.text,
+      replyText: adjusted.presented.text,
+      route,
+      capabilityId: prepared.resolution.capabilityId,
+    });
     const finalPayload = {
       ...adjusted,
       coreState: 'complete' as const,
@@ -613,9 +666,10 @@ export class JarvisLabRuntime {
       intent: prepared.intent,
       route,
       affectStyle: this.workCenter()?.affect.style(),
+      briefing,
     };
     emit({ type: 'final', payload: finalPayload });
-    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
+    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak, briefing);
     if (speech) emit({ type: 'speech', payload: speech });
     return { ...finalPayload, ...(speech ? { speech } : {}) };
   }
@@ -793,7 +847,14 @@ export class JarvisLabRuntime {
     };
     const presentation = this.sessions.resolveTurn(sessionId);
     const presented = await this.engine.render(result, presentation, { sessionId });
-    const speech = await this.maybeSpeak(synthesis.text, request.requestId, presented.voiceProfileId, input.speak);
+    const briefing = this.buildBriefing({
+      text: input.text || task.objective,
+      replyText: synthesis.text,
+      route,
+      capabilityId: waiting?.capability || task.toolResults[0]?.capability,
+      workOutcome: synthesis,
+    });
+    const speech = await this.maybeSpeak(synthesis.text, request.requestId, presented.voiceProfileId, input.speak, briefing);
     return {
       request,
       result,
@@ -813,6 +874,7 @@ export class JarvisLabRuntime {
       taskId: task.id,
       workOutcome: synthesis,
       affectStyle: this.workCenter()?.affect.style(),
+      briefing,
       ...(speech ? { speech } : {}),
       ...(waiting?.pendingConfirmation ? {
         pendingConfirmation: {
@@ -835,11 +897,52 @@ export class JarvisLabRuntime {
     turnId: string,
     voiceProfileId: string,
     speak?: boolean,
+    briefing?: PlannedPresentation,
   ): Promise<VoiceOutputResult | undefined> {
     if (!speak || !this.speech) return undefined;
-    return await this.speech.speak(text, this.speech.resolveProfile(voiceProfileId), {
+    const spoken = briefing ? spokenTextFor(briefing, text) : text;
+    return await this.speech.speak(spoken, this.speech.resolveProfile(voiceProfileId), {
       turnId,
-      text,
+      text: spoken,
+    });
+  }
+
+  private buildBriefing(input: {
+    text: string;
+    replyText: string;
+    route?: RouteDecision;
+    capabilityId?: string;
+    workOutcome?: SynthesizedTaskResponse;
+  }): PlannedPresentation {
+    const research = this.researchSnapshot();
+    const presence = this.presenceStatus();
+    return runPresentationPipeline({
+      text: input.text,
+      replyText: input.replyText,
+      route: input.route?.route,
+      capabilityId: input.capabilityId,
+      workOutcome: input.workOutcome,
+      research: research.last ? {
+        query: research.last.query,
+        synthesis: research.last.synthesis,
+        sources: research.last.sources.map(item => ({
+          sourceId: item.sourceId,
+          title: item.title,
+          url: item.url,
+          domain: item.domain,
+        })),
+        evidence: research.last.evidence.map(item => ({
+          evidenceId: item.evidenceId,
+          claim: item.claim,
+          sourceId: item.sourceId,
+        })),
+        uncertainty: research.last.uncertainty,
+        disagreements: research.last.disagreements,
+      } : undefined,
+      displays: input.capabilityId?.startsWith('desktop.') ? {
+        hostKind: presence.hostKind,
+        reason: presence.canMoveWindow ? undefined : 'Browser host cannot move the Jarvis window.',
+      } : undefined,
     });
   }
 

@@ -83,6 +83,12 @@ export {
   DESKTOP_OPEN_PROJECT,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_FOCUS_JARVIS_WINDOW,
+  DESKTOP_GET_JARVIS_WINDOW,
+  DESKTOP_LIST_DISPLAYS,
+  DESKTOP_MOVE_JARVIS_WINDOW,
+  DESKTOP_SET_JARVIS_LAYOUT,
+  DESKTOP_SET_JARVIS_WINDOW_BOUNDS,
   SYSTEM_STATUS,
   JARVIS_RUNTIME_STATUS,
   JARVIS_START_SERVICE,
@@ -139,6 +145,18 @@ export {
   ELEMISU_VOICE_ID,
 } from './presentation/types';
 export type { PresentationEngine } from './presentation/PresentationEngine';
+export {
+  applyBriefingFollowUp,
+  buildMotionTimeline,
+  estimateNarrationMs,
+  FORBIDDEN_PRESENTATION_KEYS,
+  planPresentation,
+  presentationHasForbiddenKeys,
+  runPresentationPipeline,
+  sanitizePlannedPresentation,
+  spokenTextFor,
+} from './presentation/briefing';
+export type { PlannedPresentation, PresentationModel } from './presentation/briefing';
 export { FactPreservingPresentationEngine } from './presentation/PresentationEngine';
 export { FileBehaviorPersonaProvider } from './presentation/filePersonaProvider';
 export { StandalonePresentationSessions } from './presentation/standaloneSession';
@@ -259,6 +277,11 @@ export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } f
 export type { CommandCenterSnapshot } from './standalone/commandCenter';
 export type { DemoScenarioId } from './standalone/commandCenterHttp';
 export { presentCommandCenter } from './standalone/commandCenterView';
+export {
+  inferDesktopPresenceIntent,
+  JarvisPresenceStore,
+  sharedJarvisPresenceStore,
+} from './desktop';
 export type { CommandCenterClientSnapshot } from './standalone/commandCenterView';
 export {
   parseDemoScenario,

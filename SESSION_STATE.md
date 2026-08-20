@@ -3,7 +3,21 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — LA-001 / LA-002 close pass
+## This turn — Presentation Mode + desktop presence
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** not claimed
+(LA-026/LA-027). No merge. Not pushed.
+
+Branch: `local/jarvis-acceptance-2026-08-20`.
+Presentation briefing pipeline + Presenter Mode on existing `/jarvis-lab`.
+Desktop presence capabilities are Jarvis-window-only and fail closed on the
+Express + React browser host (`UNSUPPORTED_HOST` unless a native helper is
+injected). Typed Speak stays default off. Presentation never invokes tools.
+
+Verification: targeted briefing+desktop **19/19**; `npx tsc --noEmit` PASS;
+`npm run test:cloud` **496/496** (was 477). No Discord / Whonix / CCTV.
+
+## Previous — LA-001 / LA-002 close pass
 
 Labels: **LIVE_VERIFIED** for LA-001 and LA-002 agent-browser QA.
 LA-002 is **not OWNER_VERIFIED** (LA-013). No merge. Not pushed.

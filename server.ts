@@ -17,6 +17,7 @@ import { MemoryGraphAdapter, emptyMemoryGraph, type MemoryGraphSnapshot } from "
 import { nightAgentSnapshot, systemHealthSnapshot } from "./src/jarvis/standalone/labSystem";
 import { assertLocalMutationRequest, enforceLoopbackBindHost } from "./src/jarvis/standalone/localMutationGuard";
 import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants";
+import { parseClientWindowReport } from "./src/jarvis/desktop";
 import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
 import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
 import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
@@ -1194,6 +1195,23 @@ async function startServer() {
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }
+  });
+  app.get('/api/jarvis/presence', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    return res.json(jarvisLab.presenceStatus());
+  });
+  app.post('/api/jarvis/presence', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    const parsed = parseClientWindowReport(req.body);
+    if (parsed.ok === false) {
+      return res.status(400).json({ error: 'Invalid presence report.', reasonCode: parsed.reasonCode });
+    }
+    return res.json(jarvisLab.reportPresence(parsed.value));
   });
   app.get('/api/jarvis/reminders', (_req, res) => {
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {

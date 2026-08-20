@@ -38,7 +38,7 @@ export type CoreSceneLayers = {
   tools: boolean;
 };
 
-export type CameraAction = { seq: number; kind: 'fit' | 'core' | 'graph' | 'reset' };
+export type CameraAction = { seq: number; kind: 'fit' | 'core' | 'graph' | 'reset' | 'presenter' };
 
 export type ToolOrbitItem = {
   id: string;
@@ -1835,11 +1835,13 @@ const CAMERA_PRESETS: Record<CameraAction['kind'], { position: [number, number, 
   core: { position: [0, 0.3, 13.8], target: [0, 0.18, 0] },
   graph: { position: [26, 14, 44], target: [0, 1.6, 0] },
   fit: { position: [0, 16, 64], target: [0, 0, 0] },
+  presenter: { position: [0, 1.2, 11.4], target: [0, 0.4, 0] },
 };
 
 const COMPACT_CAMERA_PRESETS: Partial<typeof CAMERA_PRESETS> = {
   reset: { position: [0, 0.9, 20.5], target: [0, 0.3, 0] },
   core: { position: [0, 0.7, 15.2], target: [0, 0.28, 0] },
+  presenter: { position: [0, 1.4, 14.2], target: [0, 0.35, 0] },
 };
 
 function CameraRig({ action, focusPosition, reducedMotion, compact }: {
