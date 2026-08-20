@@ -9,6 +9,7 @@ Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
 PRIVATE_BROWSER remains fail-closed. Whonix/Tor **LOCAL_VERIFY_REQUIRED**.
 
 Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+HEAD: `d02f40155aa1521cefbf24fc05aac605310462de`
 Implementation: `66b4772`
 Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
 Evidence: `npx tsc --noEmit` PASS; `tests/jarvis_research_v2.test.ts` +

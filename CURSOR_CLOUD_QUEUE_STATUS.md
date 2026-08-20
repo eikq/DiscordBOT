@@ -44,7 +44,7 @@ Handoff: `CURSOR_CLOUD_PRESENTER_DESKTOP_HANDOFF.md`.
 
 Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
 
-Queue 02 HEAD: pin after this docs commit; continue from latest pushed HEAD.
+Queue 02 HEAD: `d02f40155aa1521cefbf24fc05aac605310462de`
 
 Structured query planning, depth budgets (NONE never hits providers),
 source trustClass metadata, dedup with provenance, claim/evidence
