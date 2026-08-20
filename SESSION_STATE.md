@@ -19,7 +19,7 @@ Follow-up after the ask-router / ActionGate pass (`8945da3`):
 - Command Center client snapshot now includes `permission.taskId/stepId/proposalId` and registry-only model-adaptation counts. Grant once posts those ids. SSE skips `seq <= lastSeq`.
 - Affect may suppress casual slang when formal; it cannot authorize and cannot drop immutable facts.
 
-Verification this turn: targeted suite **119/119**; `npx tsc --noEmit` PASS. Full `npm run test:cloud` recorded after push. Browser visual QA not run (no browser MCP).
+Verification this turn: targeted suite **119/119**; `npx tsc --noEmit` PASS; `npm run test:cloud` **457/457**. Browser visual QA not run (no browser MCP).
 
 ## Previous — cloud finalization (ask router, ActionGate handshake, one evolution loop)
 
