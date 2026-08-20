@@ -3,7 +3,28 @@
 Updated: 2026-08-20
 Agent/model: Cursor Grok 4.6
 
-## This turn — Queue 05 Model Registry, Certification, Routing and Efficiency
+## This turn — Queue 06 Realtime Voice Interaction Architecture
+
+Labels: IMPLEMENTED + UNIT_VERIFIED. Not LIVE_VERIFIED.
+Do not claim microphone / STT / TTS / RVC live verification.
+SQLite remains canonical. Qdrant is not started.
+
+Canonical branch: `cursor/jarvis-cloud-evolution-2026-08-20`
+Implementation: `7d3a69008bff41947105c516b16ba7d74d5987c4`
+Feat: `b8e4f4a9ae00feecfac913e1fa8612cd15e7c549`
+Queue status: `CURSOR_CLOUD_QUEUE_STATUS.md`.
+ADR: ADR-028.
+Evidence: `npx tsc --noEmit` PASS;
+`tests/jarvis_realtime_voice.test.ts` **13/13**. Full
+`npm run test:cloud` deferred while later Cloud follow-ups are queued.
+
+NightCycle on Command Center now pauses for `realtime_voice`. Mutating
+WorkAgent apply is not cancelled by barge-in. Persona remains
+independent from voice.
+
+Do not merge. Do not mark LIVE_VERIFIED. STOP after this queue.
+
+## Previous — Queue 05 Model Registry, Certification, Routing and Efficiency
 
 Labels: IMPLEMENTED + CLOUD_VERIFIED (unit). Not LIVE_VERIFIED.
 RESTRICTED models are never auto-selected and never security authorities.

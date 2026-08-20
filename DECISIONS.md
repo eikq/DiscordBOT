@@ -1119,6 +1119,67 @@ models, invent tok/s, or mark certification LIVE_VERIFIED.
 - Live Ollama discovery, real latency, and GPU metrics:
   BLOCKED_LOCAL_ACCEPTANCE / NEEDS_LOCAL_VERIFY.
 
+## ADR-028 — Interruptible voice turns with one playback clock
+
+Date: 2026-08-20
+Status: **APPROVED** for cloud-safe software. Not LIVE_VERIFIED.
+Live microphone, STT, TTS, and RVC remain BLOCKED_LOCAL_ACCEPTANCE.
+
+### Context
+
+Queue 06 needed a transport-agnostic path for natural barge-in:
+
+listen → detect speech → STT → route → think/work → begin response →
+TTS → owner interruption → cancel/adjust → continue.
+
+Existing lab speech used JF-008 `SpeechTurnController` (busy=`reject`)
+and a Presenter estimate interval that already yielded to
+`audio.ontimeupdate` while speaking. There was no explicit turn FSM,
+no interruption kind, and NightCycle on Command Center had no resource
+callback, so background evolution did not pause for lab voice.
+
+### Decision
+
+- Voice turns are an explicit state machine: IDLE, LISTENING,
+  TRANSCRIBING, THINKING, WORKING, SPEAKING, INTERRUPTED,
+  WAITING_OWNER, ERROR. Illegal transitions throw `PLAN_INVALID`.
+- Barge-in classifies the owner utterance as question, correction,
+  stop, or new_command. Playback may cancel. Task state is preserved.
+- Mutating WorkAgent work (running/retrying `apply` with
+  `riskLevel !== 'LOW'`) is never paused or cancelled by barge-in.
+  `WorkAgent.pause` aborts the task controller; that is unsafe for
+  in-flight mutating apply.
+- Conversation/information may begin presenting before every UI detail
+  is complete. Agentic actions must not set `claimSuccess` until the
+  task is COMPLETED, outcome success, and verification passed.
+- Presenter narration and TTS share one `PlaybackClock`. Speech elapsed
+  is authoritative while speaking. Estimated duration is bootstrap only.
+- Scheduler signal only: `realtime_voice` > `owner_task` >
+  `background_evolution`. Command Center NightCycle reads
+  `voice.resourcePriority()`. No OS/process priority changes.
+- Persona and voice remain independent selections. Presentation style
+  cannot grant capability authority.
+- Cloud STT/TTS ports are mocks. Do not persist raw audio. Do not claim
+  microphone/STT/TTS/RVC live verification.
+
+### Alternatives considered
+
+- Blindly cancelling the active WorkAgent task on barge-in — rejected
+  (mutating apply must keep running).
+- Overlapping STT while the JF-008 pipeline is busy — rejected (busy
+  policy stays `reject`; barge-in is a higher-level session concern).
+- Independent Presenter estimate timer while speaking — rejected
+  (one authoritative timeline).
+- Changing OS niceness / process priority — rejected.
+
+### Consequences
+
+- Cloud: IMPLEMENTED + UNIT_VERIFIED (`tests/jarvis_realtime_voice.test.ts`
+  13/13; `npx tsc --noEmit` PASS). Not LIVE_VERIFIED.
+- Live mic/STT/TTS/RVC and speech↔motion: BLOCKED_LOCAL_ACCEPTANCE /
+  NEEDS_LOCAL_VERIFY (LA-026 stays PARTIAL).
+
+
 
 
 

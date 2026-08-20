@@ -154,6 +154,40 @@ Cloud evidence: `npx tsc --noEmit` PASS; targeted
 
 Handoff: ADR-027, `tests/jarvis_models_v2.test.ts`.
 
+## Queue 06 — Realtime Voice Interaction Architecture
+
+Status: **COMPLETE** (cloud-safe software). Not LIVE_VERIFIED.
+Microphone / STT / TTS / RVC live verification is **not** claimed.
+
+Implementation: `7d3a69008bff41947105c516b16ba7d74d5987c4`
+(feat `b8e4f4a9ae00feecfac913e1fa8612cd15e7c549`)
+
+Explicit turn states: IDLE, LISTENING, TRANSCRIBING, THINKING,
+WORKING, SPEAKING, INTERRUPTED, WAITING_OWNER, ERROR.
+
+Shipped:
+
+- `src/jarvis/realtime/` coordinator with mockable STT/TTS ports
+- Barge-in classification: question / correction / stop / new_command
+- Mutating WorkAgent apply (risk !== LOW, running/retrying) is never
+  paused or cancelled by barge-in; playback may stop
+- Streaming: CONVERSATION/INFORMATION may present early with
+  `claimSuccess: false`; agentic success only after verified COMPLETED
+- One Presenter playback clock; estimate timer is ignored while speech
+  is the authority (no independent fake timer)
+- Resource signals: realtime_voice > owner_task > background_evolution
+  (NightCycle callback on Command Center). No OS/process priority hacks
+- Persona and voice stay independent; style is not capability authority
+- Default `RECORD_RAW_AUDIO=false` unchanged; mocks do not persist PCM
+
+Cloud evidence: `npx tsc --noEmit` PASS; targeted
+`tests/jarvis_realtime_voice.test.ts` **13/13**. Related speech / STT /
+briefing / work-agent / evolution / command-center tests stayed green
+after the Thai correction-boundary fix. Full `npm run test:cloud` is
+deferred while later Cloud follow-ups are queued.
+
+Handoff: ADR-028, `tests/jarvis_realtime_voice.test.ts`.
+
 ## Operating constraints still in force
 
 - LLM output ≠ execution

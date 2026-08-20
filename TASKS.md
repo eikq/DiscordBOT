@@ -23,7 +23,7 @@ Current priority: standalone Jarvis first (`JARVIS_FIRST_TASKS.md`). Discord fea
 - `UI-R1`–`UI-R8` `/jarvis-lab` command center — DONE (CSS/SVG; live lab UI verified)
 - `JF-008` standalone microphone/STT — DONE (unit-tested + live lab mic verified 2026-08-19; not speech-output)
 - `JF-008B` standalone conversation latency + STT hardening — DONE (unit-tested + live typed-turn timings 2026-08-19)
-- `JF-009` standalone local speech — DONE (unit-tested + live typed native Edge-TTS 2026-08-19; clone live speech not verified; browser speaker start not measured)
+- `JF-009` standalone local speech — DONE (unit-tested + live typed native Edge-TTS 2026-08-19; clone live speech not verified; browser speaker start not measured). Queue 06 realtime turn FSM / barge-in / playback clock: IMPLEMENTED + UNIT_VERIFIED (mocks only; not live mic/STT/TTS/RVC)
 - `JF-010` permission/action policy — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (safe lab A–F). Owner product sign-off still optional.
 - `JF-011` runtime + system capability pack — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–J; stop/restart confirmed-only, ollama not stopped). Owner product sign-off still optional.
 - `JF-012` reminders + scheduler — IMPLEMENTED + UNIT_VERIFIED + LIVE_VERIFIED (in-process A–G + lab HTTP/UI; 45–70s real timers). Owner product sign-off still optional.
