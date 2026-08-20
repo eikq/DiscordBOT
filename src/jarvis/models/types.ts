@@ -8,11 +8,41 @@ export const ALIGNMENT_STATUSES = [
 ] as const;
 export type AlignmentStatus = (typeof ALIGNMENT_STATUSES)[number];
 
-export const EVIDENCE_STATES = ['unverified', 'fixture_only', 'locally_verified'] as const;
+/** Unknown abilities stay unknown/unverified. Never invent a pass. */
+export const EVIDENCE_STATES = [
+  'unknown',
+  'unverified',
+  'fixture_only',
+  'cloud_verified',
+  'locally_verified',
+] as const;
 export type EvidenceState = (typeof EVIDENCE_STATES)[number];
+
+export const UNKNOWN_ABILITY: EvidenceState = 'unverified';
+
+export type LatencyEvidence = {
+  source: EvidenceState;
+  p50Ms?: number;
+  p95Ms?: number;
+};
+
+export type ThroughputEvidence = {
+  source: EvidenceState;
+  tokensPerSec?: number;
+};
+
+export type HardwareRequirements = {
+  notes: string;
+  measured: boolean;
+  ramBytes?: number;
+  vramBytes?: number;
+};
 
 export type ModelProfile = {
   id: string;
+  modelId: string;
+  provider: string;
+  engine: string;
   family: string;
   engineCompatibility: string[];
   local: boolean;
@@ -26,10 +56,18 @@ export type ModelProfile = {
   thai: EvidenceState;
   coding: EvidenceState;
   agent: EvidenceState;
+  research: EvidenceState;
+  recovery: EvidenceState;
+  contextCapability: EvidenceState;
+  latencyEvidence: LatencyEvidence;
+  throughputEvidence: ThroughputEvidence;
+  hardwareRequirements: HardwareRequirements;
   resourceRequirements: string;
   trustTier: ModelTrustTier;
   alignmentStatus: AlignmentStatus;
   lastLocallyVerified: string | null;
+  certificationState: CertificationStatus | 'UNVERIFIED';
+  available: boolean;
   /** RESTRICTED specialists never become the permission system. */
   securityAuthority: false;
 };
@@ -48,7 +86,10 @@ export const CERT_CATEGORIES = [
 ] as const;
 export type CertCategory = (typeof CERT_CATEGORIES)[number];
 
-export type CertificationStatus = 'FIXTURE_ONLY' | 'BLOCKED_LOCAL_ACCEPTANCE' | 'CERTIFIED';
+/** Cloud may emit FIXTURE_ONLY or CLOUD_VERIFIED. Never LIVE_VERIFIED. */
+export type CertificationStatus = 'FIXTURE_ONLY' | 'CLOUD_VERIFIED' | 'BLOCKED_LOCAL_ACCEPTANCE' | 'CERTIFIED';
+
+export type CloudCertificationLabel = 'FIXTURE_ONLY' | 'CLOUD_VERIFIED';
 
 export type CertificationResult = {
   category: CertCategory;
@@ -63,18 +104,36 @@ export type CertificationRun = {
   modelProfileId: string;
   status: CertificationStatus;
   liveOllama: false;
+  liveVerified: false;
   results: CertificationResult[];
 };
 
+export const MODEL_WORKLOADS = [
+  'casual',
+  'information',
+  'deep_reasoning',
+  'research',
+  'coding',
+  'voice_realtime',
+  'night_background',
+  'vision',
+] as const;
+export type ModelWorkload = (typeof MODEL_WORKLOADS)[number];
+
+/** @deprecated Prefer ModelWorkload. Aliases remain for existing callers. */
 export type ModelRouteIntent =
+  | ModelWorkload
   | 'casual_chat'
-  | 'deep_reasoning'
-  | 'coding'
-  | 'voice'
-  | 'night_background';
+  | 'voice';
 
 export type HardwareRoutingHint = {
   idle?: boolean;
+  /** Only runtime-measured idle counts. Assumed idle is ignored. */
+  idleSource?: 'runtime' | 'assumed';
   ramBytes?: number;
   vramBytes?: number;
+  availableModelIds?: string[];
+  latencyBudgetMs?: number;
+  minContextTokens?: number;
+  preferredModelId?: string;
 };

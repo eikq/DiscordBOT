@@ -47,6 +47,10 @@ export type JarvisTraceRecord = {
   success?: boolean;
   /** User-visible input. Not reasoning. Combining marks must be preserved. */
   inputText?: string;
+  /** Workload class used for model routing. Observable policy, not hidden reasoning. */
+  workload?: string;
+  fallbackFrom?: string;
+  fallbackReason?: string;
 };
 
 export const FORBIDDEN_TRACE_KEYS = [

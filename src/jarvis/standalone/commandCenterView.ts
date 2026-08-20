@@ -108,7 +108,7 @@ export type CommandCenterClientSnapshot = {
   control: CommandCenterSnapshot['control'] & { autonomyLabel: string; maxAutonomyLabel: string };
   vision: { title: string; simulated: boolean; elements: number } | null;
   intelligence: {
-    traces: { count: number; lastRoute?: string; lastInput?: string };
+    traces: { count: number; lastRoute?: string; lastInput?: string; lastModelProfileId?: string; lastWorkload?: string; lastFallbackReason?: string };
     analyzer: { status: string; reason?: string; samples: number };
     runtimeSpec: { id: string; version: number };
     specCandidates: Array<{ id: string; hypothesis: string; status: string }>;
@@ -256,6 +256,9 @@ export function presentCommandCenter(
         count: snapshot.intelligence.traces.count,
         lastRoute: snapshot.intelligence.traces.recent.at(-1)?.route,
         lastInput: snapshot.intelligence.traces.recent.at(-1)?.inputText,
+        lastModelProfileId: snapshot.intelligence.traces.recent.at(-1)?.modelProfileId,
+        lastWorkload: snapshot.intelligence.traces.recent.at(-1)?.workload,
+        lastFallbackReason: snapshot.intelligence.traces.recent.at(-1)?.fallbackReason,
       },
       analyzer: {
         status: snapshot.intelligence.analyzer.status,

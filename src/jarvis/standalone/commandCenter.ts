@@ -8,7 +8,9 @@ import { synthesizeTaskResponse } from '../agent/synthesize';
 import { ArtifactWorkflow, type ArtifactTask } from '../artifacts';
 import { routeJarvisRequest, type RouteDecision } from '../intent/requestRouter';
 import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
-import { CapabilityCertificationBank, ModelProfileRegistry } from '../models';
+import { CapabilityCertificationBank, ModelProfileRegistry, routeModelProfile } from '../models';
+import type { ModelRouteDecision } from '../models/modelRouter';
+import { workloadFromRoute } from '../models/workload';
 import type { CertificationRun, ModelProfile } from '../models/types';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
 import type { CapabilityHost } from '../capabilities/types';
@@ -111,6 +113,10 @@ export type IntelligenceSnapshot = {
       inputText?: string;
       simulated?: boolean;
       success?: boolean;
+      modelProfileId?: string;
+      workload?: string;
+      fallbackFrom?: string;
+      fallbackReason?: string;
     }>;
   };
   analyzer: ReturnType<TraceAnalyzer['summarize']>;
@@ -402,6 +408,26 @@ export class CommandCenterRuntime {
     return this.traces.record(input);
   }
 
+  public routeModel(input: {
+    route: string;
+    objective?: string;
+    idle?: boolean;
+    idleSource?: 'runtime' | 'assumed';
+  }): ModelRouteDecision {
+    const spec = this.runtimeSpecs.current();
+    const idle = input.idle === true;
+    return routeModelProfile({
+      intent: workloadFromRoute(input.route, input.objective ?? ''),
+      profiles: this.models,
+      certifications: this.certifications,
+      hardware: {
+        idle,
+        idleSource: input.idleSource ?? (idle ? 'runtime' : 'assumed'),
+        preferredModelId: spec.layers.intelligence.modelProfileId,
+      },
+    });
+  }
+
   private recordTaskTrace(task: WorkTask, meta: {
     sessionId?: string;
     requestId?: string;
@@ -410,6 +436,7 @@ export class CommandCenterRuntime {
     started: number;
   }): void {
     const retries = task.plan.reduce((acc, step) => acc + (step.retryPolicy?.attempted ?? 0), 0);
+    const routed = this.routeModel({ route: meta.route, objective: task.objective });
     this.traces.record({
       requestId: meta.requestId || task.requestId,
       sessionId: meta.sessionId || task.sessionId,
@@ -431,8 +458,11 @@ export class CommandCenterRuntime {
       experienceId: `exp_task_${task.id}`,
       simulated: task.simulated,
       success: task.status === 'COMPLETED',
-      modelProfileId: this.runtimeSpecs.current().layers.intelligence.modelProfileId,
+      modelProfileId: routed.modelProfileId,
+      workload: routed.workload,
       engine: this.runtimeSpecs.current().layers.engine.interactiveProfile,
+      ...(routed.fallbackFrom ? { fallbackFrom: routed.fallbackFrom } : {}),
+      ...(routed.fallbackReason ? { fallbackReason: routed.fallbackReason } : {}),
     });
   }
 
@@ -450,6 +480,10 @@ export class CommandCenterRuntime {
           inputText: item.inputText,
           simulated: item.simulated,
           success: item.success,
+          modelProfileId: item.modelProfileId,
+          workload: item.workload,
+          fallbackFrom: item.fallbackFrom,
+          fallbackReason: item.fallbackReason,
         })),
       },
       analyzer: this.analyzer.summarize(this.traces.list(80), 'route'),

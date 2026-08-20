@@ -266,8 +266,8 @@ export {
   runExperiencePipeline,
 } from './evolution';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
-export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
-export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, realModelCertificationBlocked } from './models';
+export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure, TraceStore, TraceAnalyzer, ANALYZER_INSUFFICIENT, FORBIDDEN_TRACE_KEYS, efficiencyFromTraces, efficiencyForModel, auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './ops';
+export { ModelProfileRegistry, CapabilityCertificationBank, routeModelProfile, catalogModelProfiles, modelMayNotAuthorize, neverAutoSelectRestricted, realModelCertificationBlocked, cloudCertificationLabel, certificationIsLiveVerified, normalizeWorkload, workloadFromRoute, MODEL_WORKLOADS, CERT_CATEGORIES } from './models';
 export { ArtifactWorkflow } from './artifacts';
 export { SimulatedMediaProvider, mediaStageList, neverAutoPublish, requestPublish, MONEY_PRINTER_TURBO } from './media';
 export { THAI_COMBINING_FIXTURE } from './i18n/thaiIntegrity';

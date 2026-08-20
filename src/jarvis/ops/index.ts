@@ -20,6 +20,6 @@ export { FORBIDDEN_TRACE_KEYS } from './traceTypes';
 export type { JarvisTraceRecord, TraceCapabilityRef } from './traceTypes';
 export { traceCapabilitiesFromTurn, traceCapabilitiesFromWork } from './traceCapabilities';
 export { TraceAnalyzer, ANALYZER_INSUFFICIENT } from './traceAnalyzer';
-export { efficiencyFromTraces } from './efficiencyMetrics';
+export { efficiencyFromTraces, efficiencyForModel } from './efficiencyMetrics';
 export { auditSchedulers, scheduledJobIsNotPermission, authorizeAtExecution } from './schedulerAudit';
 export { OpsPersistence, defaultOpsDbPath } from './opsPersistence';

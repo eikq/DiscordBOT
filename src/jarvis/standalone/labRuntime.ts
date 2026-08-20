@@ -1097,6 +1097,10 @@ export class JarvisLabRuntime {
     const center = this.commandCenter;
     if (!center) return;
     const spec = center.runtimeSpecs.current();
+    const routed = center.routeModel({
+      route: route.route,
+      objective: String(input.text || ''),
+    });
     center.recordTurnTrace({
       requestId: output.request.requestId,
       sessionId,
@@ -1111,9 +1115,12 @@ export class JarvisLabRuntime {
         actionResults: output.result.actionResults,
         toolResults: output.result.toolResults,
       }),
-      modelProfileId: spec.layers.intelligence.modelProfileId,
+      modelProfileId: routed.modelProfileId,
+      workload: routed.workload,
       engine: spec.layers.engine.interactiveProfile,
       success: !(output.result.actionResults ?? []).some(item => item.status === 'failed' || item.status === 'denied'),
+      ...(routed.fallbackFrom ? { fallbackFrom: routed.fallbackFrom } : {}),
+      ...(routed.fallbackReason ? { fallbackReason: routed.fallbackReason } : {}),
     });
     center.noteLatestRequest({
       route,
