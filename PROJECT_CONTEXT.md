@@ -19,6 +19,8 @@ Natural owner objectives for the current research, workspace, basic indexed-text
 
 Declared goals that need one more owner field now use an expiring, session-bound pending-goal continuation protocol. It persists only redacted context, never authority; fills only the declared missing field; detects cancellation, explicit revision, drift, ambiguity, expiry, and cross-session reuse; rechecks current capability evidence and every Trusted Operator boundary; and resumes the same `WAITING_INPUT` WorkAgent task with bounded idempotency. The reminder fixture proves one ActionGate-approved mutation plus deterministic store re-read verification and no duplicate creation. CCTV continuation remains owner-only `PREPARE_CONTRACT`. See `docs/JARVIS_PENDING_GOAL_CONTINUATION.md`.
 
+Mutating capability execution now has one persistent execution journal. Persistence is evidence, never permission. Interrupted mutation is reconciled without blind retry; ambiguous outcomes fail closed into containment. See `docs/JARVIS_EXECUTION_JOURNAL.md`.
+
 `PROJECT_STATUS.md` and `HANDOFF.md` were last verified **2026-08-09**. They are still useful for the verified-versus-unverified boundary of the Discord/GPU loop, but they do not describe the current local model stack. Since then the default LLM moved to **Ollama + Qwen3.8 27B**, STT defaulted to **Qwen3-ASR-1.7B**, and a **read-only world-intel research layer** was added. Qwen is the current owner profile, not a Core architecture requirement; model profiles may have unknown family/size/tool metadata until evidence-backed certification exists.
 
 ---

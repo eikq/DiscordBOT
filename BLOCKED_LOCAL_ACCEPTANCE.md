@@ -234,6 +234,8 @@ LA-014 → LA-013.
 - Expected: only the fixed Jarvis-owned sandbox target changes; checkpoint
   integrity and scope validate; timeout/unknown mutation activates containment;
   owner resume/recovery remains required; Activity contains no secret input.
+  Interrupted mutation is also recorded in the persistent execution journal;
+  `CHECKPOINTED` restart must not remutate without explicit owner retry.
 - Failure evidence: `/api/jarvis/operator`, task snapshot, checkpoint state,
   redacted event sequence, sandbox target digest, and restart logs. Do not attach
   checkpoint state containing private owner data.

@@ -1,9 +1,44 @@
 ﻿# Cursor Session State
 
 Updated: 2026-08-21
-Agent/model: ChatGPT Work / Codex (cloud)
+Agent/model: Cursor Grok 4.6 (owner Windows)
+
+## This turn — Persistent execution journal recovery
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for the reconstructed journal.
+**OWNER_VERIFIED** / **LIVE_VERIFIED** are not claimed.
+
+Starting checkout: `local/jarvis-acceptance-2026-08-20` at
+`8aba6b019c436b1e636f32274607015a4dc23e38`, working tree clean. Path B: no
+unpublished GPT Work journal existed locally. `origin/work/jarvis-pending-goal-continuation`
+matched `38709c4ebe9e34c5aaa38b9cc93f902b75a1e407`. Created
+`local/jarvis-journal-recovery-2026-08-21` from that exact SHA.
+
+Local verification on this branch (2026-08-21, owner Windows):
+
+- `npx tsc --noEmit` PASS
+- `node --import tsx --test tests/jarvis_execution_journal.test.ts tests/jarvis_execution_recovery.test.ts` 28 then 29/29 after WorkAgent id sanitization
+- `npm run test:cloud` **565 / 565 PASS** (previous published baseline was 545; this branch adds journal coverage)
+- `npm run build` PASS (known Vite CoreScene chunk warning and esbuild `import.meta` CJS warning; not treated as failure)
+
+Bugs found while verifying:
+
+- `tests/jarvis_intent.test.ts` spawned live WorldIntel MCP from `createStandaloneCapabilityHost()` with default options, which kept the Node test worker alive and hung `npm run test:cloud` on Windows. Isolated the host with `worldIntel: false`.
+- WorkAgent `requestId` values contain `:`, which failed journal schema validation and made reminder continuation `FAILED` instead of `COMPLETED`. Journal operation ids are now sanitized.
+
+See `docs/JARVIS_EXECUTION_JOURNAL.md` and
+`docs/JARVIS_LOCAL_ACCEPTANCE_2026-08-21.md`.
+
+- Added `src/jarvis/executionJournal` with validated transitions, fingerprints,
+  SQLite persistence, unique idempotency, checkpoint binding, and fail-closed
+  corrupt-schema handling.
+- Wired the journal through Trusted Operator, ActionGate, and the recovery
+  sandbox. `CHECKPOINTED` no longer auto-mutates after restart.
+- Rollback remains a separate journaled operation. Model identity cannot set
+  journal state. Journal cannot grant permission or revive leases.
 
 ## This turn — Secure pending-goal continuation
+
 
 Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for cloud-safe declared-goal
 continuation. **OWNER_VERIFIED** and live owner-machine/provider verification are

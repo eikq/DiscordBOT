@@ -1116,3 +1116,41 @@ authority persistence.
   and CCTV acceptance remain `BLOCKED_LOCAL_ACCEPTANCE`.
 
 See `docs/JARVIS_PENDING_GOAL_CONTINUATION.md`.
+
+---
+
+## ADR-028 — Persistent execution journal is evidence, never authority
+
+Date: 2026-08-21
+Status: Accepted for Core implementation; owner acceptance pending
+
+### Context
+
+Pending-goal continuation and the recovery sandbox already persisted some
+mutation evidence, but there was no single authoritative journal for
+interrupted mutating capability execution. GPT Work started
+`work/jarvis-persistent-execution-journal` and quota expired before commit.
+The unpublished branch was absent from GitHub and from this working tree.
+
+### Decision
+
+- Reconstruct one SQLite execution journal over the existing checkpoint store,
+  verification registry, containment, ActionGate, leases, Emergency Stop, and
+  sandbox ledger. Do not add a competing recovery system.
+- Record fingerprints, idempotency class, checkpoint binding, and explicit
+  states. Never persist tokens, grants, credentials, or model hidden state.
+- Reconcile restart without blind retry. `CHECKPOINTED` offers owner retry only.
+  `EXECUTING` without a proven commit becomes `AMBIGUOUS` and containment.
+  `MUTATED` retries verification only. Rollback is a separate owner-approved
+  operation. Consumed checkpoints cannot authorize another mutation.
+- Model identity cannot set journal state. Journal APIs cannot grant permission
+  or revive leases. Emergency Resume does not auto-resume journaled mutation.
+
+### Consequences
+
+- Cloud/unit tests can prove no-blind-retry and fail-closed corrupt journals.
+- Owner-machine crash-window, Trusted Operator, Ollama, and UI acceptance remain
+  `BLOCKED_LOCAL_ACCEPTANCE` until staged local tests pass.
+
+See `docs/JARVIS_EXECUTION_JOURNAL.md`.
+
