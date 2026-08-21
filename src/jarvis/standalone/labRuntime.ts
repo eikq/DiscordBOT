@@ -20,7 +20,22 @@ import { sharedJarvisEventBus } from '../security/eventBus';
 import { PrivateResearchGateway } from '../research/private/privateGateway';
 import type { HostSecuritySnapshot } from '../security/types';
 import type { PrivateRouteHealth } from '../research/private/types';
-import { configuredLocalModelProfile, type ModelProfile } from '../models';
+import {
+  configuredLocalModelProfile,
+  ModelCertificationRegistry,
+  ModelProfileRegistry,
+  type ModelProfile,
+} from '../models';
+import {
+  CapabilityGapResolver,
+  answerFromSelfKnowledge,
+  buildSelfKnowledgeSnapshot,
+  resolveCapabilityGoal,
+  selfKnowledgeQuestionKind,
+  type SelfKnowledgeAnswer,
+  type SelfKnowledgeSnapshot,
+} from '../intelligence';
+import { CCTV_CONNECT_GOAL, cctvCapabilityContracts } from '../devices';
 import { isWorkspaceResult, workspaceFactsFromResult } from '../workspace/workspaceFacts';
 import {
   ActionAuditLog,
@@ -175,6 +190,7 @@ export type JarvisLabStatus = {
     reasonCode: string;
     detail: string;
   };
+  selfKnowledge?: SelfKnowledgeSnapshot;
 };
 
 export type JarvisLabRuntimeOptions = {
@@ -198,6 +214,8 @@ export type JarvisLabRuntimeOptions = {
   research?: ResearchRuntime | false;
   workspace?: WorkspaceRuntime | false;
   commandCenter?: CommandCenterRuntime | false;
+  modelProfiles?: ModelProfileRegistry;
+  modelCertifications?: ModelCertificationRegistry;
 };
 
 export class JarvisLabRuntime {
@@ -221,6 +239,8 @@ export class JarvisLabRuntime {
   private readonly workspace?: WorkspaceRuntime;
   private readonly intents = new InteractionContextStore();
   private commandCenter?: CommandCenterRuntime;
+  private readonly modelProfiles: ModelProfileRegistry;
+  private readonly modelCertifications: ModelCertificationRegistry;
 
   constructor(options: JarvisLabRuntimeOptions = {}) {
     const attached = options.memory
@@ -253,6 +273,8 @@ export class JarvisLabRuntime {
     this.applicationIds = configuredApplicationIds(allowlists);
     this.projectIds = configuredProjectIds(allowlists);
     this.llm = options.llm ?? new LocalLlmProvider();
+    this.modelProfiles = options.modelProfiles ?? new ModelProfileRegistry();
+    this.modelCertifications = options.modelCertifications ?? new ModelCertificationRegistry();
     this.persona = options.persona ?? (options.attachDefaultPresentation ? new FileBehaviorPersonaProvider() : undefined);
     this.speech = options.speech ?? (options.attachDefaultSpeech ? new StandaloneVoiceRouter() : undefined);
     this.voices = options.voices
@@ -307,6 +329,13 @@ export class JarvisLabRuntime {
     } catch {
       llm = { enabled: false, reachable: false };
     }
+    if (llm?.profile) this.modelProfiles.replace(llm.profile);
+    const services = await this.serviceSnapshot();
+    const selfKnowledge = await this.selfKnowledgeSnapshot({
+      modelId: llm?.profile?.id,
+      modelAvailable: llm?.reachable,
+      services,
+    });
     return {
       discordRequired: false,
       ready: true,
@@ -338,7 +367,7 @@ export class JarvisLabRuntime {
           ? (this.speech as StandaloneVoiceRouter).resourcePolicy()
           : { phase: 'listening', unload: 'none' },
       },
-      services: await this.serviceSnapshot(),
+      services,
       reminders: this.reminderStatus(),
       research: this.researchStatus(),
       workspace: this.workspaceStatus(),
@@ -348,7 +377,43 @@ export class JarvisLabRuntime {
         summary: item.summary,
         level: item.level,
       })),
+      selfKnowledge,
     };
+  }
+
+  public async selfKnowledgeSnapshot(input: {
+    modelId?: string;
+    modelAvailable?: boolean;
+    services?: Awaited<ReturnType<JarvisLabRuntime['serviceSnapshot']>>;
+  } = {}): Promise<SelfKnowledgeSnapshot> {
+    const providerState = new Map<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>();
+    if (input.modelId) {
+      providerState.set(input.modelId, input.modelAvailable === true
+        ? 'AVAILABLE'
+        : input.modelAvailable === false
+          ? 'UNAVAILABLE'
+          : 'UNKNOWN');
+    }
+    return buildSelfKnowledgeSnapshot({
+      host: this.capabilityHost,
+      selfModel: this.commandCenter?.selfModel,
+      modelProfiles: this.modelProfiles,
+      modelCertifications: this.modelCertifications,
+      modelProviderState: providerState,
+      services: (input.services ?? await this.serviceSnapshot() ?? []).map(service => ({
+        id: service.id,
+        state: service.health === 'healthy'
+          ? 'AVAILABLE'
+          : service.health === 'degraded'
+            ? 'DEGRADED'
+            : service.health === 'unknown'
+              ? 'UNKNOWN'
+              : 'UNAVAILABLE',
+        detail: service.reason,
+        evidence: [`service:${service.id}:${service.health}`],
+      })),
+      declarations: cctvCapabilityContracts(),
+    });
   }
 
   public recentOperations() {
@@ -568,6 +633,8 @@ export class JarvisLabRuntime {
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
   }> {
+    const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
+    if (knowledgeKind) return this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
@@ -605,6 +672,13 @@ export class JarvisLabRuntime {
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
   }> {
+    const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
+    if (knowledgeKind) {
+      const output = await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
+      emit({ type: 'final', payload: output });
+      if (output.speech) emit({ type: 'speech', payload: output.speech });
+      return output;
+    }
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
@@ -711,6 +785,71 @@ export class JarvisLabRuntime {
         capabilityId: prepared.resolution.capabilityId,
       }),
     };
+  }
+
+  private async answerSelfKnowledgeTurn(
+    input: JarvisLabAskInput,
+    sessionId: string,
+    kind: SelfKnowledgeAnswer['kind'],
+  ) {
+    const snapshot = await this.selfKnowledgeSnapshot();
+    const latestGap = this.commandCenter?.agent.store.list().at(-1)?.gapResolution;
+    const gap = kind === 'CCTV_STATUS'
+      ? await new CapabilityGapResolver().resolve({
+          objective: CCTV_CONNECT_GOAL.title,
+          graph: resolveCapabilityGoal(CCTV_CONNECT_GOAL, snapshot),
+          snapshot,
+        })
+      : latestGap;
+    const answer = answerFromSelfKnowledge(kind, snapshot, gap);
+    const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
+    const result: JarvisCoreResult = {
+      requestId: request.requestId,
+      answerIntent: 'self_knowledge',
+      verifiedFacts: [{
+        key: 'jarvis.selfKnowledge',
+        value: { generatedAt: snapshot.generatedAt, capabilityIds: answer.capabilityIds, kind: answer.kind },
+        sourceType: 'system',
+        sourceRef: `self-knowledge:${snapshot.generatedAt}`,
+        immutableForPresentation: true,
+      }],
+      unverifiedClaims: [],
+      toolResults: [],
+      memoryRefs: [],
+      actionResults: [],
+      uncertainty: snapshot.unknowns,
+      suggestedContent: answer.text,
+    };
+    const presented = await this.engine.render(
+      result,
+      this.sessions.resolveTurn(sessionId, input.oneTurn ? turnOverride(input) : undefined),
+      { sessionId },
+    );
+    const speech = await this.maybeSpeak(answer.text, request.requestId, presented.voiceProfileId, input.speak);
+    return {
+      request,
+      result,
+      presented: { ...presented, text: answer.text },
+      timings: { totalMs: 0 },
+      coreState: 'complete' as const,
+      presentation: await this.presentationStatus(sessionId),
+      research: this.researchSnapshot(),
+      workspace: this.workspaceSnapshot(),
+      intent: { stage: 'self_knowledge', detail: 'Evidence-backed capability intelligence', kind: answer.kind },
+      route: { route: 'CONVERSATION' as const, socialAction: 'SPEAK' as const, agentic: false, reason: 'structured_self_knowledge', confidence: 1 },
+      selfKnowledge: answer,
+      affectStyle: this.commandCenter?.affect.style(),
+      ...(speech ? { speech } : {}),
+    };
+  }
+
+  private prepareSelfKnowledgeSession(input: JarvisLabAskInput): string {
+    const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    if (!input.oneTurn) {
+      if (input.personaProfileId) this.sessions.selectPersona(sessionId, input.personaProfileId);
+      if (input.voiceProfileId) this.sessions.selectVoice(sessionId, input.voiceProfileId);
+    }
+    return sessionId;
   }
 
   private workCenter(): CommandCenterRuntime | undefined {

@@ -50,6 +50,8 @@ export type CommandCenterClientSnapshot = {
     rollback?: NonNullable<CommandCenterSnapshot['task']>['rollback'];
     preflight?: NonNullable<CommandCenterSnapshot['task']>['plan'][number]['preflight'];
     cancellation?: NonNullable<CommandCenterSnapshot['task']>['cancellation'];
+    gapResolution?: NonNullable<CommandCenterSnapshot['task']>['gapResolution'];
+    blockers?: NonNullable<CommandCenterSnapshot['task']>['blockers'];
   } | null;
   recentTasks: Array<{ id: string; objective: string; status: string; simulated?: boolean }>;
   evolution: {
@@ -92,6 +94,7 @@ export type CommandCenterClientSnapshot = {
     status: string;
     node: ReturnType<typeof systemNodeState>;
     simulated: boolean;
+    distribution: Array<'OWNER_ONLY' | 'COMMUNITY_EXCLUDED' | 'DEMO_EXCLUDED'>;
   }>;
   notifications: Array<{ id: string; summary: string; severity: string; simulated: boolean }>;
   control: CommandCenterSnapshot['control'] & { autonomyLabel: string; maxAutonomyLabel: string };
@@ -138,6 +141,8 @@ export function presentCommandCenter(
           ...(task.verification ? { verification: task.verification } : {}),
           ...(task.rollback ? { rollback: task.rollback } : {}),
           ...(task.cancellation ? { cancellation: task.cancellation } : {}),
+          ...(task.gapResolution ? { gapResolution: task.gapResolution } : {}),
+          ...(task.blockers ? { blockers: task.blockers } : {}),
           ...([...task.plan].reverse().find(step => step.preflight)?.preflight
             ? { preflight: [...task.plan].reverse().find(step => step.preflight)!.preflight }
             : {}),
@@ -222,6 +227,7 @@ export function presentCommandCenter(
         blocked: false,
       }),
       simulated: device.simulated,
+      distribution: [...device.distribution],
     })),
     notifications: snapshot.notifications.slice(0, 8).map(item => ({
       id: item.id,
