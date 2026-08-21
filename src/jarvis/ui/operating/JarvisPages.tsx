@@ -179,7 +179,7 @@ export default function JarvisPages(props: Props) {
 
 function HomePage(props: Props) {
   const task = props.commandCenter?.task;
-  const waiting = Boolean(task?.waitingPermission || props.pendingRisk);
+  const waiting = Boolean(task?.waitingPermission || task?.waitingOwnerInput || props.pendingRisk);
   const problems = [
     props.operator?.emergency.active ? 'Emergency Stop is active' : null,
     props.status?.llm?.reachable === false ? 'Model runtime is unavailable' : null,
@@ -214,7 +214,7 @@ function HomePage(props: Props) {
               <ChevronRight size={18} />
             </button>
           ) : <EmptyState title="Nothing is running" detail="Jarvis is ready for a question or a task." />}
-          {waiting ? <div className="jai-attention"><AlertTriangle size={18} /><span><strong>Owner decision required</strong><small>Review the scoped permission before Jarvis continues.</small></span><button type="button" onClick={() => props.onNavigate('security')}>Review</button></div> : null}
+          {task?.waitingOwnerInput ? <div className="jai-attention"><Clock3 size={18} /><span><strong>Waiting for you</strong><small>{task.waitingInput?.question || 'Jarvis needs one declared input before continuing.'}</small></span><button type="button" onClick={() => props.onNavigate('assistant')}>Continue</button></div> : waiting ? <div className="jai-attention"><AlertTriangle size={18} /><span><strong>Owner decision required</strong><small>Review the scoped permission before Jarvis continues.</small></span><button type="button" onClick={() => props.onNavigate('security')}>Review</button></div> : null}
           {problems.map(problem => <div className="jai-alert" key={problem}><TriangleAlert size={17} /><span>{problem}</span></div>)}
           {notifications.map(notification => <div className={notification.severity === 'critical' ? 'jai-alert' : 'jai-attention'} key={notification.id}><TriangleAlert size={17} /><span><strong>{notification.summary}</strong><small>{notification.simulated ? 'Simulation · no live device effect' : 'Proactive alert'}</small></span></div>)}
           {!waiting && problems.length === 0 && !task?.active ? <TrustedOperatorNote>No urgent actions or security warnings are waiting.</TrustedOperatorNote> : null}
@@ -299,31 +299,32 @@ function TasksPage(props: Props) {
         <SectionCard title="Tasks" description="Current and recent objectives" tone="neutral">
           <TaskForm busy={props.busy} onTask={props.onTask} />
           <ul className="jai-task-list">
-            {task ? <li className="is-selected"><span className={`jai-task-orb is-${task.waitingPermission ? 'waiting' : task.active ? 'active' : 'done'}`} /><div><strong>{task.objective}</strong><small>{humanTaskState(task.status)}</small></div></li> : null}
+            {task ? <li className="is-selected"><span className={`jai-task-orb is-${task.waitingPermission || task.waitingOwnerInput ? 'waiting' : task.active ? 'active' : 'done'}`} /><div><strong>{task.objective}</strong><small>{humanTaskState(task.status)}</small></div></li> : null}
             {snapshot?.recentTasks.filter(item => item.id !== task?.id).map(item => <li key={item.id}><span className="jai-task-orb" /><div><strong>{item.objective}</strong><small>{humanTaskState(item.status)}{item.simulated ? ' · simulation' : ''}</small></div></li>)}
             {!task && !snapshot?.recentTasks.length ? <li><EmptyState title="No tasks yet" detail="Start a scoped objective above." /></li> : null}
           </ul>
         </SectionCard>
         <div className="jai-task-detail">
-          <SectionCard title="Selected task" description={task ? humanTaskState(task.status) : 'No task selected'} tone={task?.waitingPermission ? 'amber' : task?.active ? 'cyan' : 'neutral'}>
+          <SectionCard title="Selected task" description={task ? humanTaskState(task.status) : 'No task selected'} tone={task?.waitingPermission || task?.waitingOwnerInput ? 'amber' : task?.active ? 'cyan' : 'neutral'}>
             {!task ? <EmptyState title="Select or start a task" detail="The plan and evidence will appear here." /> : (
               <>
                 <div className="jai-task-objective"><span>Objective</span><h3>{task.objective}</h3></div>
                 {task.goalResolution ? <div className="jai-attention"><WandSparkles size={17} /><span><strong>{task.goalResolution.goalName || 'Declared goal'}</strong><small>{task.goalResolution.routes.find(item => item.id === task.goalResolution?.selectedRouteId)?.title || task.goalResolution.status}{task.adapters[0] ? ` · typed by ${task.adapters[0].adapterId}` : ''}</small></span></div> : null}
+                {task.waitingOwnerInput ? <div className="jai-attention"><Clock3 size={17} /><span><strong>I need one thing from you</strong><small>{task.waitingInput?.question || 'Provide the missing declared input in Assistant.'}</small></span></div> : null}
                 <div className="jai-task-meta"><span><small>Capabilities</small><strong>{task.steps.filter(step => step.capability).length ? task.steps.filter(step => step.capability).map(step => humanCapability(step.capability!)).join(' · ') : 'No typed capability declared'}</strong></span><span><small>Risk / permission</small><strong>{task.waitingPermission ? 'Owner approval required' : 'Policy enforced at each step'}</strong></span><span><small>Recovery</small><strong>{task.rollback ? humanRecoveryState(task.rollback.state) : task.cancellation ? humanCancellationState(task.cancellation.state) : 'No recovery action recorded'}</strong></span></div>
                 <ol className="jai-plan">
                   {task.steps.map(step => <li key={step.id} className={`is-${step.state}`}><span>{step.index}</span><div><strong>{step.title}</strong>{step.summary ? <small>{step.summary}</small> : null}</div>{step.state === 'done' ? <Check size={16} /> : step.state === 'active' ? <RefreshCw className="is-spinning" size={16} /> : step.state === 'failed' ? <XCircle size={16} /> : <CircleDashed size={16} />}</li>)}
                 </ol>
                 <PermissionCard snapshot={snapshot} busy={props.busy} onDeny={props.onCancelTask} onAllow={props.onGrantTask} />
                 {task.gapResolution ? <div className="jai-attention"><Info size={17} /><span><strong>{task.blockers?.[0] ? `${task.blockers[0].blocker.replaceAll('_', ' ')} · ${humanCapability(task.blockers[0].capabilityId)}` : 'Capability path reviewed'}</strong><small>{task.gapResolution.recommendedPath?.title || 'No safe executable route is currently available.'}{task.gapResolution.ownerInputRequired[0] ? ` Needed from owner: ${task.gapResolution.ownerInputRequired[0]}.` : ''}</small></span></div> : null}
-                {task.active && !task.waitingPermission ? <div className="jai-action-row"><button type="button" className="jai-button jai-button--danger" disabled={props.busy} onClick={props.onCancelTask}><Square size={15} /> Cancel task</button><button type="button" className="jai-button" disabled title="Pause/resume contract not exposed by the current HTTP API"><Pause size={15} /> Pause · prepared</button></div> : null}
+                {task.active && !task.waitingPermission ? <div className="jai-action-row"><button type="button" className="jai-button jai-button--danger" disabled={props.busy} onClick={props.onCancelTask}><Square size={15} /> Cancel task</button>{task.waitingOwnerInput ? <button type="button" className="jai-button" onClick={() => props.onNavigate('assistant')}>Continue in Assistant</button> : <button type="button" className="jai-button" disabled title="Pause/resume contract not exposed by the current HTTP API"><Pause size={15} /> Pause · prepared</button>}</div> : null}
                 {task.rollback?.state === 'AVAILABLE' && task.rollback.checkpointId && task.steps.some(step => step.capability === 'operator.sandbox.writeConfig') ? <div className="jai-action-row"><button type="button" className="jai-button jai-button--danger" disabled={props.busy} onClick={() => props.onRollback(task.rollback!.checkpointId!)}><RotateCcw size={15} /> Request rollback</button><span className="jai-muted">Rollback is a new owner-authorized action.</span></div> : null}
               </>
             )}
           </SectionCard>
           <SectionCard title="Verification" description="A command exit code alone is not success" tone="green"><VerificationReport task={task ?? null} /></SectionCard>
           <ExpertDetails summary="Task IDs, capability IDs, and simulation demos">
-            {task ? <dl className="jai-data-list"><div><dt>Task ID</dt><dd><code>{task.id}</code></dd></div><div><dt>Goal ID</dt><dd><code>{task.goalResolution?.goalId || 'unresolved'}</code></dd></div><div><dt>Status</dt><dd>{task.status}</dd></div><div><dt>Capability IDs</dt><dd>{task.steps.some(step => step.capability) ? task.steps.filter(step => step.capability).map(step => <code key={step.id}>{step.capability} </code>) : 'none'}</dd></div><div><dt>Input adapters</dt><dd>{task.adapters.length ? task.adapters.map(item => <code key={item.stepId}>{item.adapterId} </code>) : 'none'}</dd></div><div><dt>Errors</dt><dd>{task.errors.join(' · ') || 'none'}</dd></div><div><dt>Checkpoint</dt><dd><code>{task.rollback?.checkpointId || 'none'}</code></dd></div><div><dt>Cancellation</dt><dd>{task.cancellation ? `${task.cancellation.state} · ${task.cancellation.reason || 'reason unavailable'} · observed=${String(task.cancellation.observedByHandler)}` : 'none'}</dd></div><div><dt>Gap attempts</dt><dd>{task.gapResolution ? `${task.gapResolution.boundedAttempts.attempted}/${task.gapResolution.boundedAttempts.maximum}` : 'none'}</dd></div><div><dt>Goal evidence</dt><dd>{task.goalResolution?.evidence.join(' · ') || 'none'}</dd></div><div><dt>Gap evidence</dt><dd>{task.gapResolution?.evidence.join(' · ') || 'none'}</dd></div></dl> : null}
+            {task ? <dl className="jai-data-list"><div><dt>Task ID</dt><dd><code>{task.id}</code></dd></div><div><dt>Goal ID</dt><dd><code>{task.goalResolution?.goalId || 'unresolved'}</code></dd></div><div><dt>Pending goal ID</dt><dd><code>{task.waitingInput?.pendingGoalId || 'none'}</code></dd></div><div><dt>Missing fields</dt><dd>{task.waitingInput?.missingFields.join(' · ') || 'none'}</dd></div><div><dt>Pending expiry</dt><dd>{task.waitingInput?.expiresAt || 'none'}</dd></div><div><dt>Status</dt><dd>{task.status}</dd></div><div><dt>Capability IDs</dt><dd>{task.steps.some(step => step.capability) ? task.steps.filter(step => step.capability).map(step => <code key={step.id}>{step.capability} </code>) : 'none'}</dd></div><div><dt>Input adapters</dt><dd>{task.adapters.length ? task.adapters.map(item => <code key={item.stepId}>{item.adapterId} </code>) : 'none'}</dd></div><div><dt>Errors</dt><dd>{task.errors.join(' · ') || 'none'}</dd></div><div><dt>Checkpoint</dt><dd><code>{task.rollback?.checkpointId || 'none'}</code></dd></div><div><dt>Cancellation</dt><dd>{task.cancellation ? `${task.cancellation.state} · ${task.cancellation.reason || 'reason unavailable'} · observed=${String(task.cancellation.observedByHandler)}` : 'none'}</dd></div><div><dt>Gap attempts</dt><dd>{task.gapResolution ? `${task.gapResolution.boundedAttempts.attempted}/${task.gapResolution.boundedAttempts.maximum}` : 'none'}</dd></div><div><dt>Goal evidence</dt><dd>{task.goalResolution?.evidence.join(' · ') || 'none'}</dd></div><div><dt>Gap evidence</dt><dd>{task.gapResolution?.evidence.join(' · ') || 'none'}</dd></div></dl> : null}
             <p className="jai-muted">Demos create tagged simulation data. They do not operate owner hardware.</p>
             <div className="jai-action-row">{(['research', 'coding', 'evolution', 'monitoring'] as const).map(id => <button type="button" className="jai-button" key={id} disabled={props.busy} onClick={() => props.onDemo(id)}>{id}</button>)}</div>
           </ExpertDetails>
@@ -629,7 +630,7 @@ function countTaskStates(snapshot: CommandCenterClientSnapshot | null) {
   const counts = { ACTIVE: 0, QUEUED: 0, WAITING: 0, PAUSED: 0, COMPLETED: 0, FAILED: 0, CANCELLED: 0 };
   const tasks = snapshot?.recentTasks ?? [];
   for (const task of tasks) {
-    if (task.status === 'WAITING_PERMISSION') counts.WAITING += 1;
+    if (task.status === 'WAITING_PERMISSION' || task.status === 'WAITING_INPUT') counts.WAITING += 1;
     else if (task.status === 'PAUSED') counts.PAUSED += 1;
     else if (task.status === 'SUCCESS' || task.status === 'COMPLETED') counts.COMPLETED += 1;
     else if (task.status === 'FAILED') counts.FAILED += 1;

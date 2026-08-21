@@ -12,6 +12,7 @@ const ACTIVE_TASK = new Set([
   'OBSERVING',
   'ADAPTING',
   'VERIFYING',
+  'WAITING_INPUT',
   'WAITING_PERMISSION',
   'PAUSED',
   'DEGRADED',
@@ -42,6 +43,7 @@ export type CommandCenterClientSnapshot = {
     outcome?: string;
     simulated?: boolean;
     waitingPermission: boolean;
+    waitingOwnerInput: boolean;
     active: boolean;
     steps: LiveOpsStep[];
     evidence: string[];
@@ -54,6 +56,7 @@ export type CommandCenterClientSnapshot = {
     blockers?: NonNullable<CommandCenterSnapshot['task']>['blockers'];
     goalResolution?: NonNullable<CommandCenterSnapshot['task']>['goalResolution'];
     goalOutcome?: NonNullable<CommandCenterSnapshot['task']>['goalOutcome'];
+    waitingInput?: NonNullable<CommandCenterSnapshot['task']>['waitingInput'];
     adapters: Array<{ stepId: string; capability: string; adapterId: string; evidence: string[] }>;
   } | null;
   recentTasks: Array<{ id: string; objective: string; status: string; simulated?: boolean }>;
@@ -137,6 +140,7 @@ export function presentCommandCenter(
           status: task.status,
           simulated: task.simulated,
           waitingPermission: task.status === 'WAITING_PERMISSION' || task.plan.some(step => step.status === 'waiting_permission'),
+          waitingOwnerInput: task.status === 'WAITING_INPUT',
           active: ACTIVE_TASK.has(task.status),
           steps: liveOpsSteps(task),
           evidence: task.evidence.slice(0, 6),
@@ -148,6 +152,7 @@ export function presentCommandCenter(
           ...(task.blockers ? { blockers: task.blockers } : {}),
           ...(task.goalResolution ? { goalResolution: task.goalResolution } : {}),
           ...(task.goalOutcome ? { goalOutcome: task.goalOutcome } : {}),
+          ...(task.waitingInput ? { waitingInput: task.waitingInput } : {}),
           adapters: task.plan.flatMap(step => step.inputAdapter ? [{
             stepId: step.id,
             capability: step.capability || 'unknown',
