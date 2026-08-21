@@ -1,0 +1,373 @@
+.jp {
+  --jp-void: #02040a;
+  --jp-graphite: #070b12;
+  --jp-cyan: #5ee7ff;
+  --jp-ice: #d7f7ff;
+  --jp-muted: #7d97a8;
+  --jp-amber: #f0c36a;
+  --jp-alert: #ff6b7a;
+  --jp-ok: #6ef0c8;
+  --jp-line: rgb(94 231 255 / 0.16);
+  --jp-display: Bahnschrift, "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --jp-body: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  position: relative;
+  isolation: isolate;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--jp-ice);
+  background:
+    radial-gradient(42% 48% at 50% 46%, rgb(8 48 72 / 0.42), transparent 62%),
+    radial-gradient(18% 20% at 50% 48%, rgb(94 231 255 / 0.07), transparent 70%),
+    linear-gradient(180deg, #010208 0%, var(--jp-void) 48%, #010309 100%);
+  font-family: var(--jp-body);
+}
+
+.jp *,
+.jp *::before,
+.jp *::after { box-sizing: border-box; }
+
+.jp button,
+.jp input,
+.jp textarea { font: inherit; color: inherit; }
+
+.jp[data-hidden="true"] { filter: saturate(0.72); }
+.jp[data-ambient="true"] .jp-dock,
+.jp[data-ambient="true"] .jp-hud { opacity: 0.55; }
+
+.jp-orbit {
+  pointer-events: none;
+  position: absolute;
+  inset: 4.5%;
+  border: 1px solid rgb(94 231 255 / 0.08);
+  border-radius: 50%;
+  box-shadow: inset 0 0 80px rgb(94 231 255 / 0.03);
+}
+
+.jp-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 7%;
+  border: 1px dashed rgb(94 231 255 / 0.07);
+  border-radius: 50%;
+}
+
+.jp-core {
+  position: absolute;
+  inset: 8% 18% 22%;
+  display: grid;
+  place-items: center;
+}
+
+.jp-core > * {
+  width: min(52vh, 58vw);
+  height: min(52vh, 58vw);
+}
+
+.jp-core canvas,
+.jp-core .jcc-core { width: 100% !important; height: 100% !important; }
+
+.jp-mark {
+  position: absolute;
+  top: 1.4rem;
+  left: 1.6rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.jp-mark strong {
+  font-family: var(--jp-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.42em;
+}
+
+.jp-mark span {
+  color: var(--jp-muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.jp-clock {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.6rem;
+  text-align: right;
+}
+
+.jp-clock time {
+  display: block;
+  font-family: var(--jp-display);
+  font-size: 1.35rem;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+
+.jp-clock small {
+  color: var(--jp-muted);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+}
+
+.jp-state {
+  position: absolute;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.jp-state em {
+  font-style: normal;
+  font-family: var(--jp-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.38em;
+  color: var(--jp-cyan);
+}
+
+.jp-state p {
+  margin: 0;
+  color: var(--jp-muted);
+  font-size: 0.78rem;
+}
+
+.jp-state[data-tone="warning"] em { color: var(--jp-amber); }
+.jp-state[data-tone="critical"] em { color: var(--jp-alert); }
+.jp-state[data-tone="ok"] em { color: var(--jp-ok); }
+
+.jp-attention {
+  position: absolute;
+  top: 5.4rem;
+  right: 1.6rem;
+  width: min(18rem, 32vw);
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgb(240 195 106 / 0.22);
+  background: rgb(8 12 18 / 0.72);
+  backdrop-filter: blur(16px);
+}
+
+.jp-attention span {
+  display: block;
+  color: var(--jp-amber);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.jp-attention p { margin: 0.3rem 0 0; font-size: 0.82rem; line-height: 1.4; }
+
+.jp-hud {
+  position: absolute;
+  right: 1.6rem;
+  top: 50%;
+  transform: translateY(-42%);
+  width: min(22rem, 34vw);
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--jp-line);
+  background: linear-gradient(180deg, rgb(8 16 26 / 0.82), rgb(4 8 14 / 0.72));
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.35);
+}
+
+.jp-hud header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.55rem;
+  font-family: var(--jp-display);
+  letter-spacing: 0.22em;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  color: var(--jp-cyan);
+}
+
+.jp-hud p,
+.jp-hud li { margin: 0; font-size: 0.84rem; line-height: 1.45; }
+.jp-hud ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.45rem; }
+.jp-hud small { display: block; color: var(--jp-muted); font-size: 0.7rem; overflow-wrap: anywhere; }
+.jp-sim { color: var(--jp-amber); font-style: normal; letter-spacing: 0.12em; font-size: 0.58rem; }
+
+.jp-progress {
+  margin-top: 0.7rem;
+  height: 2px;
+  background: rgb(94 231 255 / 0.12);
+  position: relative;
+}
+
+.jp-progress i {
+  display: block;
+  height: 100%;
+  background: var(--jp-cyan);
+}
+
+.jp-progress small {
+  position: absolute;
+  right: 0;
+  top: 0.35rem;
+}
+
+.jp-hud--verify { border-color: rgb(110 240 200 / 0.28); }
+.jp-hud--wait,
+.jp-hud--remind { border-color: rgb(240 195 106 / 0.28); }
+
+.jp-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 1.3rem;
+  transform: translateX(-50%);
+  width: min(46rem, calc(100vw - 2.4rem));
+  display: grid;
+  gap: 0.55rem;
+}
+
+.jp-reply {
+  min-height: 2.6rem;
+  max-height: 7.5rem;
+  overflow: auto;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid rgb(94 231 255 / 0.1);
+  background: rgb(4 8 14 / 0.55);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.jp-reply[data-empty="true"] { color: var(--jp-muted); }
+.jp-reply .jp-heard { color: var(--jp-cyan); font-size: 0.72rem; letter-spacing: 0.08em; margin-bottom: 0.25rem; }
+
+.jp-composer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.4rem;
+  align-items: end;
+  padding: 0.4rem;
+  border: 1px solid var(--jp-line);
+  background: rgb(5 10 16 / 0.78);
+}
+
+.jp-composer textarea {
+  resize: none;
+  min-height: 2.6rem;
+  max-height: 6.5rem;
+  padding: 0.55rem 0.4rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.jp-icon,
+.jp-send {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid rgb(94 231 255 / 0.16);
+  background: rgb(94 231 255 / 0.04);
+  cursor: pointer;
+}
+
+.jp-icon.is-on,
+.jp-send { background: rgb(94 231 255 / 0.14); color: var(--jp-cyan); }
+.jp-icon:disabled,
+.jp-send:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.jp-approve {
+  position: absolute;
+  left: 1.6rem;
+  top: 50%;
+  transform: translateY(-40%);
+  width: min(24rem, 36vw);
+  padding: 1rem;
+  border: 1px solid rgb(240 195 106 / 0.32);
+  background: rgb(8 10 14 / 0.88);
+  backdrop-filter: blur(18px);
+}
+
+.jp-approve header {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--jp-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  color: var(--jp-amber);
+}
+
+.jp-approve dl { margin: 0.7rem 0 0; display: grid; gap: 0.4rem; }
+.jp-approve dl > div { display: grid; grid-template-columns: 5.4rem minmax(0, 1fr); gap: 0.6rem; font-size: 0.8rem; }
+.jp-approve dt { color: var(--jp-muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.62rem; }
+.jp-approve dd { margin: 0; }
+.jp-approve__ask { margin: 0.85rem 0 0.55rem; }
+.jp-approve__row { display: flex; gap: 0.45rem; }
+.jp-approve__note,
+.jp-approve__more { margin-top: 0.7rem; color: var(--jp-muted); font-size: 0.72rem; }
+.jp-approve__more .jai-risk-brief { margin-top: 0.5rem; }
+
+.jp-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  border: 1px solid var(--jp-line);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jp-btn--allow { border-color: rgb(110 240 200 / 0.4); color: var(--jp-ok); }
+.jp-btn--deny { border-color: rgb(255 107 122 / 0.4); color: var(--jp-alert); }
+.jp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.jp-ghost {
+  position: absolute;
+  left: 1.6rem;
+  bottom: 1.4rem;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.jp-ghost button {
+  border: 0;
+  background: transparent;
+  color: var(--jp-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+
+.jp-ghost button:hover,
+.jp-ghost button:focus-visible { color: var(--jp-cyan); }
+
+.jp-error {
+  position: absolute;
+  left: 50%;
+  bottom: 8.8rem;
+  transform: translateX(-50%);
+  color: var(--jp-alert);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 900px) {
+  .jp-core { inset: 16% 6% 28%; }
+  .jp-hud,
+  .jp-approve {
+    position: static;
+    transform: none;
+    width: auto;
+    margin: 0 1rem;
+  }
+  .jp-orbit { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-orbit,
+  .jp-core,
+  .jp-hud,
+  .jp-approve { transition: none; }
+}
