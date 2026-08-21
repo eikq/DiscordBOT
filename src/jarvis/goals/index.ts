@@ -12,6 +12,10 @@ export type {
 export { resolveOwnerGoal, validateGoalSuggestion } from './resolver';
 export type { GoalResolverOptions } from './resolver';
 export { buildGoalKnowledge } from './knowledge';
+export { PendingGoalCoordinator } from './pendingGoals';
+export type { PendingGoalCoordinatorOptions } from './pendingGoals';
+export { PendingGoalStore, DEFAULT_PENDING_GOAL_TTL_MS, defaultPendingGoalDbPath, newPendingGoalId } from './pendingStore';
+export type { PendingGoalStoreOptions } from './pendingStore';
 export { validateAdapterAuthorityBoundary, validateAgainstJsonSchema } from './schema';
 export type { SchemaValidation } from './schema';
 export type {
@@ -33,3 +37,11 @@ export type {
   GoalSuggestion,
   InputCompatibility,
 } from './types';
+export { PENDING_GOAL_STATES } from './pendingTypes';
+export type {
+  ContinuePendingGoalInput,
+  PendingGoalContinuation,
+  PendingGoalContinuationStatus,
+  PendingGoalRecord,
+  PendingGoalState,
+} from './pendingTypes';

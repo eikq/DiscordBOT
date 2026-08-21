@@ -179,14 +179,8 @@ function deterministicMatch(text: string, catalog: GoalCatalog, context?: Intera
     return matched(fromCatalog('workspace.search'), query ? 0.96 : 0.84, query ? { query } : {}, ['matcher:workspace.search', 'scope:workspace']);
   }
   if (isAmbiguousComparison(text)) {
-    return {
-      status: 'CLARIFICATION',
-      confidence: 0.55,
-      source: 'deterministic',
-      extracted: {},
-      question: 'Should I compare public web evidence or files in your approved workspace?',
-      evidence: ['matcher:ambiguous-comparison', 'scope:not-selected'],
-    };
+    const query = extractResearchQuery(text);
+    return matched(fromCatalog('information.compare'), 0.9, query ? { query } : {}, ['matcher:information.compare', 'scope:not-selected']);
   }
   if (isResearchIntent(text)) {
     const query = extractResearchQuery(text);
@@ -228,6 +222,7 @@ function resolveRoute(
   context: InteractionContext | null | undefined,
   snapshot: Awaited<ReturnType<typeof buildSelfKnowledgeSnapshot>>,
 ): GoalResolvedRoute {
+  const ownerSelectedScope = extracted.scope === route.scope;
   if (route.scope !== definition.scope && !route.ownerDecisionRequired) {
     return unknownRoute(route, 'Route scope differs from the owner goal without an owner decision.');
   }
@@ -268,7 +263,7 @@ function resolveRoute(
     priority: route.priority,
     scope: route.scope,
     risk: route.risk,
-    ownerDecisionRequired: Boolean(route.ownerDecisionRequired),
+    ownerDecisionRequired: Boolean(route.ownerDecisionRequired && !ownerSelectedScope),
     available,
     inputCompatible,
     steps,
@@ -276,7 +271,7 @@ function resolveRoute(
       ? graph.missing.map(item => `${item.capabilityId}: ${item.status}`).join(' · ')
       : !inputCompatible
         ? issues.join(' · ') || 'Typed input is incompatible.'
-        : route.ownerDecisionRequired
+        : route.ownerDecisionRequired && !ownerSelectedScope
           ? 'This route changes scope or risk and requires an explicit owner decision.'
           : 'Registered capability evidence and typed input are ready.',
     evidence: [...graph.evidence, ...steps.flatMap(step => step.evidence), `goal-route:${route.id}`],
@@ -307,7 +302,7 @@ function baseResolution(
     status: patch.status,
     goalId: definition.id,
     goalName: definition.name,
-    scope: definition.scope,
+    scope: selected?.scope ?? definition.scope,
     handler: definition.handler,
     matchedIntent: raw,
     matchSource: match.source,
@@ -426,7 +421,7 @@ function extractResearchQuery(text: string): string {
 }
 
 function isAmbiguousComparison(text: string): boolean {
-  return /^(?:compare|เทียบ)\s+.+\s+(?:and|with|กับ|vs\.?)\s+.+/iu.test(text.trim())
+  return /^(?:compare|เทียบ)\s+.+/iu.test(text.trim())
     && !isWorkspaceIntent(text)
     && !isResearchIntent(text);
 }

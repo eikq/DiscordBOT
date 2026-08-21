@@ -98,7 +98,7 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
   registry.register({
     id: 'research.current.query.v1',
     capabilityId: RESEARCH_CURRENT,
-    acceptedGoalFields: ['query', 'officialOnly', 'freshness', 'compare'],
+    acceptedGoalFields: ['query', 'officialOnly', 'freshness', 'compare', 'scope'],
     adapt: input => ({
       query: boundedString(input.query, 'query', 200),
       officialOnly: Boolean(input.officialOnly),
@@ -109,7 +109,7 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
   registry.register({
     id: 'research.search.query.v1',
     capabilityId: RESEARCH_SEARCH,
-    acceptedGoalFields: ['query', 'officialOnly', 'freshness', 'compare'],
+    acceptedGoalFields: ['query', 'officialOnly', 'freshness', 'compare', 'scope'],
     adapt: input => ({
       query: boundedString(input.query, 'query', 200),
       maxResults: 6,
@@ -120,13 +120,13 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
   registry.register({
     id: 'research.private.query.v1',
     capabilityId: RESEARCH_PRIVATE_BROWSE,
-    acceptedGoalFields: ['query', 'officialOnly', 'freshness', 'compare'],
+    acceptedGoalFields: ['query', 'officialOnly', 'freshness', 'compare', 'scope'],
     adapt: input => ({ query: boundedString(input.query, 'query', 200), depth: 'standard' }),
   });
   registry.register({
     id: 'workspace.search.query.v1',
     capabilityId: WORKSPACE_SEARCH,
-    acceptedGoalFields: ['query'],
+    acceptedGoalFields: ['query', 'scope'],
     adapt: (input, context) => ({
       query: boundedString(input.query, 'query', 200),
       ...(context.trustedWorkspaceId ? { workspaceId: context.trustedWorkspaceId } : {}),

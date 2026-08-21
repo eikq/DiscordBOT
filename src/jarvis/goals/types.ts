@@ -9,6 +9,7 @@ export const GOAL_SCOPES = [
   'AUTOMATION',
   'SELF_KNOWLEDGE',
   'OWNER_DEVICE',
+  'OWNER_SELECTED_SOURCE',
 ] as const;
 
 export type GoalScope = (typeof GOAL_SCOPES)[number];
@@ -41,6 +42,7 @@ export type GoalRouteDefinition = {
 
 export type GoalDefinition = {
   id: string;
+  version?: number;
   name: string;
   description: string;
   scope: GoalScope;

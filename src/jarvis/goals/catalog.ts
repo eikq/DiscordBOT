@@ -31,7 +31,37 @@ export function createDefaultGoalCatalog(): GoalCatalog {
 
 export const DEFAULT_GOALS: GoalDefinition[] = [
   {
+    id: 'information.compare',
+    version: 1,
+    name: 'Compare information in an owner-selected source',
+    description: 'Compare evidence without guessing whether the owner meant public web or the approved workspace.',
+    scope: 'OWNER_SELECTED_SOURCE',
+    handler: 'CAPABILITY_PLAN',
+    examples: ['Compare the security notes.', 'Compare X and Y.'],
+    matchingHints: ['compare', 'source scope', 'workspace or web'],
+    requiredInputs: [
+      { id: 'scope', description: 'The owner-selected public-web or approved-workspace scope.', required: true, smallestQuestion: 'Do you mean public web or your approved workspace?' },
+      { id: 'query', description: 'The items or evidence to compare.', required: true, smallestQuestion: 'What should I compare?' },
+    ],
+    optionalInputs: [],
+    routes: [
+      route('compare-workspace', 'Compare evidence in the approved workspace', 1, 'WORKSPACE', 'READ_ONLY', [
+        { capabilityId: WORKSPACE_SEARCH, adapterId: 'workspace.search.query.v1' },
+      ], true),
+      route('compare-public-web', 'Compare public web evidence', 2, 'PUBLIC_WEB', 'READ_ONLY', [
+        { capabilityId: RESEARCH_CURRENT, adapterId: 'research.current.query.v1' },
+      ], true),
+    ],
+    expectedOutcome: 'A bounded comparison from the owner-selected source scope.',
+    verificationExpectation: 'Every comparison item must retain workspace provenance or public source evidence.',
+    permissionImplications: 'Read-only. Source scope must be selected explicitly and cannot drift after continuation.',
+    maturity: 'REAL',
+    allowedCapabilityPrefixes: ['workspace.', 'research.'],
+    distribution: ['CORE'],
+  },
+  {
     id: 'research.topic',
+    version: 1,
     name: 'Research a current topic',
     description: 'Collect and synthesize evidence from public web sources.',
     scope: 'PUBLIC_WEB',
@@ -64,6 +94,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'workspace.search',
+    version: 1,
     name: 'Search the approved workspace',
     description: 'Find code, files, or symbols without leaving owner-approved workspace roots.',
     scope: 'WORKSPACE',
@@ -89,6 +120,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'workspace.overview',
+    version: 1,
     name: 'Describe the approved codebase',
     description: 'List configured workspaces and indexed documents for a bounded overview.',
     scope: 'WORKSPACE',
@@ -110,6 +142,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'documents.analyze-basic',
+    version: 1,
     name: 'Analyze an indexed text document',
     description: 'Summarize a document already indexed by Workspace Intelligence.',
     scope: 'DOCUMENT',
@@ -130,6 +163,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'system.health',
+    version: 1,
     name: 'Check Jarvis health',
     description: 'Read Jarvis runtime and local system health without changing configuration.',
     scope: 'SYSTEM',
@@ -151,6 +185,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'reminders.create',
+    version: 1,
     name: 'Create a reminder',
     description: 'Create one notification-only reminder from explicit owner text and time.',
     scope: 'AUTOMATION',
@@ -174,6 +209,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'self.capabilities',
+    version: 1,
     name: 'Explain what Jarvis can do',
     description: 'Answer from Self Knowledge and current runtime evidence.',
     scope: 'SELF_KNOWLEDGE',
@@ -192,6 +228,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'self.explain-gap',
+    version: 1,
     name: 'Explain a capability gap',
     description: 'Explain why a requested objective is blocked and the smallest safe next step.',
     scope: 'SELF_KNOWLEDGE',
@@ -210,6 +247,7 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
   },
   {
     id: 'devices.cctv.connect',
+    version: 1,
     name: 'Connect owner CCTV',
     description: 'Future owner-only local CCTV connection through a reviewed provider.',
     scope: 'OWNER_DEVICE',
