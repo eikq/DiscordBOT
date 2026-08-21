@@ -295,7 +295,12 @@ test('skill or webpage-like text cannot become resolver authority', async () => 
 
 test('lab fast path and clarification do not wake the conversational model', async () => {
   let llmCalls = 0;
-  const host = createStandaloneCapabilityHost();
+  const host = createStandaloneCapabilityHost({
+    worldIntel: false,
+    reminders: false,
+    research: false,
+    workspace: false,
+  });
   const core = new LocalLlmJarvisCore({
     generateText: async () => {
       llmCalls += 1;
