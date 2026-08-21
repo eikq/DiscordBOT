@@ -580,6 +580,7 @@ export default function JarvisPresencePage() {
     emergencyActive: operator?.emergency.active,
     waitingPermission: commandCenter?.permission.waiting || Boolean(pendingConfirmation),
     waitingOwnerInput: commandCenter?.task?.waitingOwnerInput,
+    taskActive: commandCenter?.task?.active,
   });
   const labPhase = presencePhaseToLab(phase);
   const mood = sceneMoodFor(labPhase);

@@ -91,6 +91,7 @@ export function derivePresencePhase(input: {
   emergencyActive?: boolean;
   waitingPermission?: boolean;
   waitingOwnerInput?: boolean;
+  taskActive?: boolean;
 }): PresencePhase {
   if (input.emergencyActive) return 'EMERGENCY_STOP';
   if (input.ready === false && input.llmReachable === false && !input.busy) return 'OFFLINE';
@@ -100,12 +101,27 @@ export function derivePresencePhase(input: {
   if (input.micState === 'transcribing') return 'UNDERSTANDING';
   if (input.speechState === 'speaking') return 'SPEAKING';
   const visual = presencePhaseFromVisual(input.visualState);
-  if (visual) return visual;
+  if (visual && honorVisualWhileIdle(visual, input)) return visual;
   if (input.labPhase) return presencePhaseFromLab(input.labPhase);
   if (input.error) return 'CRITICAL';
   if (input.busy) return 'THINKING';
   if (input.ready === false) return 'WARNING';
   return 'IDLE';
+}
+
+function honorVisualWhileIdle(visual: PresencePhase, input: {
+  busy?: boolean;
+  waitingPermission?: boolean;
+  waitingOwnerInput?: boolean;
+  taskActive?: boolean;
+  speechState?: 'idle' | 'loading' | 'speaking';
+}): boolean {
+  if (input.busy || input.waitingPermission || input.waitingOwnerInput || input.taskActive) return true;
+  if (visual === 'WAITING_OWNER' || visual === 'WARNING' || visual === 'CRITICAL' || visual === 'EMERGENCY_STOP' || visual === 'EVOLVING') {
+    return true;
+  }
+  if (visual === 'SPEAKING') return input.speechState === 'speaking';
+  return false;
 }
 
 export function presencePhaseFromVisual(state?: string): PresencePhase | null {
@@ -275,7 +291,7 @@ export function derivePresenceHud(input: {
     return 'execution';
   }
   if (input.phase === 'VERIFYING' || input.verificationComplete) return 'verification';
-  if (input.phase === 'RESEARCHING' || input.researchActive || (input.researchSources ?? 0) > 0) return 'research';
+  if (input.phase === 'RESEARCHING' || input.researchActive) return 'research';
   if (input.systemAsked) return 'system';
   if (input.reminderPending || input.reminderActive) return 'reminder';
   if (input.cctvAsked) return 'cctv';

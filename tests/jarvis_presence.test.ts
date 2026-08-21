@@ -37,11 +37,12 @@ test('presence phase is driven by real runtime flags, not fake activity', () => 
   assert.equal(derivePresencePhase({ micState: 'listening' }), 'LISTENING');
   assert.equal(derivePresencePhase({ micState: 'transcribing' }), 'UNDERSTANDING');
   assert.equal(derivePresencePhase({ busy: true }), 'THINKING');
-  assert.equal(derivePresencePhase({ visualState: 'WEB_SEARCH' }), 'RESEARCHING');
-  assert.equal(derivePresencePhase({ visualState: 'PLANNING' }), 'PLANNING');
+  assert.equal(derivePresencePhase({ visualState: 'WEB_SEARCH' }), 'IDLE');
+  assert.equal(derivePresencePhase({ visualState: 'WEB_SEARCH', busy: true }), 'RESEARCHING');
+  assert.equal(derivePresencePhase({ visualState: 'PLANNING', busy: true }), 'PLANNING');
   assert.equal(derivePresencePhase({ waitingPermission: true }), 'WAITING_OWNER');
-  assert.equal(derivePresencePhase({ visualState: 'EXECUTING' }), 'EXECUTING');
-  assert.equal(derivePresencePhase({ visualState: 'VERIFYING' }), 'VERIFYING');
+  assert.equal(derivePresencePhase({ visualState: 'EXECUTING', taskActive: true }), 'EXECUTING');
+  assert.equal(derivePresencePhase({ visualState: 'VERIFYING', taskActive: true }), 'VERIFYING');
   assert.equal(derivePresencePhase({ speechState: 'speaking' }), 'SPEAKING');
   assert.equal(derivePresencePhase({ visualState: 'EVOLVING' }), 'EVOLVING');
   assert.equal(derivePresencePhase({ ready: false }), 'WARNING');
@@ -58,6 +59,7 @@ test('contextual HUD appears for the current job and collapses otherwise', () =>
   assert.equal(derivePresenceHud({ phase: 'WAITING_OWNER', waitingOwnerInput: true }), 'waiting-input');
   assert.equal(derivePresenceHud({ phase: 'EXECUTING', taskActive: true }), 'execution');
   assert.equal(derivePresenceHud({ phase: 'VERIFYING' }), 'verification');
+  assert.equal(derivePresenceHud({ phase: 'IDLE', researchSources: 3 }), 'none');
   assert.equal(derivePresenceHud({ phase: 'RESEARCHING', researchSources: 3 }), 'research');
   assert.equal(derivePresenceHud({ phase: 'IDLE', systemAsked: true }), 'system');
   assert.equal(derivePresenceHud({ phase: 'IDLE', reminderPending: true }), 'reminder');

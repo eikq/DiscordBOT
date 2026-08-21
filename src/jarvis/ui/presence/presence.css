@@ -67,6 +67,9 @@
 .jp-core canvas,
 .jp-core .jcc-core { width: 100% !important; height: 100% !important; }
 
+.jp .jcc-core__phase,
+.jp .jcc-core__answer { display: none; }
+
 .jp-mark {
   position: absolute;
   top: 1.4rem;
