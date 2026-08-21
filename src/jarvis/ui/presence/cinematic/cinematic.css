@@ -237,6 +237,9 @@
   text-shadow: 0 0 18px rgb(3 8 16 / 0.8);
   animation: jp-caption-in 240ms ease-out;
 }
+.jp-caption .jp-heard[data-prior='true'] {
+  opacity: 0.42;
+}
 .jp-caption .jp-heard {
   display: block;
   margin-bottom: 0.2rem;

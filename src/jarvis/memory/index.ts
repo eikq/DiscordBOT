@@ -13,3 +13,12 @@ export type {
   MemoryTurnQuery,
 } from './service';
 export { compactMemoryTokens, extractFactKeys, wantsSupersededHistory } from './intent';
+export {
+  displayAliasKey,
+  forgetOwnerAlias,
+  formatAliasAnswer,
+  listOwnerAliases,
+  rememberOwnerAlias,
+  rememberOwnerPreference,
+} from './ownerSemantics';
+export { applyOpenedResource, MEMORY_TURN_BUDGET } from './workingContext';

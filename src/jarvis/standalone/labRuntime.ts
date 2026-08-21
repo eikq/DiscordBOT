@@ -70,9 +70,19 @@ import { createJarvisRequest } from '../core/request';
 import type { ActionResult, JarvisCore, JarvisCoreResult } from '../core/types';
 import { JarvisMemoryRetrieval } from '../memory/retrieval';
 import type { JarvisMemoryService } from '../memory/service';
+import {
+  forgetOwnerAlias,
+  formatAliasAnswer,
+  listOwnerAliases,
+  rememberOwnerAlias,
+  rememberOwnerPreference,
+} from '../memory/ownerSemantics';
+import { applyOpenedResource } from '../memory/workingContext';
+import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
 import { loadDefaultJarvisSkillRuntime } from '../skills';
 import type { JarvisSkillHost } from '../skills';
-import { JARVIS_BRAIN_ID, JARVIS_PERSONA_ID } from '../presentation/types';
+import { JARVIS_BRAIN_ID, JARVIS_PERSONA_ID, JARVIS_VOICE_ID } from '../presentation/types';
+import type { InteractionContext } from '../intent/types';
 import type {
   PersonaProvider,
   PresentationOverride,
@@ -206,6 +216,7 @@ export type JarvisLabStatus = {
 export type JarvisLabRuntimeOptions = {
   core?: JarvisCore;
   memory?: JarvisMemoryService;
+  memoryStore?: JarvisMemoryStore;
   memorySchemaVersion?: number;
   capabilities?: CapabilityHost;
   skills?: JarvisSkillHost;
@@ -233,6 +244,7 @@ export class JarvisLabRuntime {
   private readonly llm?: JarvisLabRuntimeOptions['llm'];
   private readonly memoryAttached: boolean;
   private readonly memorySchemaVersion?: number;
+  private readonly memoryStore?: JarvisMemoryStore;
   private readonly capabilityIds: string[];
   private readonly capabilityHost?: CapabilityHost;
   private readonly sessions = new StandalonePresentationSessions();
@@ -279,6 +291,7 @@ export class JarvisLabRuntime {
       ?? (options.attachDefaultSkills ? loadDefaultJarvisSkillRuntime() : undefined);
     this.memoryAttached = Boolean(attached?.service);
     this.memorySchemaVersion = attached?.schemaVersion;
+    this.memoryStore = options.memoryStore ?? attached?.store;
     this.capabilityHost = capabilities;
     this.capabilityIds = capabilities?.list().map(item => item.id) ?? [];
     const allowlists = loadDesktopAllowlists();
@@ -653,6 +666,8 @@ export class JarvisLabRuntime {
       return this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
     }
     const prepared = await this.prepareAsk(input);
+    const memoryTurn = await this.finishOwnerMemoryTurn(input, prepared);
+    if (memoryTurn) return memoryTurn;
     if (prepared.continuedTask) {
       return this.finishWorkTask(input, prepared.sessionId, {
         route: 'CAPABILITY', socialAction: 'SPEAK', agentic: true, reason: 'pending_goal_continuation', confidence: 1,
@@ -706,6 +721,12 @@ export class JarvisLabRuntime {
       return output;
     }
     const prepared = await this.prepareAsk(input);
+    const memoryTurn = await this.finishOwnerMemoryTurn(input, prepared);
+    if (memoryTurn) {
+      emit({ type: 'final', payload: memoryTurn });
+      if (memoryTurn.speech) emit({ type: 'speech', payload: memoryTurn.speech });
+      return memoryTurn;
+    }
     if (prepared.continuedTask) {
       const output = await this.finishWorkTask(input, prepared.sessionId, {
         route: 'CAPABILITY', socialAction: 'SPEAK', agentic: true, reason: 'pending_goal_continuation', confidence: 1,
@@ -813,14 +834,15 @@ export class JarvisLabRuntime {
       text: String(input.text || '').trim(),
       intentKind: prepared.resolution.kind,
     });
+    const desktopDirect = Boolean(prepared.resolution.capabilityId?.startsWith('desktop.'));
     return {
       route,
-      useWork: (prepared.resolution.goal?.status === 'RESOLVED'
+      useWork: !desktopDirect && ((prepared.resolution.goal?.status === 'RESOLVED'
         && prepared.resolution.goal.handler === 'CAPABILITY_PLAN') || shouldUseWorkAgent(route, {
         explicitCalls: Boolean(input.capabilityCalls?.length || input.capabilities?.length),
         intentKind: prepared.resolution.kind,
         capabilityId: prepared.resolution.capabilityId,
-      }),
+      })),
     };
   }
 
@@ -1121,6 +1143,7 @@ export class JarvisLabRuntime {
       capabilityCalls: input.capabilityCalls,
       catalog: compactCapabilityCatalog(this.capabilityHost),
       context: this.intents.get(sessionId),
+      aliases: listOwnerAliases(this.memoryStore),
       semanticResolve: this.llm?.generateText
         ? async (request) => runSemanticResolver(
           input => this.llm!.generateText!(input),
@@ -1146,6 +1169,7 @@ export class JarvisLabRuntime {
       pendingGoal = pending;
     }
     const stage = intentStageOf(prepared.resolution);
+    this.rememberIntentReferents(sessionId, prepared.resolution);
     return {
       sessionId,
       resolution: prepared.resolution,
@@ -1169,6 +1193,21 @@ export class JarvisLabRuntime {
     };
   }
 
+  private rememberIntentReferents(sessionId: string, resolution: IntentResolution): void {
+    const args = resolution.arguments ?? {};
+    if (!(resolution.capabilityId?.startsWith('desktop.open') || resolution.capabilityId === 'desktop.placeWindow')) return;
+    this.intents.touch(sessionId, applyOpenedResource(this.intents.get(sessionId), {
+      kind: typeof args.url === 'string' ? 'url' : 'application',
+      applicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
+      url: typeof args.url === 'string' ? args.url : undefined,
+      label: String(args.label || args.applicationId || args.url || resolution.capabilityId || ''),
+      display: args.display && typeof args.display === 'object' ? args.display as InteractionContext['lastDisplay'] : undefined,
+      openState: resolution.capabilityId === 'desktop.placeWindow'
+        ? this.intents.get(sessionId)?.lastOpenedResource?.openState ?? 'intended'
+        : 'intended',
+    }));
+  }
+
   private rememberAfterTurn(
     sessionId: string,
     resolution: IntentResolution,
@@ -1183,11 +1222,27 @@ export class JarvisLabRuntime {
     } else {
       this.intents.clearClarification(sessionId);
     }
+    const opened = output.result.actionResults.some(item => (
+      String(item.capabilityId || item.name || '').startsWith('desktop.open')
+      && item.status === 'completed'
+    ));
     this.intents.touch(sessionId, {
       activeIntent: resolution.kind,
       lastCapabilityId: resolution.capabilityId ?? this.intents.get(sessionId)?.lastCapabilityId,
       lastServiceId: typeof args.serviceId === 'string' ? args.serviceId : this.intents.get(sessionId)?.lastServiceId,
-      lastApplicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
+      lastApplicationId: typeof args.applicationId === 'string' ? args.applicationId : this.intents.get(sessionId)?.lastApplicationId,
+      ...(resolution.capabilityId?.startsWith('desktop.open') || resolution.capabilityId === 'desktop.placeWindow'
+        ? applyOpenedResource(this.intents.get(sessionId), {
+          kind: typeof args.url === 'string' ? 'url' : 'application',
+          applicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
+          url: typeof args.url === 'string' ? args.url : undefined,
+          label: String(args.label || args.applicationId || args.url || resolution.capabilityId || ''),
+          display: args.display && typeof args.display === 'object' ? args.display as InteractionContext['lastDisplay'] : undefined,
+          openState: opened || resolution.capabilityId === 'desktop.placeWindow'
+            ? 'opened'
+            : (output.pendingConfirmation ? 'intended' : this.intents.get(sessionId)?.lastOpenedResource?.openState ?? 'intended'),
+        })
+        : {}),
       recentResearchQuery: typeof args.query === 'string' && String(resolution.capabilityId || '').startsWith('research.')
         ? String(args.query)
         : research?.last?.query,
@@ -1231,6 +1286,83 @@ export class JarvisLabRuntime {
     };
   }
 
+  private async finishOwnerMemoryTurn(
+    input: JarvisLabAskInput,
+    prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
+  ) {
+    const reason = prepared.resolution.reasonCode;
+    if (reason !== 'TEACH_ALIAS' && reason !== 'FORGET_ALIAS' && reason !== 'ASK_MEMORY' && reason !== 'REMEMBER_PREFERENCE') {
+      return undefined;
+    }
+    const args = prepared.resolution.arguments || {};
+    const phrase = String(args.aliasPhrase || args.entity || input.text);
+    let text = 'I can remember that if you say it as an owner preference.';
+    if (reason === 'TEACH_ALIAS') {
+      const written = rememberOwnerAlias(this.memoryStore, {
+        phrase,
+        target: String(args.target || 'display.internal'),
+        kind: 'display',
+        actor: 'owner',
+      });
+      text = written.ok
+        ? `I’ll call “${phrase}” the ${written.factKey.includes('display') ? 'display you described' : 'name you taught'}. That stays in owner memory.`
+        : written.ok === false ? written.message : 'I could not store that alias.';
+    } else if (reason === 'FORGET_ALIAS') {
+      const forgotten = forgetOwnerAlias(this.memoryStore, phrase, 'owner');
+      text = forgotten.ok ? `I’ve forgotten the “${phrase}” alias.` : forgotten.ok === false ? forgotten.message : 'I could not forget that alias.';
+    } else if (reason === 'ASK_MEMORY') {
+      text = formatAliasAnswer(listOwnerAliases(this.memoryStore, /monitor|screen|จอ/iu.test(input.text) ? 'display' : undefined));
+    } else if (reason === 'REMEMBER_PREFERENCE') {
+      const written = rememberOwnerPreference(this.memoryStore, {
+        key: String(args.target || 'preference'),
+        value: String(args.target || input.text),
+        actor: 'owner',
+      });
+      text = written.ok ? 'I’ll keep that as an owner preference.' : written.ok === false ? written.message : 'I could not store that preference.';
+    }
+    const request = createJarvisRequest({ text: input.text, sessionId: prepared.sessionId, actionSource: input.actionSource });
+    const result = {
+      requestId: request.requestId,
+      answerIntent: 'owner_memory',
+      verifiedFacts: [{
+        key: 'owner.memory',
+        value: text,
+        sourceType: 'memory' as const,
+        confidence: 1,
+        immutableForPresentation: true,
+      }],
+      unverifiedClaims: [],
+      toolResults: [],
+      memoryRefs: listOwnerAliases(this.memoryStore).slice(0, 6).map(item => ({
+        canonicalId: item.factKey,
+        domain: 'global' as const,
+        type: 'alias',
+        confidence: 0.95,
+      })),
+      actionResults: [],
+      uncertainty: [],
+      suggestedContent: text,
+    };
+    const presented = await this.engine.render(
+      result,
+      this.sessions.resolveTurn(prepared.sessionId, input.oneTurn ? turnOverride(input) : undefined),
+      { sessionId: prepared.sessionId },
+    );
+    const speech = await this.maybeSpeak(text, request.requestId, presented.voiceProfileId, input.speak);
+    return {
+      request,
+      result,
+      presented: { ...presented, text },
+      timings: { totalMs: 0 },
+      coreState: 'complete' as const,
+      presentation: await this.presentationStatus(prepared.sessionId),
+      research: this.researchSnapshot(),
+      workspace: this.workspaceSnapshot(),
+      intent: prepared.intent,
+      ...(speech ? { speech } : {}),
+    };
+  }
+
   private async finishActionTurn(
     invoked: Awaited<ReturnType<NonNullable<CapabilityHost['invoke']>>>,
     sessionId: string,
@@ -1270,6 +1402,14 @@ export class JarvisLabRuntime {
     const presentation = this.sessions.resolveTurn(sessionId);
     const presented = await this.engine.render(result, presentation, { sessionId });
     const speech = await this.maybeSpeak(presented.text, request.requestId, presented.voiceProfileId, speak);
+    if (invoked.status === 'ok' && invoked.capabilityId.startsWith('desktop.open')) {
+      const current = this.intents.get(sessionId)?.lastOpenedResource;
+      if (current) {
+        this.intents.touch(sessionId, {
+          lastOpenedResource: { ...current, openState: 'opened' },
+        });
+      }
+    }
     return {
       request,
       result,
@@ -1339,6 +1479,7 @@ async function resolveLabActionTurn(text: string, input: {
   capabilityCalls?: JarvisLabAskInput['capabilityCalls'];
   catalog: ReturnType<typeof compactCapabilityCatalog>;
   context?: ReturnType<InteractionContextStore['get']>;
+  aliases?: import('../memory/ownerSemantics').OwnerAliasRecord[];
   semanticResolve?: Parameters<typeof resolveUserIntent>[1] extends infer T
     ? T extends { semanticResolve?: infer S } ? S : undefined
     : undefined;
@@ -1400,6 +1541,7 @@ async function resolveLabActionTurn(text: string, input: {
     projectIds: input.projectIds,
     catalog: input.catalog,
     context: input.context,
+    aliases: input.aliases,
     semanticResolve: input.semanticResolve,
     capabilityHost: input.capabilityHost,
   });

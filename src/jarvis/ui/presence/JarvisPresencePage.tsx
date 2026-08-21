@@ -106,6 +106,7 @@ export default function JarvisPresencePage() {
   const [wakeAttention, setWakeAttention] = useState(false);
   const speechSession = useRef(defaultSpeechSession());
   const [lastAsk, setLastAsk] = useState('');
+  const [priorAsk, setPriorAsk] = useState('');
   const [clock, setClock] = useState(() => new Date());
   const [ambient, setAmbient] = useState(() => isPresenceAmbientPath(window.location.pathname, window.location.search));
   const [emergencyOpen, setEmergencyOpen] = useState(false);
@@ -629,6 +630,7 @@ export default function JarvisPresencePage() {
       return;
     }
 
+    setPriorAsk(current => current && current !== payloadText ? lastAsk || current : lastAsk);
     setLastAsk(payloadText);
     if (/research|ค้นหา|ค้นเว็บ|qwen/i.test(payloadText)) setResearchIntent(true);
     setBusy(true);
@@ -947,6 +949,7 @@ export default function JarvisPresencePage() {
         <div className="jp-dock">
           {answer || heard ? (
             <p className="jp-caption" data-empty={answer ? 'false' : 'true'}>
+              {priorAsk && priorAsk !== heard ? <span className="jp-heard" data-prior="true">{priorAsk}</span> : null}
               {heard ? <span className="jp-heard">{heard}</span> : null}
               {answer}
             </p>
