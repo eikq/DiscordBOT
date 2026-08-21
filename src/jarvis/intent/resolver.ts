@@ -4,6 +4,7 @@ import { fastPathResolution, heuristicResolve } from './heuristic';
 import { parseSemanticJson } from './semanticLlm';
 import { validateIntentResolution } from './schema';
 import { resolveOwnerGoal } from '../goals';
+import { DESKTOP_PLACE_WINDOW } from '../capabilities/actions/constants';
 import type { CompactCapability, IntentResolution, IntentResolveOptions } from './types';
 
 export async function resolveUserIntent(text: string, options: IntentResolveOptions = {}): Promise<IntentResolution> {
@@ -14,6 +15,8 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
     catalog,
     applicationIds: options.applicationIds,
     projectIds: options.projectIds,
+    aliases: options.aliases,
+    context: options.context,
   });
   if (fast) {
     const declared = shouldResolveDeclaredGoal(options)
@@ -44,6 +47,7 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
     applicationIds: options.applicationIds,
     projectIds: options.projectIds,
     context: options.context,
+    aliases: options.aliases,
     now: options.now,
   });
   if (heuristic) return applyConfidencePolicy(heuristic, catalog);
@@ -131,14 +135,26 @@ function bindFastPathToGoal(fast: IntentResolution, declared?: IntentResolution)
   const route = declared.goal.routes.find(item => (
     item.available && item.inputCompatible && item.steps[0]?.capabilityId === fast.capabilityId
   ));
-  if (!route) return declared;
+  if (!route) {
+    if (
+      fast.capabilityId === DESKTOP_PLACE_WINDOW
+      || String(fast.reasonCode || '').startsWith('REFERENT_')
+    ) {
+      return { ...fast, goal: declared.goal };
+    }
+    return declared;
+  }
   const goal = structuredClone(declared.goal);
   goal.selectedRouteId = route.id;
   goal.permissionRequired = route.ownerDecisionRequired ? route.steps.map(item => item.capabilityId) : [];
   goal.evidence = [...goal.evidence, `fast-path-bound:${fast.capabilityId}`];
+  const adapted = route.steps[0]?.input ?? {};
+  const hasAdaptedTarget = Boolean(
+    adapted.url || adapted.applicationId || adapted.projectId || adapted.settingsId || adapted.serviceId,
+  );
   return {
     ...fast,
-    arguments: structuredClone(route.steps[0]?.input ?? fast.arguments ?? {}),
+    arguments: structuredClone(hasAdaptedTarget ? adapted : (fast.arguments ?? adapted)),
     reasonCode: 'DECLARED_GOAL',
     goal,
   };

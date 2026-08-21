@@ -20,6 +20,8 @@ import {
   SYSTEM_STATUS,
 } from './constants';
 import { classifyVoiceFamily } from '../../intent/voiceFamilies';
+import { routeSemanticIntent } from '../../intent/semanticRoute';
+import { compactCapabilityCatalog } from '../../intent/catalog';
 import { SERVICE_ALIASES, type JarvisServiceId } from './services/catalog';
 import type { CapabilityCall } from './types';
 
@@ -83,7 +85,12 @@ export function isExplicitActionConfirmation(text: string): boolean {
 
 export function inferActionIntent(
   text: string,
-  options: { applicationIds?: string[]; projectIds?: string[] } = {},
+  options: {
+    applicationIds?: string[];
+    projectIds?: string[];
+    aliases?: import('../../memory/ownerSemantics').OwnerAliasRecord[];
+    context?: import('../../intent/types').InteractionContext | null;
+  } = {},
 ): ActionIntent {
   const raw = text.trim();
   if (!raw) return { kind: 'none' };
@@ -158,6 +165,24 @@ export function inferActionIntent(
         input: { applicationId: voiceEarly.resources[0].applicationId, ...(voiceEarly.display ? { display: voiceEarly.display } : {}) },
       }],
     };
+  }
+
+  const semantic = routeSemanticIntent(raw, {
+    catalog: compactCapabilityCatalog(),
+    applicationIds: options.applicationIds,
+    projectIds: options.projectIds,
+    aliases: options.aliases,
+    context: options.context,
+  });
+  if (semantic?.kind === 'CAPABILITY' && semantic.capabilityId && semantic.arguments) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [{ id: semantic.capabilityId, input: semantic.arguments }],
+    };
+  }
+  if (semantic?.kind === 'UNSUPPORTED') {
+    return { kind: 'unsupported', reasonCode: semantic.reasonCode, userMessage: semantic.userMessage || 'I understand the goal, but that capability is not enabled.' };
   }
 
   const settingsId = matchSettings(raw);

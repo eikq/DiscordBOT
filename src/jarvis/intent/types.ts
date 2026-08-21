@@ -1,3 +1,5 @@
+import type { DisplaySelector } from '../desktop/monitorTopology';
+import type { OwnerAliasRecord } from '../memory/ownerSemantics';
 import type { CapabilityHost } from '../capabilities/types';
 import type { GoalCatalog, GoalResolution, GoalSuggestion, TrustedInputAdapterRegistry } from '../goals';
 
@@ -71,6 +73,16 @@ export type InteractionContext = {
   lastServiceId?: string;
   lastApplicationId?: string;
   lastSettingsId?: string;
+  lastOpenedResource?: {
+    kind: 'application' | 'url';
+    applicationId?: string;
+    url?: string;
+    label: string;
+    display?: DisplaySelector | null;
+    openState?: 'intended' | 'opened';
+  };
+  lastDisplay?: DisplaySelector | null;
+  previousDisplay?: DisplaySelector | null;
   lastQuery?: string;
   recentResearchSessionId?: string;
   recentResearchQuery?: string;
@@ -97,6 +109,7 @@ export type IntentResolveOptions = {
   goalCatalog?: GoalCatalog;
   inputAdapters?: TrustedInputAdapterRegistry;
   goalSuggestion?: GoalSuggestion;
+  aliases?: OwnerAliasRecord[];
   semanticResolve?: (input: {
     text: string;
     catalog: CompactCapability[];

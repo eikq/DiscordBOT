@@ -6,6 +6,7 @@ import { resolveCapabilityGoal } from '../intelligence/capabilityGraph';
 import type { InteractionContext } from '../intent/types';
 import { redactSecrets } from '../security/redaction';
 import { classifyVoiceFamily } from '../intent/voiceFamilies';
+import { interpretSemanticIntent } from '../intent/semanticIntent';
 import { createDefaultGoalCatalog, type GoalCatalog } from './catalog';
 import { createDefaultInputAdapterRegistry, directCapabilityInput, type TrustedInputAdapterRegistry } from './inputAdapters';
 import type {
@@ -147,6 +148,15 @@ function deterministicMatch(text: string, catalog: GoalCatalog, context?: Intera
     return matched(fromCatalog('self.explain-gap'), 0.98, {}, ['matcher:self.explain-gap']);
   }
   const voice = classifyVoiceFamily(text);
+  const semanticOpen = interpretSemanticIntent(text);
+  if (semanticOpen.action === 'OPEN' && (semanticOpen.objectType === 'WEBSITE' || (semanticOpen.display && semanticOpen.entity))) {
+    return matched(fromCatalog('desktop.open-resource'), 0.94, {
+      resource: semanticOpen.entity,
+      entity: semanticOpen.entity,
+      objectType: semanticOpen.objectType,
+      ...(semanticOpen.display ? { display: semanticOpen.display } : {}),
+    }, ['matcher:desktop.open-resource', 'matcher:resource.open']);
+  }
   if (voice.family === 'DESKTOP_OPEN' || voice.family === 'COMPOUND_OPEN') {
     const resource = voice.resources[0];
     return matched(fromCatalog('desktop.open-resource'), resource ? 0.96 : 0.8, {

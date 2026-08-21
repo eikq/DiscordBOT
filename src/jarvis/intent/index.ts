@@ -1,3 +1,6 @@
+export { interpretSemanticIntent } from './semanticIntent';
+export type { SemanticIntent } from './semanticIntent';
+export { routeSemanticIntent } from './semanticRoute';
 export { classifyVoiceFamily, isWakeUtterance } from './voiceFamilies';
 export { routeVoiceFamily } from './voiceRoute';
 export { sttMayExecute } from './sttRiskGate';

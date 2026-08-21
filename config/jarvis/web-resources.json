@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "resources": [
+    {
+      "id": "youtube",
+      "kind": "website",
+      "names": ["youtube", "youtu.be", "ยูทูบ", "ยูทูป"],
+      "officialUrl": "https://www.youtube.com",
+      "evidence": "allowlisted-web"
+    },
+    {
+      "id": "github",
+      "kind": "website",
+      "names": ["github", "git hub"],
+      "officialUrl": "https://github.com",
+      "evidence": "owner-catalog"
+    },
+    {
+      "id": "roblox",
+      "kind": "website",
+      "names": ["roblox"],
+      "officialUrl": "https://www.roblox.com",
+      "evidence": "owner-catalog"
+    }
+  ]
+}

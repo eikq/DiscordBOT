@@ -16,6 +16,7 @@ import { WORKSPACE_COMPARE, WORKSPACE_CURRENT, WORKSPACE_GET, WORKSPACE_SEARCH }
 import { REMINDERS_CANCEL, REMINDERS_LIST, REMINDERS_RESCHEDULE } from '../automation/constants';
 import { classifyVoiceFamily } from './voiceFamilies';
 import { routeVoiceFamily } from './voiceRoute';
+import { routeSemanticIntent } from './semanticRoute';
 import { classifyActionability, isTalkingAboutTopic, shouldTreatAsForbiddenRequest } from './classify';
 import { catalogHas } from './catalog';
 import { newClarificationId } from './context';
@@ -43,6 +44,7 @@ export function heuristicResolve(
     applicationIds?: string[];
     projectIds?: string[];
     context?: InteractionContext | null;
+    aliases?: import('../memory/ownerSemantics').OwnerAliasRecord[];
     now?: number;
   },
 ): IntentResolution | null {
@@ -57,6 +59,15 @@ export function heuristicResolve(
 
   const followUp = resolveFollowUp(raw, options.context, options.catalog);
   if (followUp) return followUp;
+
+  const semantic = routeSemanticIntent(raw, {
+    catalog: options.catalog,
+    context: options.context,
+    aliases: options.aliases,
+    applicationIds: options.applicationIds,
+    projectIds: options.projectIds,
+  });
+  if (semantic) return semantic;
 
   const voice = classifyVoiceFamily(raw);
   const routed = routeVoiceFamily(raw, { catalog: options.catalog, context: options.context });
@@ -183,11 +194,19 @@ export function heuristicResolve(
 
 export function fastPathResolution(
   text: string,
-  options: { applicationIds?: string[]; projectIds?: string[]; catalog: CompactCapability[] },
+  options: {
+    applicationIds?: string[];
+    projectIds?: string[];
+    catalog: CompactCapability[];
+    aliases?: import('../memory/ownerSemantics').OwnerAliasRecord[];
+    context?: InteractionContext | null;
+  },
 ): IntentResolution | null {
   const intent = inferActionIntent(text, {
     applicationIds: options.applicationIds,
     projectIds: options.projectIds,
+    aliases: options.aliases,
+    context: options.context,
   });
   if (intent.kind === 'unsupported') {
     return {

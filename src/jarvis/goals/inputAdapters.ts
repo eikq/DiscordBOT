@@ -11,6 +11,7 @@ import {
 import { REMINDERS_CREATE } from '../automation/constants';
 import type { InputCompatibility } from './types';
 import { validateAdapterAuthorityBoundary, validateAgainstJsonSchema } from './schema';
+import { resolveResource } from '../resources/resolver';
 
 export type TrustedAdapterContext = {
   trustedWorkspaceId?: string;
@@ -165,12 +166,33 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
     acceptedGoalFields: ['resource', 'display', 'applicationId', 'url', 'kind', 'label'],
     adapt: input => {
       const resource = input.resource && typeof input.resource === 'object' ? input.resource as Record<string, unknown> : {};
-      const kind = resource.kind === 'url' || input.kind === 'url' || resource.url || input.url ? 'url' : 'application';
+      let url = typeof resource.url === 'string' ? resource.url : typeof input.url === 'string' ? input.url : undefined;
+      let applicationId = typeof resource.applicationId === 'string' ? resource.applicationId : typeof input.applicationId === 'string' ? input.applicationId : undefined;
+      let label = typeof resource.label === 'string' ? resource.label : undefined;
+      if (!url && !applicationId && typeof input.resource === 'string') {
+        const resolved = resolveResource({
+          action: 'OPEN',
+          objectType: 'WEBSITE',
+          entity: input.resource,
+          modifiers: [],
+          references: [],
+          confidence: 'HIGH',
+          mixedLanguage: false,
+        });
+        if (resolved.ok && resolved.kind === 'website') {
+          url = resolved.url;
+          label = resolved.label;
+        } else if (resolved.ok && resolved.kind === 'application') {
+          applicationId = resolved.applicationId;
+          label = resolved.label;
+        }
+      }
+      const kind = url || resource.kind === 'url' || input.kind === 'url' ? 'url' : 'application';
       return {
         kind,
-        ...(typeof resource.applicationId === 'string' ? { applicationId: resource.applicationId } : {}),
-        ...(typeof resource.url === 'string' ? { url: resource.url } : {}),
-        ...(typeof resource.label === 'string' ? { label: resource.label } : {}),
+        ...(applicationId ? { applicationId } : {}),
+        ...(url ? { url } : {}),
+        ...(label ? { label } : {}),
         ...(input.display && typeof input.display === 'object' ? { display: input.display } : {}),
       };
     },
