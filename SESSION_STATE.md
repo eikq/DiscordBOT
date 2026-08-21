@@ -29,6 +29,16 @@ Bugs found while verifying:
 See `docs/JARVIS_EXECUTION_JOURNAL.md` and
 `docs/JARVIS_LOCAL_ACCEPTANCE_2026-08-21.md`.
 
+Local acceptance on this Windows machine used disposable fixtures only:
+
+- LA-015 / LA-017 / Journal C: PASS via real temp-dir persistence (not HTTP UI)
+- LA-001 hello / recursion / `สถานะระบบ`: PASS against local Ollama
+- Research request routed RESEARCH/agentic but had no verified executable route in the harness
+- Self-knowledge CCTV honesty PASS; setup-question classifier FAIL
+- `/jarvis-lab` UI/SSE: NOT_RUN
+
+`BLOCKED_LOCAL_ACCEPTANCE.md` is not upgraded to LIVE_VERIFIED for dashboard-complete procedures.
+
 - Added `src/jarvis/executionJournal` with validated transitions, fingerprints,
   SQLite persistence, unique idempotency, checkpoint binding, and fail-closed
   corrupt-schema handling.
