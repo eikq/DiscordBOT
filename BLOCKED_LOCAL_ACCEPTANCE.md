@@ -266,3 +266,28 @@ LA-014 → LA-013.
   and owner notes. Never attach footage or credential values.
 - Not claimed by cloud: Windows, actual CCTV, RTSP/ONVIF connectivity, owner
   LAN/NVR, screen/phone control, Ollama/GPU, voice, browser visuals, or Whonix.
+
+## LA-019 Goal Catalog and typed input adapter owner acceptance
+
+- Purpose: confirm natural owner requests select the intended declared goal,
+  preserve local/public scope, and pass schema-valid inputs through the actual
+  owner runtime without creating authority.
+- Preconditions: local loopback dashboard; configured public research,
+  workspace, status, and reminder services; no real CCTV test required.
+- Exact verification: ask one research, workspace search, system health,
+  reminder, capability-summary, ambiguous comparison, and missing-time request.
+  Confirm Goal ID/route and adapter only in Expert Details; workspace never uses
+  public web; system health remains read-only; reminder uses ActionGate; missing
+  time asks only for time. Disable the preferred research route and confirm one
+  bounded declared public alternative, then confirm private browsing stops for
+  owner decision. Restart and inspect redacted goal/experience records.
+- Expected: model identity cannot change goal availability; adapters cannot add
+  paths, credentials, capability IDs, permissions, confirmation, shell, risk,
+  privilege, or admin fields; capability failures remain capability-specific;
+  goal success is recorded separately.
+- Failure evidence: redacted intent/goal record, Task Center goal route, adapter
+  ID, capability result, gap plan, and verification record. Do not attach owner
+  file contents, reminder private text, credentials, or browser data.
+- Not claimed by cloud: Windows, owner filesystem behavior, actual notification
+  delivery, Ollama, browser visuals, CCTV/RTSP/ONVIF, phone/screen/voice, GPU, or
+  Whonix.

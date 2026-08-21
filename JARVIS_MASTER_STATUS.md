@@ -124,6 +124,32 @@ See `docs/JARVIS_CAPABILITY_INTELLIGENCE.md`. Real CCTV/RTSP/ONVIF/NVR,
 owner LAN, device control, Windows services, local model state, and browser
 visual acceptance remain `BLOCKED_LOCAL_ACCEPTANCE`.
 
+## Authoritative Goal Catalog and typed input adapters
+
+Branch: `work/jarvis-goal-catalog-input-adapters` from exact remote source
+`work/jarvis-capability-intelligence` at
+`deab0bb96a02ab0465171221b97c0be0e8b58ca8`.
+
+- GoalCatalog declares a bounded set of existing end-to-end owner objectives;
+  it does not replace WorkAgent or CapabilityGraph.
+- Exact trusted adapters validate against registered capability schemas and
+  cannot create path, credential, capability, permission, confirmation, shell,
+  privilege, risk, or administrator authority.
+- Compatibility, ambiguity, missing owner input, scope, route evidence, and
+  verification expectations are structured. Unknown goals remain unsupported.
+- WorkAgent may try only bounded declared safe alternatives. Private/higher-risk
+  scope, setup, credentials, installation, or new privilege stop for owner
+  decision.
+- Goal outcome evidence and CapabilitySelfModel competence remain distinct.
+  Failed capability attempts are retained even when an alternate route completes
+  the goal.
+- System and Task Center show human goal readiness/routes first and keep IDs and
+  adapter evidence in Expert Details.
+
+See `docs/JARVIS_GOAL_CATALOG_INPUT_ADAPTERS.md`. Full document parsing, real
+CCTV/devices, owner filesystem/provider behavior, and browser/hardware acceptance
+remain partial, prepared, or `BLOCKED_LOCAL_ACCEPTANCE` as documented.
+
 Future providers remain honest contracts: MinerU, Tokei, social/video,
 Content Studio, and local computer use are `PREPARE_CONTRACT`; OpenHarness,
 Awesome LLM Apps and Security Academy sources are `REFERENCE_ONLY`;

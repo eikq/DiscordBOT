@@ -1024,3 +1024,48 @@ independent verification. CCTV existed only as simulation cards.
   remain `BLOCKED_LOCAL_ACCEPTANCE`.
 
 See `docs/JARVIS_CAPABILITY_INTELLIGENCE.md`.
+
+---
+
+## ADR-026 — Declared goals and trusted adapters bridge language to authority
+
+Date: 2026-08-21
+Status: Accepted for Core cloud implementation; owner acceptance pending
+
+### Context
+
+Capability Intelligence could explain registry availability and compose known
+capabilities, but arbitrary natural owner language still lacked an authoritative
+goal definition and schema-safe representation bridge. Allowing a model to
+invent a route or capability input would confuse representation with authority.
+
+### Decision
+
+- Add one bounded GoalCatalog over existing workflows. Reuse WorkAgent,
+  CapabilityGraph, GapResolver, CapabilityHost, ActionGate, Self Knowledge, and
+  capability schemas; add no parallel planner or authority system.
+- Bind every trusted input adapter to one adapter ID and one registered
+  capability ID. Validate both the authority boundary and actual descriptor
+  schema before a plan can execute.
+- Preserve owner scope at catalog registration and runtime. A scope-changing or
+  higher-risk alternative requires an explicit owner decision.
+- Unknown goals remain `NO_MATCH`; low-confidence/ambiguous matches clarify;
+  missing required fields ask the smallest declared owner question.
+- Allow WorkAgent to try only bounded declared, available, input-compatible
+  existing/composed alternatives. Setup, installation, credentials, new
+  dependency, or privilege increases stop.
+- Store goal/route/adapter evidence without chain-of-thought. Keep goal outcome
+  distinct from CapabilitySelfModel evidence so a recovered goal cannot turn a
+  failed capability attempt into success.
+
+### Consequences
+
+- Current natural research, workspace, basic indexed document, status, reminder,
+  and Self Knowledge requests can reach typed existing capability plans.
+- Full document intelligence, content/social/computer-use/device providers, and
+  real CCTV remain future catalog families and are not made REAL by catalog
+  extensibility.
+- Owner-machine routing, provider behavior, browser visuals, reminders, and
+  hardware remain `BLOCKED_LOCAL_ACCEPTANCE`.
+
+See `docs/JARVIS_GOAL_CATALOG_INPUT_ADAPTERS.md`.

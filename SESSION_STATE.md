@@ -1,7 +1,39 @@
 ﻿# Cursor Session State
 
-Updated: 2026-08-20
+Updated: 2026-08-21
 Agent/model: ChatGPT Work / Codex (cloud)
+
+## This turn — Authoritative Goal Catalog and typed input adapters
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for existing cloud-safe workflows.
+**OWNER_VERIFIED** and live owner-machine/provider verification are not claimed.
+
+Branch: `work/jarvis-goal-catalog-input-adapters` from exact remote source
+`work/jarvis-capability-intelligence` at
+`deab0bb96a02ab0465171221b97c0be0e8b58ca8`.
+
+- Added one authoritative GoalCatalog for research, workspace, basic indexed
+  documents, Jarvis/system health, reminder creation, capability Self Knowledge,
+  gap explanation, and honest owner-only CCTV preparation.
+- Added capability-bound trusted input adapters and JSON-schema validation.
+  Adapters cannot add paths, credentials, capability IDs, permissions,
+  confirmation, shell/command, risk, privilege, or admin authority.
+- Intent resolution preserves existing fast-path behavior while attaching goal,
+  route, typed input, rejected alternative, permission, and verification
+  evidence. Unknown/ambiguous objectives do not become supported.
+- WorkAgent consumes the declared route and can try a bounded compatible safe
+  alternative. Higher-risk/private routes stop for owner decision.
+- Goal outcome evidence is separate from capability competence. A failed first
+  capability remains a failure even when an alternate route completes the goal.
+- Self Knowledge and System/Task Center expose end-to-end goal readiness and
+  adapter evidence with technical IDs under Expert Details.
+
+Verification: focused goal/intent/capability/runtime suite **65/65**;
+`npx tsc --noEmit` PASS; `npm run test:cloud` **517/517**; production client and
+server build PASS with the pre-existing CoreScene chunk and CJS `import.meta`
+warnings. Windows, owner filesystem, actual reminder delivery, Ollama/GPU,
+browser visuals, CCTV/RTSP/ONVIF, phone/screen/voice, and Whonix remain
+`BLOCKED_LOCAL_ACCEPTANCE`.
 
 ## This turn — Capability Intelligence and Self Knowledge
 
