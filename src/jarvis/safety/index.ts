@@ -1,5 +1,6 @@
 export { DestructiveActionCircuitBreaker, DEFAULT_CIRCUIT_BREAKER_THRESHOLDS } from './circuitBreaker';
 export { FailureContainment } from './failureContainment';
+export { reconcileContainment, isExpectedNoMutationOutcome } from './containmentReconcile';
 export { rollbackForResult, verificationForResult } from './lifecycle';
 export type {
   ActionEffect,

@@ -5,6 +5,7 @@ import type { CapabilityResult } from '../capabilities/types';
 import type { JarvisEventBus } from '../security/eventBus';
 import type { PrivilegeActor } from '../security/types';
 import { redactSecrets } from '../security/redaction';
+import { isExpectedNoMutationOutcome } from './containmentReconcile';
 import type { ActionPreflight, RollbackContract } from './types';
 
 export type ContainmentIncident = {
@@ -37,9 +38,25 @@ export class FailureContainment {
   public blocks(capabilityId: string, preflight: ActionPreflight): ContainmentIncident | undefined {
     return [...this.incidents.values()].find(incident => {
       if (!incident.active || (incident.capabilityId !== '*' && incident.capabilityId !== capabilityId)) return false;
-      if (incident.affectedTargets.length === 0 || preflight.affectedTargets.length === 0) return true;
+      if (incident.affectedTargets.length === 0) {
+        return incident.reasonCode === 'MUTATION_OUTCOME_UNKNOWN'
+          || incident.reasonCode === 'CONTAINMENT_STATE_CORRUPT'
+          || incident.reasonCode === 'DESTRUCTIVE_EXECUTION_FAILED';
+      }
+      if (preflight.affectedTargets.length === 0) {
+        return incident.capabilityId === capabilityId || incident.capabilityId === '*';
+      }
       return incident.affectedTargets.some(target => preflight.affectedTargets.includes(target));
     });
+  }
+
+  public listActive(capabilityId?: string): ContainmentIncident[] {
+    return this.list().filter(item => item.active && (!capabilityId || item.capabilityId === capabilityId || item.capabilityId === '*'));
+  }
+
+  public get(id: string): ContainmentIncident | undefined {
+    const incident = this.incidents.get(id);
+    return incident ? this.clone(incident) : undefined;
   }
 
   public observe(input: {
@@ -59,6 +76,7 @@ export class FailureContainment {
         || input.result.structured.reasonCode === 'MUTATION_OUTCOME_UNKNOWN'
         || cancellationState(input.result.structured.cancellation) === 'FAILED_TO_CANCEL'
         || cancellationState(input.result.structured.cancellation) === 'CANCELLATION_REQUESTED');
+    if (isExpectedNoMutationOutcome(input.result)) return undefined;
     if (!failedAfterDestructive && outsideScope.length === 0 && !mutationOutcomeUnknown) return undefined;
 
     const reasonCode = outsideScope.length > 0
