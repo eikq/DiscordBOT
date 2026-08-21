@@ -16,7 +16,12 @@ export function readNetworkStatus(
 ): NetworkSnapshot {
   const live = groups === undefined;
   if (live && cache && now - cache.at < NETWORK_TTL_MS) return cache.value;
-  const value = readNetworkFresh(live ? os.networkInterfaces() : groups);
+  let value: NetworkSnapshot;
+  try {
+    value = readNetworkFresh(live ? os.networkInterfaces() : groups);
+  } catch {
+    value = { status: 'unavailable', reason: 'Network interfaces are unavailable.' };
+  }
   if (live) cache = { at: now, value };
   return value;
 }

@@ -398,7 +398,7 @@ export class CommandCenterRuntime {
       id: 'gpu_hot',
       type: 'temperature',
       summary: 'Simulated GPU overheating warning',
-      severity: 'warning',
+      severity: 'critical',
       at: new Date().toISOString(),
       ownerRelevant: true,
       simulated: true,

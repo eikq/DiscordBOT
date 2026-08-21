@@ -20,8 +20,8 @@ function npmInvocation(npmArgs: string[]): { executable: string; args: string[] 
   return { executable: 'npm', args: npmArgs };
 }
 
-function tsxEntry(): string {
-  return require.resolve('tsx/cli');
+function tsxLoader(): string {
+  return require.resolve('tsx');
 }
 
 function tscEntry(): string {
@@ -146,7 +146,7 @@ export function validateNightCommand(raw: string): PolicyResult<ValidatedCommand
     if (files.length === 0 || files.some((item) => !isSafeRelPath(item) || !/\.test\.(ts|js|mts|cts)$/.test(item))) {
       return deny('tsx --test requires relative *.test.ts paths.');
     }
-    return allow('tsx_test', process.execPath, [tsxEntry(), '--test', ...files], tokens.join(' '));
+    return allow('tsx_test', process.execPath, ['--import', tsxLoader(), '--test', ...files], tokens.join(' '));
   }
 
   if (head === 'npx' && rest[0] === 'tsc' && rest.length === 2 && rest[1] === '--noEmit') {
