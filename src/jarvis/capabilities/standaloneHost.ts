@@ -33,6 +33,8 @@ import { CapabilityRegistry } from './CapabilityRegistry';
 import { createLabPingHandler } from './labPing';
 import { registerWorldIntelCapabilities, type WorldIntelCapabilityPort } from './worldIntel';
 import type { CapabilityHost } from './types';
+import { registerRecoverySandboxCapabilities } from '../recovery';
+import { defaultRuntimeRoot } from '../storage/operationalDb';
 
 export type StandaloneCapabilityHostOptions = {
   worldIntel?: WorldIntelCapabilityPort | false;
@@ -52,6 +54,9 @@ export type StandaloneCapabilityHostOptions = {
     events?: JarvisEventBus;
     emergency?: EmergencyStopController;
     containment?: FailureContainment;
+    /** Enables the real checkpoint-backed acceptance sandbox under this Jarvis-owned root. */
+    recoveryRoot?: string;
+    operator?: TrustedOperatorRuntime;
   };
 };
 
@@ -116,13 +121,27 @@ export function createStandaloneCapabilityHost(
 
   if (options.actions === false || !allowlists) return registry;
 
-  const operator = options.actions?.leases || options.actions?.events || options.actions?.now
+  const operator = options.actions?.operator ?? (options.actions?.leases || options.actions?.events || options.actions?.now || options.actions?.recoveryRoot
     ? new TrustedOperatorRuntime({
         leases: options.actions?.leases,
         events: options.actions?.events ?? sharedJarvisEventBus(),
         now: options.actions?.now,
+        runtimeRoot: options.actions?.recoveryRoot,
       })
-    : sharedTrustedOperatorRuntime();
+    : sharedTrustedOperatorRuntime());
+
+  if (operator.checkpoints) {
+    const recoveryRoot = options.actions?.recoveryRoot
+      ?? process.env.JARVIS_RUNTIME_DIR
+      ?? defaultRuntimeRoot();
+    registerRecoverySandboxCapabilities(registry, {
+      root: recoveryRoot,
+      checkpoints: operator.checkpoints,
+      verification: operator.verification,
+      events: options.actions?.events ?? operator.events,
+      now: options.actions?.now,
+    });
+  }
 
   const gateOptions: ActionGateOptions = {
     allowlists,
@@ -137,6 +156,7 @@ export function createStandaloneCapabilityHost(
     events: options.actions?.events ?? operator.events,
     emergency: options.actions?.emergency ?? operator.emergency,
     containment: options.actions?.containment ?? operator.containment,
+    verification: operator.verification,
   };
   return createActionGate(registry, gateOptions);
 }

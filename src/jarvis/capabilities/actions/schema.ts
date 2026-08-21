@@ -64,6 +64,8 @@ import { isJarvisServiceId } from './services/catalog';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopAllowlists } from './types';
 import { classifyOpenUrl } from './urlSafety';
+import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
+import { looksLikeSecret } from '../../security/redaction';
 
 export type ValidatedActionInput =
   | { ok: true; value: Record<string, unknown> }
@@ -220,6 +222,33 @@ export function validateActionInput(
 
   if (isWorkspaceCapabilityId(capabilityId)) {
     return validateWorkspaceInput(capabilityId, input);
+  }
+
+  if (capabilityId === RECOVERY_SANDBOX_MUTATE) {
+    if (!onlyKeys(input, ['operationId', 'value'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only operationId and value are allowed.' };
+    }
+    if (typeof input.operationId !== 'string' || !/^[a-z0-9][a-z0-9_-]{7,63}$/u.test(input.operationId)) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Invalid sandbox operation id.' };
+    }
+    if (typeof input.value !== 'string' || input.value.length < 1 || input.value.length > 160) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Sandbox value must be 1-160 characters.' };
+    }
+    if (looksLikeSecret(input.value)) {
+      return { ok: false, reasonCode: 'SECRET_INPUT_REJECTED', userMessage: 'Secret-like values are not allowed in the recovery sandbox.' };
+    }
+    return { ok: true, value: { operationId: input.operationId, value: input.value } };
+  }
+
+  if (capabilityId === RECOVERY_SANDBOX_ROLLBACK) {
+    if (!onlyKeys(input, ['checkpointId', 'rollbackId'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only checkpointId and rollbackId are allowed.' };
+    }
+    if (typeof input.checkpointId !== 'string' || !/^checkpoint_[0-9a-f-]{36}$/u.test(input.checkpointId)
+      || typeof input.rollbackId !== 'string' || !/^[a-z0-9][a-z0-9_-]{7,63}$/u.test(input.rollbackId)) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Invalid rollback request.' };
+    }
+    return { ok: true, value: { checkpointId: input.checkpointId, rollbackId: input.rollbackId } };
   }
 
   return { ok: false, reasonCode: 'UNKNOWN_CAPABILITY', userMessage: 'Unknown capability.' };

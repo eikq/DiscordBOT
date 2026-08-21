@@ -2,6 +2,7 @@ import { isReminderReadCapability, REMINDER_CAPABILITY_IDS } from '../../automat
 import { isResearchReadCapability, RESEARCH_CAPABILITY_IDS } from '../../research/constants';
 import { RESEARCH_PRIVATE_BROWSE } from '../../research/private/constants';
 import { isWorkspaceReadCapability, WORKSPACE_CAPABILITY_IDS } from '../../workspace/constants';
+import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 
 export {
   REMINDERS_CANCEL,
@@ -49,6 +50,8 @@ export const GATED_CAPABILITY_IDS = [
   ...RESEARCH_CAPABILITY_IDS,
   RESEARCH_PRIVATE_BROWSE,
   ...WORKSPACE_CAPABILITY_IDS,
+  RECOVERY_SANDBOX_MUTATE,
+  RECOVERY_SANDBOX_ROLLBACK,
 ] as const;
 
 export const CONFIRMATION_TTL_MS = 120_000;

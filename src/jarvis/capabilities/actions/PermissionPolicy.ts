@@ -22,6 +22,7 @@ import { serviceRecord } from './services/catalog';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { ActionProposal, DesktopAllowlists, PermissionDecision } from './types';
 import { classifyOpenUrl } from './urlSafety';
+import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 
 export class PermissionPolicy {
   public evaluate(proposal: ActionProposal, lists: DesktopAllowlists): PermissionDecision {
@@ -268,6 +269,20 @@ export class PermissionPolicy {
       };
     }
 
+    if (proposal.capabilityId === RECOVERY_SANDBOX_MUTATE || proposal.capabilityId === RECOVERY_SANDBOX_ROLLBACK) {
+      return {
+        ...base,
+        decision: 'confirm',
+        reasonCode: proposal.capabilityId === RECOVERY_SANDBOX_MUTATE
+          ? 'SANDBOX_MUTATION_REVIEW'
+          : 'ROLLBACK_OWNER_AUTHORIZATION',
+        userMessage: proposal.capabilityId === RECOVERY_SANDBOX_MUTATE
+          ? 'Review the bounded Jarvis recovery-sandbox mutation and its checkpoint protection.'
+          : 'Rollback is a new scoped mutation and requires explicit owner authorization.',
+        risk: 'CONFIRM_REQUIRED',
+      };
+    }
+
     return {
       ...base,
       decision: 'deny',
@@ -277,4 +292,3 @@ export class PermissionPolicy {
     };
   }
 }
-
