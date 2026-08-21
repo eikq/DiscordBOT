@@ -1,9 +1,74 @@
 ﻿# Cursor Session State
 
-Updated: 2026-08-21
+Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Semantic Intent & Conversational Memory v1
+## This turn — Context runtime completion
+
+Branch: `local/jarvis-context-runtime-completion-2026-08-21` from semantic
+checkpoint HEAD `18b40601433c8fbe14c2f0419a141ad02e057cb2`.
+Did not modify `main`. Did not push this branch.
+
+Verification: `npx tsc --noEmit` PASS; focused context+intent **50 / 50**
+then context **30 / 30**; `npm run test:cloud` **671 / 671** PASS;
+`npm run build` PASS (same Vite/`import.meta` warnings as before).
+
+Standalone live URL: `http://127.0.0.1:3010/jarvis` (port 3000 left alone).
+
+What this branch closed:
+
+- Containment is scoped. No `clearAll`. Expected fail-closed place
+  outcomes do not create incidents. Owner “Check it.” / “Yes.” clears
+  only the pending incident after read-only reconcile
+  (`KEEP_CONTAINED` / `CLEAR_THIS_SCOPE` / `ACCEPT_CURRENT_STATE` /
+  `REVERIFY`). `ROLL_BACK` is not implemented.
+- Display aliases persist as `display.fp:{…}` (path / name / size), not
+  `display.internal`. Ordinal change does not remap. Missing hardware
+  returns `KNOWN_ALIAS_TARGET_OFFLINE`.
+- Fingerprints survive declared-goal bind and ActionGate last-mile
+  alias application. Abstract `role: internal` is dropped when a
+  fingerprint is present.
+- Working context tracks window handle, current/previous display,
+  research sources, and `it` / `there` / `back`. High-risk `it` expires
+  in 2 minutes. Previous placement is working context, not owner facts.
+- Research “that source” asks when two official sources exist. A unique
+  host/label mention can open that source. Workspace paths come from
+  the registry only.
+- Desktop host C# is compiled once to `%TEMP%\jarvis-desktop-host-v2`.
+  Place/open search Chrome then Edge in one PowerShell. Honest limit:
+  this host’s default browser is Chrome; Jarvis cannot move a single
+  tab.
+
+Live A–K on this host (2 displays; no `Internal` flag):
+
+| ID | Result | Note |
+|---|---|---|
+| A | **PASS** | Listed 2 displays: DISPLAY1 1920×1200 at -3840,-6 (BOE); DISPLAY5 1920×1080 at 0,0 primary (MSI) |
+| B | **PASS** | “Monitor 1 is my notebook monitor.” → `display.fp` BOE path, not `display.internal` |
+| C | **PASS** | Alias survived 3010 restart |
+| D | **PASS (handler)** | Roblox official scoped open completed after allow-once. Not re-measured after later moves |
+| E | **PASS (handler)** | `desktop.placeWindow` completed; trusted browser window, not a Roblox tab |
+| F | **PARTIAL** | Handler completed with unverified placement. Post-hoc Chrome was still on DISPLAY5. **Not LIVE_VERIFIED** |
+| G | **PASS (handler)** | “Open YouTube there too” routed to last display. Same Chrome process; tab vs window not proven |
+| H | **PASS** | Live Qwen research completed; evidence included docs.qwencloud.com |
+| I | **PASS** | “Which source is official?” asked; listed QwenCloud + NVIDIA PDF. Did not pick |
+| J | **PASS (ask + named)** | “Open that source.” stayed `AMBIGUOUS_SOURCE`. “Open the qwencloud source.” → scoped confirm → handler completed. Window/URL not independently inspected |
+| K | **PASS (handler)** | Remembered registry id, no raw path. “Open the project in Cursor.” completed. Folder not independently inspected |
+
+Containment persist `data/jarvis/runtime/recovery/containment.json`:
+five historical timeout incidents, all `active: false`. None currently
+active. Root cause: place/open PowerShell `Add-Type` timeouts
+(`MUTATION_OUTCOME_UNKNOWN`), then empty-target `blocks()` paralysis.
+
+Owner alias in canonical SQLite:
+`owner.alias.display.notebook_monitor` active → `display.fp` BOE
+`MONITOR\BOE0D5B\…` 1920×1200. Prior `display.internal` is superseded.
+
+Remaining gaps: verified “bring it back” bounds; distinct YouTube
+window vs Chrome process; independent Cursor workspace-folder proof;
+no `ROLL_BACK`; no click/type/submit.
+
+## Previous — Semantic Intent & Conversational Memory v1
 
 Branch: `local/jarvis-semantic-intent-memory-v1-2026-08-21` from exact V5 HEAD
 `947d2b9a15e3c193509d16202938dd4aa2c23cbb`. Did not modify `main`.
