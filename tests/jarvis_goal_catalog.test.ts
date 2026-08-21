@@ -55,7 +55,8 @@ test('unknown and ambiguous owner objectives do not hallucinate support', async 
   assert.equal(unknown.status, 'NO_MATCH');
   assert.equal(unknown.goalId, undefined);
   const ambiguous = await resolveOwnerGoal('Compare option X with option Y.', { host });
-  assert.equal(ambiguous.status, 'CLARIFICATION');
+  assert.equal(ambiguous.status, 'NEEDS_INPUT');
+  assert.equal(ambiguous.goalId, 'information.compare');
   assert.match(ambiguous.smallestOwnerQuestion || '', /public web|workspace/iu);
   assert.equal(validateGoalSuggestion({ goalId: 'invented.goal', confidence: 1 }), undefined);
 });
