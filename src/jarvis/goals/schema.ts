@@ -1,8 +1,9 @@
 import type { JsonSchema } from '../capabilities/types';
+import { looksLikeSecret } from '../security/redaction';
 
 export type SchemaValidation = { ok: true } | { ok: false; issues: string[] };
 
-const AUTHORITY_KEYS = /^(?:authorization|cookie|credentials?|password|secret|token|api[_-]?key|permission|permissions|grant|confirmed|confirmation|confirmationtoken|proposalid|risk|privilege|admin|sudo|shell|command|argv|executable|pid|headers?|method|body|path)$/iu;
+const AUTHORITY_KEYS = /^(?:authorization|cookie|credentials?|password|secret|token|apikey|permissions?|permissionscope|grant|confirmed|confirmation|confirmationtoken|proposalid|risk|risklevel|privilege|admin|adminflags?|sudo|shell|command|argv|executable|pid|capabilityid|headers?|method|body|path)$/iu;
 
 export function validateAgainstJsonSchema(value: unknown, schema: JsonSchema): SchemaValidation {
   const issues: string[] = [];
@@ -90,6 +91,10 @@ function validateNode(value: unknown, schema: JsonSchema, path: string, issues: 
 }
 
 function inspectAuthority(value: unknown, path: string, issues: string[], seen: Set<object>): void {
+  if (typeof value === 'string' && looksLikeSecret(value)) {
+    issues.push(`${path} contains secret-like material.`);
+    return;
+  }
   if (!value || typeof value !== 'object') return;
   if (seen.has(value as object)) {
     issues.push(`${path} contains a cycle.`);

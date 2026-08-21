@@ -94,6 +94,7 @@ test('trusted adapters validate real schemas and cannot create path, credential,
     { query: 'x', credential: 'local-secret://not-owner-supplied' },
     { query: 'x', permission: 'ADMIN' },
     { query: 'x', capabilityId: 'system.admin' },
+    { query: 'DISCORD_TOKEN=not-safe-to-route' },
   ]) {
     const result = adapters.run({
       adapterId: 'workspace.search.query.v1', capabilityId: 'workspace.search',
