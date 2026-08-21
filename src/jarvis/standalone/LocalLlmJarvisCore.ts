@@ -1,4 +1,4 @@
-import type { LocalLlmProvider, TextGenerationResult } from '../../bot/llm/LocalLlmProvider';
+import type { TextGenerationRequest, TextGenerationResult } from '../../bot/llm/LocalLlmProvider';
 import { capabilityResultToToolRef } from '../capabilities/CapabilityRegistry';
 import {
   capabilityResultToActionResult,
@@ -16,14 +16,9 @@ import { memoryRefsFromItems, type JarvisMemoryService } from '../memory/service
 import type { JarvisSkillActivationResult, JarvisSkillHost } from '../skills';
 import type { LlmTurnMetrics, TurnTimings } from './turnTimings';
 
-export type StandaloneLlm = Pick<LocalLlmProvider, 'generateText'> & {
-  generateTextDetailed?: (request: {
-    systemPrompt?: string;
-    userPrompt: string;
-    temperature?: number;
-    maxTokens?: number;
-    onDraft?: (delta: string, accumulated: string) => void;
-  }) => Promise<TextGenerationResult>;
+export type StandaloneLlm = {
+  generateText: (request: TextGenerationRequest) => Promise<string | null>;
+  generateTextDetailed?: (request: TextGenerationRequest) => Promise<TextGenerationResult>;
 };
 
 export type LocalLlmJarvisCoreOptions = {
@@ -86,8 +81,9 @@ function emptyResult(
 }
 
 /**
- * Standalone Core that uses the local Qwen provider for text.
- * Optional capabilities and memory are abstractions, not MCP/SQLite types.
+ * Standalone Core that uses a text-generation provider contract.
+ * The currently configured owner model may be Qwen, but Core does not branch on
+ * model family. Optional capabilities and memory are abstractions, not provider types.
  */
 export class LocalLlmJarvisCore implements JarvisCore {
   constructor(
