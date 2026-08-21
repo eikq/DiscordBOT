@@ -347,6 +347,37 @@ test('waiting for owner input and expiration do not create capability-failure le
   closeCenter(center);
 });
 
+test('command center presents waiting permission ahead of waiting-input tasks', async () => {
+  const root = tempRoot('jarvis-pending-present-');
+  const clock = new FakeClock(NOW);
+  const reminders = createReminderRuntime({
+    dbPath: path.join(root, 'automation.db'), auditPath: path.join(root, 'reminder-audit.jsonl'),
+    clock, timeZone: 'Asia/Bangkok', start: false,
+  });
+  const host = createStandaloneCapabilityHost({
+    worldIntel: false, research: false, workspace: false, reminders,
+    actions: { audit: false, now: () => clock.now(), recoveryRoot: root, operator: new TrustedOperatorRuntime({ runtimeRoot: root, now: () => clock.now() }) },
+  });
+  const operator = new TrustedOperatorRuntime({ runtimeRoot: path.join(root, 'center'), now: () => clock.now() });
+  const center = new CommandCenterRuntime({ host, operator, persistRoot: root, now: () => clock.now() });
+  const lab = createJarvisLabRuntime({
+    capabilities: host, commandCenter: center, reminders,
+    attachDefaultMemory: false, attachDefaultSkills: false, attachDefaultPresentation: false,
+    attachDefaultSpeech: false, research: false, workspace: false,
+    llm: { generateText: async () => 'model must not own presentation ranking' },
+  });
+  await lab.ask({ text: 'Remind me to test Jarvis.', sessionId: 'present-a' });
+  await lab.ask({ text: 'Remind me to test Jarvis.', sessionId: 'present-b' });
+  const waiting = await lab.ask({ text: 'Remind me to test Jarvis tomorrow at 15:00.', sessionId: 'present-c' });
+  const presented = center.present();
+  assert.equal(waiting.workOutcome?.outcome, 'BLOCKED');
+  assert.equal(presented.task?.id, waiting.taskId);
+  assert.equal(presented.task?.status, 'WAITING_PERMISSION');
+  assert.equal(presented.permission.waiting, true);
+  assert.equal(presented.permission.capability, 'reminders.create');
+  closeFixture(center, reminders);
+});
+
 test('model identity cannot alter pending goal identity, scope, or authority', async () => {
   const fixture = await pendingFixture('Remind me to stretch.', 'model-independent');
   const before = JSON.stringify(fixture.record);

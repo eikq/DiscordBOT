@@ -266,7 +266,7 @@ export { OwnerControl } from './control';
 export { ProactiveMonitor } from './monitor';
 export * from './devices';
 export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
-export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
+export { CommandCenterRuntime, selectPresentedWorkTask, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
 export type { CommandCenterSnapshot } from './standalone/commandCenter';
 export type { DemoScenarioId } from './standalone/commandCenterHttp';
 export { presentCommandCenter } from './standalone/commandCenterView';

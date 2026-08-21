@@ -306,6 +306,15 @@ export class WorkAgent {
     return this.run(taskId);
   }
 
+  public peekConfirmationToken(proposalId: string): string | undefined {
+    const id = proposalId.trim();
+    if (!id) return undefined;
+    const cached = this.ownerTokens.get(id);
+    if (!cached) return undefined;
+    if (cached.expiresAt && cached.expiresAt <= Date.now()) return undefined;
+    return cached.token;
+  }
+
   public grantPermission(taskId: string, stepIdOrGrant?: string | PermissionGrantInput): WorkTask {
     this.assertEmergencyAllowsExecution();
     const grant: PermissionGrantInput = typeof stepIdOrGrant === 'string'

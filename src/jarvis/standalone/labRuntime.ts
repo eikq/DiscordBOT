@@ -987,7 +987,11 @@ export class JarvisLabRuntime {
       ...(waiting?.pendingConfirmation ? {
         pendingConfirmation: {
           proposalId: waiting.pendingConfirmation.proposalId,
-          token: waiting.permissionLease?.token || '',
+          token: waiting.permissionLease?.token
+            || (waiting.pendingConfirmation.proposalId
+              ? this.workCenter()?.agent.peekConfirmationToken(waiting.pendingConfirmation.proposalId)
+              : undefined)
+            || '',
           capabilityId: waiting.pendingConfirmation.capability,
           displayName: waiting.pendingConfirmation.capability,
           summary: waiting.pendingConfirmation.summary || synthesis.text,

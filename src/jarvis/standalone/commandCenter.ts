@@ -231,7 +231,7 @@ export class CommandCenterRuntime {
   public snapshot(): CommandCenterSnapshot {
     this.refreshPendingGoalExpirations();
     const tasks = this.agent.store.list();
-    const active = this.agent.store.active()[0] ?? null;
+    const active = selectPresentedWorkTask(this.agent.store.active());
     const experiences = this.experiences.list();
     const reflections = this.reflectionLedger.list();
     return {
@@ -494,7 +494,7 @@ export class CommandCenterRuntime {
   }
 
   public synthesize(task?: WorkTask) {
-    const current = task ?? this.agent.store.active()[0] ?? this.agent.store.list().at(-1);
+    const current = task ?? selectPresentedWorkTask(this.agent.store.active()) ?? this.agent.store.list().at(-1);
     return current ? synthesizeTaskResponse(current) : undefined;
   }
 
@@ -698,6 +698,18 @@ export function sharedCommandCenter(): CommandCenterRuntime {
 
 export function resetSharedCommandCenter(): void {
   sharedCenter = undefined;
+}
+
+export function selectPresentedWorkTask(tasks: WorkTask[]): WorkTask | null {
+  if (!tasks.length) return null;
+  const waitingPermission = tasks.find(task => (
+    task.status === 'WAITING_PERMISSION'
+    || task.plan.some(step => step.status === 'waiting_permission')
+  ));
+  if (waitingPermission) return waitingPermission;
+  const waitingInput = tasks.find(task => task.status === 'WAITING_INPUT');
+  if (waitingInput) return waitingInput;
+  return tasks[0] ?? null;
 }
 
 function permissionOf(task: WorkTask | null): CommandCenterSnapshot['permission'] {
