@@ -51,6 +51,13 @@ function render(
   if (outcome === 'BLOCKED' && task.permissionRequirements[0]) {
     lines.push(`Waiting on owner permission for ${task.permissionRequirements[0]}.`);
   }
+  if (outcome === 'BLOCKED' && task.blockers?.[0]) {
+    const blocker = task.blockers[0];
+    lines.push(`Current blocker: ${blocker.blocker} at ${blocker.capabilityId}.`);
+    if (task.gapResolution?.recommendedPath) {
+      lines.push(`Safest next path: ${task.gapResolution.recommendedPath.title}`);
+    }
+  }
   if (outcome === 'FAILED' && task.errors[0]) {
     lines.push(task.errors[0].message);
   }

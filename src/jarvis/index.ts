@@ -86,6 +86,9 @@ export {
   JARVIS_START_SERVICE,
   REMINDERS_CREATE,
   REMINDERS_LIST,
+  coreSecurityIsDistributionInvariant,
+  distributionForCapability,
+  isOwnerOnlyCapability,
 } from './capabilities';
 export type {
   CapabilityAvailability,
@@ -98,6 +101,11 @@ export type {
   CapabilityProviderKind,
   CapabilityResult,
   CapabilitySideEffect,
+  CapabilityDistributionClass,
+  CapabilityExecutionMode,
+  CapabilityIntelligenceMetadata,
+  CapabilityMaturity,
+  CapabilityPermissionClass,
   JsonSchema,
   WorldIntelCapabilityPort,
   WorldIntelExecuteResult,
@@ -247,11 +255,13 @@ export {
 } from './evolution';
 export * from './models';
 export * from './safety';
+export * from './intelligence';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
+export type { PlanStep, WorkGapResolver, WorkStepInvoker, WorkStepResult, WorkTask, WorkTaskStatus } from './agent';
 export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
 export { OwnerControl } from './control';
 export { ProactiveMonitor } from './monitor';
-export { SimulatedDeviceProvider } from './devices';
+export * from './devices';
 export { SimulatedVisionAnalyzer, visionActionAllowed } from './vision';
 export { CommandCenterRuntime, sharedCommandCenter, resetSharedCommandCenter } from './standalone/commandCenter';
 export type { CommandCenterSnapshot } from './standalone/commandCenter';

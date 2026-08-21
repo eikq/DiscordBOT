@@ -53,11 +53,12 @@ async function invokeThroughHost(
   if (!resolved) {
     if (step.kind === 'apply' || step.kind === 'search' || step.kind === 'research' || step.kind === 'retrieve') {
       return {
-        ok: true,
-        skipped: true,
+        ok: Boolean(task.simulated),
+        skipped: Boolean(task.simulated),
         summary: task.simulated
           ? `${step.title} completed (simulation).`
-          : `No typed capability bound for ${step.kind}; step skipped.`,
+          : `No typed capability is bound for ${step.kind}; capability gap resolution is required.`,
+        ...(task.simulated ? {} : { errorCode: 'PLAN_INVALID' as const }),
       };
     }
     return { ok: true, summary: `${step.title} completed.` };

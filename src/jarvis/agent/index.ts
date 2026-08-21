@@ -15,6 +15,7 @@ export type {
   PlanStepStatus,
   SynthesizedTaskResponse,
   WorkStepInvoker,
+  WorkGapResolver,
   WorkStepResult,
   WorkTask,
   WorkTaskOutcome,

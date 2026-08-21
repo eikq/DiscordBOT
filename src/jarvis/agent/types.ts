@@ -1,6 +1,7 @@
 import type { JarvisErrorCode } from '../ops/types';
 import type { ActionPreflight, RollbackContract, VerificationRecord, VerificationState } from '../safety/types';
 import type { CapabilityCancellationRecord } from '../capabilities/types';
+import type { GapResolutionPlan, ObjectiveBlockerCode } from '../intelligence/types';
 
 export const WORK_TASK_STATUSES = [
   'RECEIVED',
@@ -138,6 +139,16 @@ export type WorkTask = {
   simulated?: boolean;
   cancelRequested?: boolean;
   cancellation?: CapabilityCancellationRecord;
+  gapResolution?: GapResolutionPlan;
+  blockers?: Array<{
+    capabilityId: string;
+    blocker: ObjectiveBlockerCode;
+    reason: string;
+  }>;
+  goalPursuit?: {
+    attempted: number;
+    maximum: number;
+  };
 };
 
 export type WorkStepResult = {
@@ -155,6 +166,7 @@ export type WorkStepResult = {
   verification?: VerificationRecord;
   rollback?: RollbackContract;
   cancellation?: CapabilityCancellationRecord;
+  gapResolution?: GapResolutionPlan;
 };
 
 export type SynthesizedOutcome =
@@ -174,3 +186,11 @@ export type SynthesizedTaskResponse = {
 };
 
 export type WorkStepInvoker = (task: WorkTask, step: PlanStep, signal: AbortSignal) => Promise<WorkStepResult>;
+
+export type WorkGapResolver = (
+  task: WorkTask,
+  step: PlanStep,
+  result: WorkStepResult,
+  attempted: number,
+  maximum: number,
+) => Promise<GapResolutionPlan | undefined>;

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type PermissionGrantInput, type WorkStepInvoker, type WorkTask } from '../agent';
+import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type PermissionGrantInput, type WorkStepInvoker, type WorkStepResult, type WorkTask } from '../agent';
 import { adaptPlanForFailures } from '../agent/adaptivePlan';
 import { createCapabilityWorkInvoker } from '../agent/capabilityInvoker';
 import { inferCapabilityFromObjective, planForObjective } from '../agent/capabilityResolve';
@@ -10,7 +10,14 @@ import { writeExperienceEpisode } from '../memory/experienceBridge';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
 import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
-import { SimulatedDeviceProvider, type DeviceRecord } from '../devices';
+import { CCTV_CONNECT_GOAL, SimulatedDeviceProvider, cctvCapabilityContracts, type DeviceRecord } from '../devices';
+import {
+  CapabilityGapResolver,
+  buildSelfKnowledgeSnapshot,
+  resolveCapabilityGoal,
+  type GapResolutionPlan,
+  type SelfKnowledgeSnapshot,
+} from '../intelligence';
 import {
   AffectEngine,
   BenchmarkBank,
@@ -125,6 +132,7 @@ export class CommandCenterRuntime {
   private notifications: MonitorSignal[] = [];
   private memoryStore?: JarvisMemoryStore;
   private lastRequest: { route: RouteDecision; objective: string; taskId?: string } | null = null;
+  private readonly gapResolver = new CapabilityGapResolver();
 
   constructor(options: CommandCenterOptions = {}) {
     const simulated = Boolean(options.simulated);
@@ -165,6 +173,7 @@ export class CommandCenterRuntime {
       }),
       simulated,
       emergency: this.operator.emergency,
+      resolveGap: (task, step, result, attempted, maximum) => this.resolveWorkGap(task, step, result, attempted, maximum),
       onTerminal: task => this.recordTaskExperience(task),
     });
     this.night = new NightCycle({
@@ -184,6 +193,14 @@ export class CommandCenterRuntime {
 
   public attachCapabilities(host: CapabilityHost): void {
     this.host = host;
+  }
+
+  public async selfKnowledgeSnapshot(): Promise<SelfKnowledgeSnapshot> {
+    return buildSelfKnowledgeSnapshot({
+      host: this.host,
+      selfModel: this.selfModel,
+      declarations: cctvCapabilityContracts(),
+    });
   }
 
   public attachMemoryStore(store: JarvisMemoryStore): void {
@@ -295,6 +312,12 @@ export class CommandCenterRuntime {
     return this.agent.run(task.id);
   }
 
+  public async cctvGapPlan(): Promise<GapResolutionPlan> {
+    const snapshot = await this.selfKnowledgeSnapshot();
+    const graph = resolveCapabilityGoal(CCTV_CONNECT_GOAL, snapshot);
+    return this.gapResolver.resolve({ objective: CCTV_CONNECT_GOAL.title, graph, snapshot });
+  }
+
   public runNight(): NightCycleReport {
     this.assertOperatorRunning();
     return this.night.run();
@@ -333,7 +356,11 @@ export class CommandCenterRuntime {
     const exercise = this.practice.exercises(1)[0];
     const result = this.practice.run(exercise?.id || 'practice_planning_dag');
     if (result.passed && goal) {
-      this.selfModel.observe('practice', 'success');
+      this.selfModel.observe('practice', 'success', undefined, {
+        verificationState: 'VERIFIED',
+        evidenceRefs: [`practice:${exercise?.id || 'practice_planning_dag'}`],
+        observationId: `practice:${goalId}:${exercise?.id || 'practice_planning_dag'}`,
+      });
     }
     return { goalId, isolated: result.isolated, destructive: result.destructive, passed: result.passed };
   }
@@ -344,6 +371,30 @@ export class CommandCenterRuntime {
         reasonCode: 'EMERGENCY_STOP_ACTIVE',
       });
     }
+  }
+
+  private async resolveWorkGap(
+    task: WorkTask,
+    step: PlanStep,
+    _result: WorkStepResult,
+    attempted: number,
+    maximumAttempts: number,
+  ): Promise<GapResolutionPlan> {
+    const snapshot = await this.selfKnowledgeSnapshot();
+    const capabilityId = step.capability?.trim() || `unbound.${step.kind}`;
+    const graph = resolveCapabilityGoal({
+      id: `goal.task.${task.id}.${step.id}`,
+      title: task.objective,
+      dependencies: [{ capabilityId, relation: 'REQUIRED' }],
+      allowSimulation: Boolean(task.simulated),
+    }, snapshot);
+    return this.gapResolver.resolve({
+      objective: task.objective,
+      graph,
+      snapshot,
+      attempted,
+      maximumAttempts,
+    });
   }
 
   public notify(signal: MonitorSignal): ReturnType<ProactiveMonitor['ingest']> {

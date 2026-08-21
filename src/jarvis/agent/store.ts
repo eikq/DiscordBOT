@@ -42,6 +42,7 @@ export class WorkTaskStore {
     retryBudget?: number;
     simulated?: boolean;
     permissionRequirements?: string[];
+    maxGapReplans?: number;
   }): WorkTask {
     const at = new Date(this.now()).toISOString();
     const task: WorkTask = {
@@ -57,6 +58,7 @@ export class WorkTaskStore {
       retryBudget: input.retryBudget ?? 2,
       retriesUsed: 0,
       errors: [],
+      goalPursuit: { attempted: 0, maximum: Math.max(1, Math.min(input.maxGapReplans ?? 2, 4)) },
       simulated: input.simulated || undefined,
     };
     this.tasks.set(task.id, task);

@@ -12,6 +12,7 @@ import type {
   PlanStepKind,
   WorkStepInvoker,
   WorkStepResult,
+  WorkGapResolver,
   WorkTask,
   WorkTaskOutcome,
 } from './types';
@@ -32,6 +33,8 @@ export type WorkAgentOptions = {
   simulated?: boolean;
   onTerminal?: (task: WorkTask) => void;
   emergency?: EmergencyStopController;
+  resolveGap?: WorkGapResolver;
+  maxGapReplans?: number;
 };
 
 const KIND_VISUAL: Record<PlanStepKind, string> = {
@@ -64,6 +67,8 @@ export class WorkAgent {
   }>();
   private readonly usedTokenHashes = new Set<string>();
   private readonly emergency?: EmergencyStopController;
+  private readonly resolveGap?: WorkGapResolver;
+  private readonly maxGapReplans: number;
 
   constructor(options: WorkAgentOptions = {}) {
     this.store = options.store ?? new WorkTaskStore(options.now);
@@ -73,6 +78,8 @@ export class WorkAgent {
     this.simulated = Boolean(options.simulated);
     this.onTerminal = options.onTerminal;
     this.emergency = options.emergency;
+    this.resolveGap = options.resolveGap;
+    this.maxGapReplans = Math.max(1, Math.min(options.maxGapReplans ?? 2, 4));
     this.emergency?.register({
       id: 'work-agent',
       cancelForEmergency: () => this.cancelForEmergency(),
@@ -90,6 +97,7 @@ export class WorkAgent {
       objective,
       plan: steps,
       retryBudget: this.budgets.retries,
+      maxGapReplans: this.maxGapReplans,
       simulated: extra.simulated ?? this.simulated,
     });
     this.emit(task, 'TASK_RECEIVED', `Task received: ${task.objective}`, { visualState: 'UNDERSTANDING' });
@@ -412,6 +420,63 @@ export class WorkAgent {
       return;
     }
 
+    const gapEligible = result.errorCode === 'PLAN_INVALID'
+      || result.errorCode === 'PROVIDER_UNAVAILABLE'
+      || result.errorCode === 'LOCAL_ACCEPTANCE_REQUIRED'
+      || result.errorCode === 'SIMULATION_ONLY';
+    const gapResolution = result.gapResolution ?? (gapEligible
+      ? await this.resolveGap?.(
+          task,
+          step,
+          result,
+          task.goalPursuit?.attempted ?? 0,
+          task.goalPursuit?.maximum ?? this.maxGapReplans,
+        )
+      : undefined);
+    if (gapResolution) {
+      task.gapResolution = gapResolution;
+      task.blockers = gapResolution.missing.map(item => ({
+        capabilityId: item.capabilityId,
+        blocker: item.blocker,
+        reason: item.reason,
+      }));
+      this.events?.emit('CAPABILITY_GAP_DETECTED', 'Capability gap classified before abandoning the owner goal.', {
+        taskId: task.id,
+        stepId: step.id,
+        blockers: task.blockers.map(item => ({ capabilityId: item.capabilityId, blocker: item.blocker })),
+      }, 'warn', { taskId: task.id });
+      if (this.applySafeGapReplan(task, step, gapResolution)) {
+        this.store.save(task);
+        this.events?.emit('GOAL_REPLANNED', gapResolution.recommendedPath!.title, {
+          taskId: task.id,
+          stepId: step.id,
+          capabilityIds: gapResolution.recommendedPath!.capabilityIds,
+          attempted: task.goalPursuit?.attempted,
+          maximum: task.goalPursuit?.maximum,
+        }, 'info', { taskId: task.id });
+        this.store.setStatus(task.id, 'ADAPTING');
+        this.store.setStatus(task.id, 'READY');
+        return;
+      }
+      step.status = 'blocked';
+      step.resultSummary = gapResolution.recommendedPath?.title || result.summary;
+      task.errors.push({
+        at: new Date().toISOString(),
+        code: result.errorCode || 'PLAN_INVALID',
+        message: result.summary,
+        stepId: step.id,
+      });
+      this.store.save(task);
+      this.finish(
+        task,
+        'BLOCKED',
+        'blocked',
+        gapResolution.recommendedPath?.title || 'No safe executable capability path is currently available.',
+        result.errorCode || 'PLAN_INVALID',
+      );
+      return;
+    }
+
     const code = result.errorCode || classifyStepFailure(step, result.summary);
     step.errorCode = code;
     step.resultSummary = result.summary;
@@ -499,6 +564,56 @@ export class WorkAgent {
     return this.finish(verified, 'COMPLETED', 'success', 'Task completed.');
   }
 
+  private applySafeGapReplan(
+    task: WorkTask,
+    step: PlanStep,
+    resolution: import('../intelligence/types').GapResolutionPlan,
+  ): boolean {
+    const pursuit = task.goalPursuit ?? { attempted: 0, maximum: this.maxGapReplans };
+    const path = resolution.recommendedPath;
+    if (!path?.executableNow || !path.inputCompatible || pursuit.attempted >= pursuit.maximum) return false;
+    if (path.kind !== 'USE_EXISTING_CAPABILITY' && path.kind !== 'COMPOSE_EXISTING_CAPABILITIES') return false;
+    const ids = [...new Set(path.capabilityIds.filter(Boolean))];
+    if (ids.length === 0 || (ids.length === 1 && ids[0] === step.capability)) return false;
+    if (task.plan.length + Math.max(0, ids.length - 1) > this.budgets.taskSteps) return false;
+
+    pursuit.attempted += 1;
+    task.goalPursuit = pursuit;
+    const originalId = step.id;
+    const index = task.plan.findIndex(item => item.id === originalId);
+    if (index < 0) return false;
+    step.capability = ids[0];
+    step.status = 'pending';
+    step.errorCode = undefined;
+    step.resultSummary = `Replanned to ${ids[0]} from structured registry evidence.`;
+    step.retryPolicy = { ...step.retryPolicy, attempted: 0 };
+    let previousId = originalId;
+    const inserted: PlanStep[] = [];
+    for (const capabilityId of ids.slice(1)) {
+      const next: PlanStep = {
+        ...step,
+        id: newGapStepId(capabilityId, pursuit.attempted, inserted.length),
+        title: `Invoke ${capabilityId} (safe composed path)`,
+        dependencies: [previousId],
+        status: 'pending',
+        capability: capabilityId,
+        retryPolicy: { ...step.retryPolicy, attempted: 0 },
+      };
+      inserted.push(next);
+      previousId = next.id;
+    }
+    task.plan.splice(index + 1, 0, ...inserted);
+    if (inserted.length > 0) {
+      const insertedIds = new Set(inserted.map(item => item.id));
+      for (const item of task.plan) {
+        if (item.id === originalId || insertedIds.has(item.id)) continue;
+        item.dependencies = item.dependencies.map(dependency => dependency === originalId ? previousId : dependency);
+      }
+    }
+    assertAcyclic(task.plan);
+    return true;
+  }
+
   private finish(task: WorkTask, status: WorkTask['status'], outcome: WorkTaskOutcome, summary: string, errorCode?: string): WorkTask {
     const current = this.require(task.id);
     if (isTerminalStatus(current.status) && current.status !== status) {
@@ -550,6 +665,11 @@ export class WorkAgent {
       errorCode: meta.errorCode,
     });
   }
+}
+
+function newGapStepId(capabilityId: string, attempt: number, offset: number): string {
+  const safe = capabilityId.toLowerCase().replace(/[^a-z0-9]+/gu, '_').slice(0, 24) || 'capability';
+  return `gap_${safe}_${attempt}_${offset}`;
 }
 
 async function defaultInvoker(task: WorkTask, step: PlanStep, signal: AbortSignal): Promise<WorkStepResult> {

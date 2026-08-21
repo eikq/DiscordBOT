@@ -153,7 +153,9 @@ export type JarvisOperationEventType =
   | 'EMERGENCY_RESUME'
   | 'FAILURE_CONTAINED'
   | 'CONTAINMENT_ACTIVATED'
-  | 'CONTAINMENT_CLEARED';
+  | 'CONTAINMENT_CLEARED'
+  | 'CAPABILITY_GAP_DETECTED'
+  | 'GOAL_REPLANNED';
 
 export type JarvisOperationEvent = {
   id: string;
