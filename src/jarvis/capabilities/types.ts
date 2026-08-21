@@ -54,6 +54,47 @@ export type CapabilityCancellationRecord = {
   detail: string;
 };
 
+export type CapabilityMaturity =
+  | 'REAL'
+  | 'FUNCTIONAL_CORE'
+  | 'PREPARE_CONTRACT'
+  | 'SIMULATION'
+  | 'REFERENCE_ONLY';
+
+export type CapabilityExecutionMode = 'REAL' | 'SIMULATION' | 'PREPARE_CONTRACT';
+
+export type CapabilityPermissionClass =
+  | 'NOT_REQUIRED'
+  | 'POLICY_EVALUATED'
+  | 'OWNER_REQUIRED'
+  | 'PRIVILEGE_REQUIRED';
+
+export type CapabilityDistributionClass =
+  | 'CORE'
+  | 'OWNER_ONLY'
+  | 'COMMUNITY_EXCLUDED'
+  | 'DEMO_EXCLUDED';
+
+/**
+ * Runtime-authored evidence used by Self Knowledge. It describes a contract;
+ * it never grants authority and model output cannot change it.
+ */
+export type CapabilityIntelligenceMetadata = {
+  maturity?: CapabilityMaturity;
+  executionMode?: CapabilityExecutionMode;
+  permission?: CapabilityPermissionClass;
+  localAcceptance?: 'NOT_REQUIRED' | 'BLOCKED_LOCAL_ACCEPTANCE';
+  distribution?: CapabilityDistributionClass[];
+  requirements?: {
+    providers?: string[];
+    services?: string[];
+    configuration?: string[];
+    ownerInput?: string[];
+    dependencies?: string[];
+  };
+  knownLimitations?: string[];
+};
+
 export interface CapabilityDescriptor {
   id: string;
   description: string;
@@ -70,6 +111,8 @@ export interface CapabilityDescriptor {
   rollback?: CapabilityRollbackSpec;
   /** Cooperative handlers must observe the invocation AbortSignal and acknowledge cancellation. */
   cancellation?: { support: CapabilityCancellationSupport };
+  /** Evidence metadata only. Policy/ActionGate remain the execution authority. */
+  intelligence?: CapabilityIntelligenceMetadata;
 }
 
 export interface CapabilityAvailabilityState {

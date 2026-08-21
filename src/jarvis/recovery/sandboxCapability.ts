@@ -83,6 +83,14 @@ class RecoverySandboxRuntime {
         timeoutMs: 5_000,
         untrustedOutput: false,
         cancellation: { support: 'cooperative' },
+        intelligence: {
+          maturity: 'REAL',
+          executionMode: 'REAL',
+          permission: 'OWNER_REQUIRED',
+          localAcceptance: 'NOT_REQUIRED',
+          distribution: ['CORE'],
+          knownLimitations: ['Only the fixed Jarvis-owned recovery acceptance sandbox may be changed.'],
+        },
         effects: [{
           kind: 'MODIFY',
           description: 'Replace one disposable Jarvis-owned sandbox configuration value.',
@@ -129,6 +137,15 @@ class RecoverySandboxRuntime {
         timeoutMs: 5_000,
         untrustedOutput: false,
         cancellation: { support: 'cooperative' },
+        intelligence: {
+          maturity: 'REAL',
+          executionMode: 'REAL',
+          permission: 'OWNER_REQUIRED',
+          localAcceptance: 'NOT_REQUIRED',
+          distribution: ['CORE'],
+          requirements: { dependencies: [RECOVERY_SANDBOX_MUTATE] },
+          knownLimitations: ['Only an integrity-checked checkpoint for the fixed sandbox target may be restored.'],
+        },
         effects: [{
           kind: 'MODIFY',
           description: 'Restore or remove one fixed sandbox file to its recorded prior state.',

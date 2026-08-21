@@ -1,6 +1,7 @@
 const SECRET_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: 'env_assignment', pattern: /(?:DISCORD_TOKEN|API_KEY|OPENAI_API_KEY|BEARER|PASSWORD|SECRET|TOKEN)\s*[=:]\s*\S+/giu },
   { name: 'bearer', pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/giu },
+  { name: 'url_userinfo', pattern: /(?<=:\/\/)[^/\s:@]+:[^@\s/]+(?=@)/giu },
   { name: 'jwt', pattern: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]{10,}\.[A-Za-z0-9._-]{10,}\b/g },
   { name: 'discord_token', pattern: /\b[MN][A-Za-z0-9_-]{23,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{27,}\b/g },
   { name: 'cookie_header', pattern: /(?:Cookie|Set-Cookie)\s*[:=]\s*[^\s]+/giu },

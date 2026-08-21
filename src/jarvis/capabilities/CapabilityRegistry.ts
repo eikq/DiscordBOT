@@ -136,6 +136,41 @@ function cloneDescriptor(descriptor: CapabilityDescriptor): CapabilityDescriptor
     ...(descriptor.verification ? { verification: { ...descriptor.verification } } : {}),
     ...(descriptor.rollback ? { rollback: { ...descriptor.rollback } } : {}),
     ...(descriptor.cancellation ? { cancellation: { ...descriptor.cancellation } } : {}),
+    ...(descriptor.intelligence
+      ? {
+          intelligence: {
+            ...descriptor.intelligence,
+            ...(descriptor.intelligence.distribution
+              ? { distribution: [...descriptor.intelligence.distribution] }
+              : {}),
+            ...(descriptor.intelligence.requirements
+              ? {
+                  requirements: {
+                    ...descriptor.intelligence.requirements,
+                    ...(descriptor.intelligence.requirements.providers
+                      ? { providers: [...descriptor.intelligence.requirements.providers] }
+                      : {}),
+                    ...(descriptor.intelligence.requirements.services
+                      ? { services: [...descriptor.intelligence.requirements.services] }
+                      : {}),
+                    ...(descriptor.intelligence.requirements.configuration
+                      ? { configuration: [...descriptor.intelligence.requirements.configuration] }
+                      : {}),
+                    ...(descriptor.intelligence.requirements.ownerInput
+                      ? { ownerInput: [...descriptor.intelligence.requirements.ownerInput] }
+                      : {}),
+                    ...(descriptor.intelligence.requirements.dependencies
+                      ? { dependencies: [...descriptor.intelligence.requirements.dependencies] }
+                      : {}),
+                  },
+                }
+              : {}),
+            ...(descriptor.intelligence.knownLimitations
+              ? { knownLimitations: [...descriptor.intelligence.knownLimitations] }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 

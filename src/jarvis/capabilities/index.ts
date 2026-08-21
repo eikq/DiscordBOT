@@ -2,6 +2,7 @@ export {
   CapabilityRegistry,
   capabilityResultToToolRef,
 } from './CapabilityRegistry';
+export { coreSecurityIsDistributionInvariant, distributionForCapability, isOwnerOnlyCapability } from './distribution';
 export type {
   CapabilityAvailability,
   CapabilityAvailabilityState,
@@ -13,6 +14,11 @@ export type {
   CapabilityProviderKind,
   CapabilityResult,
   CapabilitySideEffect,
+  CapabilityDistributionClass,
+  CapabilityExecutionMode,
+  CapabilityIntelligenceMetadata,
+  CapabilityMaturity,
+  CapabilityPermissionClass,
   JsonSchema,
 } from './types';
 export { LAB_PING_CAPABILITY_ID, createLabPingHandler } from './labPing';
