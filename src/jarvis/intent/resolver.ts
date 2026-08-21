@@ -5,6 +5,7 @@ import { parseSemanticJson } from './semanticLlm';
 import { validateIntentResolution } from './schema';
 import { resolveOwnerGoal } from '../goals';
 import { DESKTOP_PLACE_WINDOW } from '../capabilities/actions/constants';
+import { preferConcreteDisplay, type DisplaySelector } from '../desktop/monitorTopology';
 import type { CompactCapability, IntentResolution, IntentResolveOptions } from './types';
 
 export async function resolveUserIntent(text: string, options: IntentResolveOptions = {}): Promise<IntentResolution> {
@@ -131,14 +132,18 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
 }
 
 function bindFastPathToGoal(fast: IntentResolution, declared?: IntentResolution): IntentResolution | undefined {
-  if (!declared?.goal || fast.kind !== 'CAPABILITY' || !fast.capabilityId) return declared;
+  if (fast.kind !== 'CAPABILITY' || !fast.capabilityId) return fast;
+  if (!declared?.goal) return fast;
   const route = declared.goal.routes.find(item => (
     item.available && item.inputCompatible && item.steps[0]?.capabilityId === fast.capabilityId
   ));
   if (!route) {
     if (
-      fast.capabilityId === DESKTOP_PLACE_WINDOW
+      fast.consumed
+      || fast.capabilityId === DESKTOP_PLACE_WINDOW
       || String(fast.reasonCode || '').startsWith('REFERENT_')
+      || String(fast.reasonCode || '').startsWith('RESEARCH_')
+      || String(fast.reasonCode || '').startsWith('SEMANTIC_')
     ) {
       return { ...fast, goal: declared.goal };
     }
@@ -152,12 +157,34 @@ function bindFastPathToGoal(fast: IntentResolution, declared?: IntentResolution)
   const hasAdaptedTarget = Boolean(
     adapted.url || adapted.applicationId || adapted.projectId || adapted.settingsId || adapted.serviceId,
   );
+  const base = structuredClone(hasAdaptedTarget ? adapted : (fast.arguments ?? adapted));
   return {
     ...fast,
-    arguments: structuredClone(hasAdaptedTarget ? adapted : (fast.arguments ?? adapted)),
+    arguments: mergeBoundArguments(base, fast.arguments),
     reasonCode: 'DECLARED_GOAL',
     goal,
   };
+}
+
+function mergeBoundArguments(
+  adapted: Record<string, unknown>,
+  fastArgs: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const merged = structuredClone(adapted);
+  if (!fastArgs) return merged;
+  const display = preferConcreteDisplay(
+    isDisplaySelector(fastArgs.display) ? fastArgs.display : null,
+    isDisplaySelector(adapted.display) ? adapted.display : null,
+  );
+  if (display) merged.display = display;
+  if (typeof fastArgs.windowHandle === 'string' && !merged.windowHandle) {
+    merged.windowHandle = fastArgs.windowHandle;
+  }
+  return merged;
+}
+
+function isDisplaySelector(value: unknown): value is DisplaySelector {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function shouldResolveDeclaredGoal(options: IntentResolveOptions): boolean {
@@ -171,6 +198,7 @@ async function resolveDeclaredGoalIntent(text: string, options: IntentResolveOpt
     adapters: options.inputAdapters,
     context: options.context,
     suggestion: options.goalSuggestion,
+    aliases: options.aliases,
   });
   return intentFromGoal(goal);
 }
@@ -257,7 +285,17 @@ export function applyConfidencePolicy(resolution: IntentResolution, catalog: Com
 export function intentStageOf(resolution: IntentResolution): { stage: 'UNDERSTANDING' | 'CLARIFICATION' | 'PERMISSION' | 'ACTION' | 'CONVERSATION'; detail: string } {
   if (resolution.kind === 'CLARIFICATION') return { stage: 'CLARIFICATION', detail: resolution.userMessage || 'waiting for detail' };
   if (resolution.kind === 'FORBIDDEN') return { stage: 'PERMISSION', detail: resolution.reasonCode };
-  if (resolution.kind === 'CAPABILITY') return { stage: 'ACTION', detail: resolution.capabilityId || 'capability' };
+  if (resolution.kind === 'CAPABILITY') {
+    const evidence = resolution.contextEvidence
+      ? [
+        resolution.contextEvidence.contextSource ? `context source: ${resolution.contextEvidence.contextSource}` : '',
+        resolution.contextEvidence.resolvedReferent ? `resolved referent: ${resolution.contextEvidence.resolvedReferent}` : '',
+        resolution.contextEvidence.aliasSource ? `alias source: ${resolution.contextEvidence.aliasSource}` : '',
+        resolution.contextEvidence.resourceAuthority ? `resource authority: ${resolution.contextEvidence.resourceAuthority}` : '',
+      ].filter(Boolean).join(' · ')
+      : '';
+    return { stage: 'ACTION', detail: [resolution.capabilityId || 'capability', evidence].filter(Boolean).join(' — ') };
+  }
   if (resolution.kind === 'UNSUPPORTED') return { stage: 'UNDERSTANDING', detail: 'unsupported' };
   return { stage: 'CONVERSATION', detail: 'chat' };
 }

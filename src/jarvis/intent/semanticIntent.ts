@@ -17,6 +17,9 @@ export const SEMANTIC_ACTIONS = [
   'FORGET_ALIAS',
   'ASK_MEMORY',
   'REMEMBER_PREFERENCE',
+  'LIST_DISPLAYS',
+  'INSPECT_CONTAINMENT',
+  'CLEAR_CONTAINMENT',
   'CLICK',
   'TYPE',
   'SUBMIT',
@@ -48,7 +51,8 @@ export type SemanticReference =
   | 'same'
   | 'back'
   | 'official'
-  | 'second-source';
+  | 'second-source'
+  | 'there';
 
 export type SemanticIntent = {
   action: SemanticAction;
@@ -89,6 +93,12 @@ export function interpretSemanticIntent(
   const references = extractReferences(raw);
   const base = emptyIntent(mixedLanguage, display, references);
 
+  const listed = matchListDisplays(raw);
+  if (listed) return { ...base, ...listed, confidence: 'HIGH' };
+  const containment = matchContainment(raw, options.context);
+  if (containment) return { ...base, ...containment, confidence: 'HIGH' };
+  const working = matchWorkingProject(raw);
+  if (working) return { ...base, ...working, confidence: 'HIGH' };
   const taught = matchTeachAlias(raw);
   if (taught) return { ...base, ...taught, confidence: 'HIGH' };
   const forgotten = matchForgetAlias(raw);
@@ -129,6 +139,20 @@ export function interpretSemanticIntent(
     };
   }
 
+  if (
+    /\bthat source\b|which source|official source|แหล่งนั้น|แหล่งทางการ/iu.test(raw)
+    || (/\bsource\b|แหล่ง/iu.test(raw) && Boolean(options.context?.lastResearchSources?.length) && OPEN_VERB.test(raw))
+  ) {
+    return {
+      ...base,
+      action: OPEN_VERB.test(raw) ? 'OPEN' : 'RESEARCH_FOLLOWUP',
+      objectType: 'SOURCE',
+      references: [...new Set([...references, 'that' as const, 'official' as const])],
+      entity: leftoverEntity(raw) || options.context?.currentSource,
+      confidence: options.context?.lastResearchSources?.length ? 'HIGH' : 'MEDIUM',
+    };
+  }
+
   if (/\b(research|look into|find (?:the )?(?:latest|official)|รีเสิร์ช|หาข้อมูล|ค้น)\b/iu.test(raw)) {
     const topic = leftoverEntity(raw);
     if (topic && !/^(this|that|it|อันนี้|อันนั้น)$/iu.test(topic)) {
@@ -146,7 +170,7 @@ export function interpretSemanticIntent(
   if (OPEN_VERB.test(raw) || WEBSITE_MARK.test(raw)) {
     const objectType = WEBSITE_MARK.test(raw)
       ? 'WEBSITE'
-      : PROJECT_MARK.test(raw)
+      : PROJECT_MARK.test(raw) || /\bthe project\b|โปรเจกต์นี้/iu.test(raw)
         ? 'PROJECT'
         : /\b(move|ย้าย|put .+ on|เอา .+ ไป)\b/iu.test(raw)
           ? 'WINDOW'
@@ -156,7 +180,9 @@ export function interpretSemanticIntent(
       ...base,
       action: /\b(move|ย้าย)\b/iu.test(raw) ? 'PLACE' : 'OPEN',
       objectType: objectType === 'UNKNOWN' && entity ? guessObjectType(entity) : objectType,
-      entity,
+      entity: /\bthe project\b|โปรเจกต์นี้/iu.test(raw)
+        ? (options.context?.currentWorkspace || options.context?.recentWorkspaceId || leftoverEntity(raw) || 'the project')
+        : leftoverEntity(raw),
       confidence: entity ? 'HIGH' : 'MEDIUM',
     };
   }
@@ -196,6 +222,7 @@ function extractReferences(text: string): SemanticReference[] {
   if (/\bthat\b|อันนั้น/iu.test(text)) found.push('that');
   if (/\bthis\b|อันนี้/iu.test(text)) found.push('this');
   if (/\bthe other\b|อีก(?:จอ|อัน)|จออื่น/iu.test(text)) found.push('the-other');
+  if (/\bthere\b|ตรงนั้น|ที่นั่น|จอนั้น/iu.test(text)) found.push('there');
   if (/\bsame\b|อันเดิม/iu.test(text)) found.push('same');
   if (/\bback\b|กลับ(?:มา)?/iu.test(text)) found.push('back');
   if (/\bofficial\b|ทางการ/iu.test(text)) found.push('official');
@@ -207,7 +234,7 @@ function leftoverEntity(text: string): string | undefined {
   const cleaned = text
     .replace(DISPLAY_PHRASE, ' ')
     .replace(ADDRESS, ' ')
-    .replace(/\b(please|could you|can you|jarvis|จาร์วิส|หน่อย|ให้ที|ให้หน่อย)\b/giu, ' ')
+    .replace(/\b(please|could you|can you|jarvis|จาร์วิส|หน่อย|ให้ที|ให้หน่อย|too|ด้วย)\b/giu, ' ')
     .replace(/\b(open|launch|start|put|show|bring|move|research|look into|look up|find out)\b|เปิด|เอา|วาง|ย้าย|รีเสิร์ช|หาข้อมูล/giu, ' ')
     .replace(WEBSITE_MARK, ' ')
     .replace(PROJECT_MARK, ' ')
@@ -229,6 +256,27 @@ function objectTypeFromKind(kind: 'application' | 'url'): SemanticObjectType {
 }
 
 function matchTeachAlias(text: string): Partial<SemanticIntent> | null {
+  const ordinal = text.match(/^(?:no,?\s*)?(?:monitor|display|screen|จอ)\s*(\d+)\s+is\s+(?:my\s+)?(.+)$/iu);
+  if (ordinal) {
+    return {
+      action: 'TEACH_ALIAS',
+      objectType: 'DISPLAY',
+      aliasPhrase: ordinal[2]!.trim().replace(/[.!?]+$/u, ''),
+      target: `ordinal:${ordinal[1]}`,
+      entity: ordinal[2]!.trim().replace(/[.!?]+$/u, ''),
+    };
+  }
+  const thisOne = text.match(/remember this one as\s+(.+)/iu)
+    || text.match(/the screen showing jarvis(?: right now)? is (?:the\s+)?(.+)/iu);
+  if (thisOne) {
+    return {
+      action: 'TEACH_ALIAS',
+      objectType: 'DISPLAY',
+      aliasPhrase: thisOne[1]!.trim(),
+      target: 'display.current',
+      entity: thisOne[1]!.trim(),
+    };
+  }
   const when = text.match(/when i say\s+(.+?)\s*,?\s*i mean\s+(.+)/iu)
     || text.match(/(?:no,\s*)?when i say\s+(.+?)\s*,?\s*i mean\s+(.+)/iu)
     || text.match(/call (?:this|that) (?:screen|monitor|display)\s+(?:the\s+)?(.+)/iu)
@@ -243,6 +291,40 @@ function matchTeachAlias(text: string): Partial<SemanticIntent> | null {
     aliasPhrase: phrase,
     target,
     entity: phrase,
+  };
+}
+
+function matchListDisplays(text: string): Partial<SemanticIntent> | null {
+  if (!/what monitors|which displays|what screens|จออะไรบ้าง|มีจออะไร/iu.test(text)) return null;
+  return { action: 'LIST_DISPLAYS', objectType: 'DISPLAY', entity: 'displays' };
+}
+
+function matchContainment(text: string, context?: InteractionContext | null): Partial<SemanticIntent> | null {
+  if (/clear (?:this )?(?:placement )?containment|clear this scope/iu.test(text)) {
+    return { action: 'CLEAR_CONTAINMENT', objectType: 'WINDOW', entity: 'containment' };
+  }
+  if (
+    context?.pendingContainmentId
+    && !context.pendingProposalId
+    && /^(yes|y|ok|okay|clear it|ใช่|ล้าง)\.?$/iu.test(text.trim())
+  ) {
+    return { action: 'CLEAR_CONTAINMENT', objectType: 'WINDOW', entity: 'containment' };
+  }
+  if (/check (?:it|the (?:containment|placement|window))|inspect (?:the )?containment|why can'?t you move/iu.test(text)) {
+    return { action: 'INSPECT_CONTAINMENT', objectType: 'WINDOW', entity: 'containment' };
+  }
+  return null;
+}
+
+function matchWorkingProject(text: string): Partial<SemanticIntent> | null {
+  const working = text.match(/we(?:'re| are) working on (?:the )?(.+?)(?: project)?\.?$/iu)
+    || text.match(/โปรเจกต์(?:นี้)?คือ\s*(.+)/iu);
+  if (!working) return null;
+  return {
+    action: 'REMEMBER_PREFERENCE',
+    objectType: 'PROJECT',
+    target: `workspace.current=${working[1]!.trim()}`,
+    entity: working[1]!.trim(),
   };
 }
 

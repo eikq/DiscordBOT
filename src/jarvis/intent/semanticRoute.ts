@@ -8,12 +8,19 @@ import {
 } from '../capabilities/actions/constants';
 import { RESEARCH_CURRENT } from '../research/constants';
 import { resolveResource } from '../resources/resolver';
+import { resolveRegisteredWorkspace } from '../resources/workspaceAuthority';
+import { isHighRiskReferentText, pickSourceByMention, referentStillValid, resolveThatSource } from '../memory/activeContext';
+import { speakInLanguage } from './conversationLanguage';
 import type { OwnerAliasRecord } from '../memory/ownerSemantics';
 import { resolveDisplayAlias } from '../memory/ownerSemantics';
 import { interpretSemanticIntent, type SemanticIntent } from './semanticIntent';
 import { catalogHas } from './catalog';
 import { classifyActionability } from './classify';
 import type { CompactCapability, IntentResolution, InteractionContext } from './types';
+import { loadDesktopAllowlists } from '../capabilities/actions/allowlists';
+import { loadWorkspaceRegistry } from '../workspace/registry';
+
+const OPEN_VERB_HINT = /\b(open|launch|start|put|show)\b|เปิด/iu;
 
 export function routeSemanticIntent(
   text: string,
@@ -53,7 +60,15 @@ export function resolutionFromSemantic(
     };
   }
 
-  if (semantic.action === 'TEACH_ALIAS' || semantic.action === 'FORGET_ALIAS' || semantic.action === 'ASK_MEMORY' || semantic.action === 'REMEMBER_PREFERENCE') {
+  if (
+    semantic.action === 'TEACH_ALIAS'
+    || semantic.action === 'FORGET_ALIAS'
+    || semantic.action === 'ASK_MEMORY'
+    || semantic.action === 'REMEMBER_PREFERENCE'
+    || semantic.action === 'LIST_DISPLAYS'
+    || semantic.action === 'INSPECT_CONTAINMENT'
+    || semantic.action === 'CLEAR_CONTAINMENT'
+  ) {
     return {
       kind: 'CONVERSATION',
       confidence: 'HIGH',
@@ -70,31 +85,93 @@ export function resolutionFromSemantic(
     };
   }
 
-  const display = applyAliasDisplay(semantic, options.aliases);
   const context = options.context;
+  const display = applyAliasDisplay(semantic, options.aliases, context);
+  const now = Date.now();
+  const highRisk = isHighRiskReferentText(text);
+  if (highRisk && !referentStillValid(context, now, { highRisk: true })) {
+    return clarify('That reference is too old or uncertain for a destructive action. Which exact thing do you mean?', 'REFERENT_EXPIRED', actionClass);
+  }
 
   if (semantic.action === 'MOVE_BACK') {
     const resource = context?.lastOpenedResource;
     const previous = context?.previousDisplay;
-    if (!resource || !previous) {
+    if (!resource || !previous || !referentStillValid(context, now)) {
       return clarify('Which window should I move back, and to which screen?', 'AMBIGUOUS_REFERENT', actionClass);
     }
-    return placeOrOpen(resource, previous, options.catalog, actionClass, 'REFERENT_BACK');
+    return placeOrOpen(resource, previous, options.catalog, actionClass, 'REFERENT_BACK', {
+      contextSource: 'working-memory',
+      resolvedReferent: resource.windowHandle || resource.label,
+    });
   }
 
   if (semantic.action === 'PLACE' && (semantic.references.includes('it') || semantic.references.includes('that'))) {
     const resource = context?.lastOpenedResource;
-    if (!resource) return clarify('Which window do you mean by “it”?', 'AMBIGUOUS_REFERENT', actionClass);
+    if (!resource || !referentStillValid(context, now)) return clarify('Which window do you mean by “it”?', 'AMBIGUOUS_REFERENT', actionClass);
     if (!display) return clarify('Which display should I move it to?', 'AMBIGUOUS_DISPLAY', actionClass);
-    return placeOrOpen(resource, display, options.catalog, actionClass, 'REFERENT_IT');
+    return placeOrOpen(resource, display, options.catalog, actionClass, 'REFERENT_IT', {
+      contextSource: 'working-memory',
+      resolvedReferent: resource.windowHandle || resource.label,
+    });
   }
 
-  if (semantic.references.includes('official') && context?.recentResearchQuery && catalogHas(options.catalog, RESEARCH_CURRENT)) {
+  if (semantic.objectType === 'SOURCE' || (semantic.references.includes('that') && /source|แหล่ง/iu.test(text))) {
+    if (semantic.action === 'RESEARCH_FOLLOWUP' && !OPEN_VERB_HINT.test(text)) {
+      const official = resolveThatSource(context?.lastResearchSources, text);
+      if (official.ok === false) return clarify(official.message, official.reasonCode, actionClass);
+      return {
+        kind: 'CONVERSATION',
+        confidence: 'HIGH',
+        reasonCode: 'RESEARCH_OFFICIAL_SOURCE',
+        userMessage: speakInLanguage(context?.conversationLanguage === 'th' ? 'th' : 'en', {
+          en: `The official source is ${official.source.label} (${official.source.url}).`,
+          th: `แหล่งทางการคือ ${official.source.label} (${official.source.url}) ครับ`,
+        }),
+        arguments: { url: official.source.url, sourceId: official.source.sourceId },
+        consumed: true,
+        source: 'heuristic',
+        actionClass: 'INFORMATION',
+        contextEvidence: { contextSource: 'research-session', resolvedReferent: official.source.label },
+      };
+    }
+    const picked = resolveThatSource(context?.lastResearchSources, text);
+    if (picked.ok === false) return clarify(picked.message, picked.reasonCode, actionClass);
+    if (catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+      return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
+        kind: 'url',
+        url: picked.source.url,
+        label: picked.source.label,
+        ...(display || context?.lastDisplay ? { display: display || context?.lastDisplay } : {}),
+      }, 'RESEARCH_SOURCE_OPEN', actionClass, {
+        contextSource: 'research-session',
+        resolvedReferent: picked.source.label,
+        resourceAuthority: 'research-session',
+      });
+    }
+  }
+
+  if (OPEN_VERB_HINT.test(text) && context?.lastResearchSources?.length && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+    const mentioned = pickSourceByMention(context.lastResearchSources, text);
+    if (mentioned) {
+      return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
+        kind: 'url',
+        url: mentioned.url,
+        label: mentioned.label,
+        ...(display || context.lastDisplay ? { display: display || context.lastDisplay } : {}),
+      }, 'RESEARCH_SOURCE_OPEN', actionClass, {
+        contextSource: 'research-session',
+        resolvedReferent: mentioned.label,
+        resourceAuthority: 'research-session',
+      });
+    }
+  }
+
+  if (semantic.references.includes('official') && context?.recentResearchQuery && catalogHas(options.catalog, RESEARCH_CURRENT) && semantic.objectType !== 'SOURCE') {
     return capability(RESEARCH_CURRENT, {
       query: context.recentResearchQuery,
       reuseLast: true,
       officialOnly: true,
-    }, 'RESEARCH_CONTEXT', actionClass);
+    }, 'RESEARCH_CONTEXT', actionClass, { contextSource: 'research-session' });
   }
 
   if (semantic.action === 'RESEARCH' || semantic.action === 'RESEARCH_FOLLOWUP') {
@@ -103,10 +180,33 @@ export function resolutionFromSemantic(
         query: context.recentResearchQuery,
         reuseLast: true,
         officialOnly: semantic.modifiers.includes('official-only') || semantic.references.includes('official'),
-      }, 'RESEARCH_CONTEXT', actionClass);
+      }, 'RESEARCH_CONTEXT', actionClass, { contextSource: 'research-session' });
     }
     if (semantic.entity && catalogHas(options.catalog, RESEARCH_CURRENT)) {
       return capability(RESEARCH_CURRENT, { query: semantic.entity, officialOnly: semantic.modifiers.includes('official-only') }, 'SEMANTIC_RESEARCH', actionClass);
+    }
+  }
+
+  if (semantic.objectType === 'PROJECT' && (semantic.action === 'OPEN' || /cursor|vscode/iu.test(text))) {
+    const lists = loadDesktopAllowlists();
+    const workspace = resolveRegisteredWorkspace(semantic.entity || context?.currentWorkspace || context?.recentWorkspaceId, {
+      projects: lists.projects.map(item => ({ id: item.id, displayName: item.displayName, path: item.path, installed: item.installed })),
+      workspaces: loadWorkspaceRegistry().list().map(item => ({ id: item.id, displayName: item.displayName, root: item.root })),
+      currentWorkspaceId: context?.currentWorkspace || context?.recentWorkspaceId,
+    });
+    if (workspace.ok === false) return clarify(workspace.message, workspace.reasonCode, actionClass);
+    const applicationId = /vscode/iu.test(text) ? 'vscode' : 'cursor';
+    if (catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+      return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
+        kind: 'application',
+        applicationId,
+        projectId: workspace.projectId,
+        label: workspace.label,
+      }, 'SEMANTIC_PROJECT_APP', actionClass, {
+        contextSource: context?.currentWorkspace ? 'working-memory' : 'workspace-registry',
+        resourceAuthority: workspace.evidence,
+        resolvedReferent: workspace.label,
+      });
     }
   }
 
@@ -134,19 +234,25 @@ export function resolutionFromSemantic(
     return null;
   }
 
+  const thereDisplay = semantic.references.includes('there')
+    ? display || context?.lastDisplay || context?.currentDisplay
+    : display;
+
   if (resolved.kind === 'project' && catalogHas(options.catalog, DESKTOP_OPEN_PROJECT)) {
-    return capability(DESKTOP_OPEN_PROJECT, { projectId: resolved.projectId }, 'SEMANTIC_PROJECT', actionClass);
+    return capability(DESKTOP_OPEN_PROJECT, { projectId: resolved.projectId }, 'SEMANTIC_PROJECT', actionClass, {
+      resourceAuthority: 'project-allowlist',
+    });
   }
   if (resolved.kind === 'application') {
     if (semantic.action === 'FOCUS' && catalogHas(options.catalog, DESKTOP_FOCUS_WINDOW)) {
       return capability(DESKTOP_FOCUS_WINDOW, { applicationId: resolved.applicationId }, 'SEMANTIC_FOCUS', actionClass);
     }
-    if ((semantic.action === 'PLACE' || display) && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+    if ((semantic.action === 'PLACE' || thereDisplay) && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
       return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
         kind: 'application',
         applicationId: resolved.applicationId,
         label: resolved.label,
-        ...(display ? { display } : {}),
+        ...(thereDisplay ? { display: thereDisplay } : {}),
       }, 'SEMANTIC_SCOPED_APP', actionClass);
     }
     if (catalogHas(options.catalog, DESKTOP_OPEN_APPLICATION)) {
@@ -154,13 +260,19 @@ export function resolutionFromSemantic(
     }
   }
   if (resolved.kind === 'website') {
-    if (display && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+    if (thereDisplay && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
       return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
         kind: 'url',
         url: resolved.url,
         label: resolved.label,
-        display,
-      }, 'SEMANTIC_SCOPED_WEB', actionClass);
+        display: thereDisplay,
+      }, 'SEMANTIC_SCOPED_WEB', actionClass, {
+        contextSource: semantic.references.includes('there') ? 'working-memory' : 'resource-catalog',
+        resourceAuthority: 'resource-catalog',
+        ...(thereDisplay && 'fingerprint' in thereDisplay && thereDisplay.fingerprint
+          ? { aliasSource: 'owner-semantic-memory' }
+          : {}),
+      });
     }
     if (catalogHas(options.catalog, DESKTOP_OPEN_TRUSTED_URL)) {
       return capability(DESKTOP_OPEN_TRUSTED_URL, { url: resolved.url }, 'SEMANTIC_WEB', actionClass);
@@ -169,12 +281,31 @@ export function resolutionFromSemantic(
   return null;
 }
 
-function applyAliasDisplay(semantic: SemanticIntent, aliases: OwnerAliasRecord[] | undefined) {
-  if (!semantic.display) return semantic.display;
-  const target = resolveDisplayAlias(aliases ?? [], semantic.display.raw);
-  if (target === 'display.internal') return { ...semantic.display, role: 'internal' as const };
-  if (target) return { ...semantic.display, name: target };
-  return semantic.display;
+export function applyOwnerDisplaySelector(
+  selector: NonNullable<InteractionContext['lastDisplay']> | null | undefined,
+  aliases: OwnerAliasRecord[] | undefined,
+  phrase?: string,
+): NonNullable<InteractionContext['lastDisplay']> | null | undefined {
+  if (!selector) return selector;
+  const target = resolveDisplayAlias(aliases ?? [], selector.raw)
+    || resolveDisplayAlias(aliases ?? [], phrase);
+  if (target === 'display.internal') return { ...selector, role: 'internal' };
+  if (target?.startsWith('display.fp:') || target?.startsWith('{')) {
+    return { raw: selector.raw, name: target, fingerprint: target };
+  }
+  if (target) return { ...selector, name: target };
+  return selector;
+}
+
+function applyAliasDisplay(
+  semantic: SemanticIntent,
+  aliases: OwnerAliasRecord[] | undefined,
+  context?: InteractionContext | null,
+) {
+  if (semantic.references.includes('there')) {
+    return context?.lastDisplay || context?.currentDisplay || semantic.display || null;
+  }
+  return applyOwnerDisplaySelector(semantic.display, aliases, semantic.aliasPhrase);
 }
 
 function placeOrOpen(
@@ -183,6 +314,7 @@ function placeOrOpen(
   catalog: CompactCapability[],
   actionClass: IntentResolution['actionClass'],
   reasonCode: string,
+  evidence?: IntentResolution['contextEvidence'],
 ): IntentResolution {
   if (resource.openState === 'intended') {
     return clarify(
@@ -198,9 +330,10 @@ function placeOrOpen(
     kind: resource.kind,
     ...(resource.applicationId ? { applicationId: resource.applicationId } : {}),
     ...(resource.url ? { url: resource.url } : {}),
+    ...(resource.windowHandle ? { windowHandle: resource.windowHandle } : {}),
     label: resource.label,
     display,
-  }, reasonCode, actionClass);
+  }, reasonCode, actionClass, evidence);
 }
 
 function capability(
@@ -208,6 +341,7 @@ function capability(
   args: Record<string, unknown>,
   reasonCode: string,
   actionClass: IntentResolution['actionClass'],
+  evidence?: IntentResolution['contextEvidence'],
 ): IntentResolution {
   return {
     kind: 'CAPABILITY',
@@ -218,6 +352,7 @@ function capability(
     consumed: true,
     source: 'heuristic',
     actionClass: actionClass === 'CONVERSATION' ? 'ACTIONABLE' : actionClass,
+    ...(evidence ? { contextEvidence: evidence } : {}),
   };
 }
 

@@ -1,5 +1,7 @@
 import type { DisplaySelector } from '../desktop/monitorTopology';
+import type { ContextEvidence } from './contextEvidence';
 import type { OwnerAliasRecord } from '../memory/ownerSemantics';
+import type { ResearchSourceRef } from '../memory/activeContext';
 import type { CapabilityHost } from '../capabilities/types';
 import type { GoalCatalog, GoalResolution, GoalSuggestion, TrustedInputAdapterRegistry } from '../goals';
 
@@ -64,6 +66,7 @@ export type IntentResolution = {
   pendingGoalId?: string;
   pendingGoalExpiresAt?: string;
   extraCalls?: Array<{ id: string; input?: Record<string, unknown> }>;
+  contextEvidence?: ContextEvidence;
 };
 
 export type InteractionContext = {
@@ -80,9 +83,25 @@ export type InteractionContext = {
     label: string;
     display?: DisplaySelector | null;
     openState?: 'intended' | 'opened';
+    processName?: string;
+    windowHandle?: string;
+    openOperationId?: string;
+    currentDisplayId?: string;
+    previousDisplayId?: string;
+    placementScope?: 'process-window' | 'unknown';
   };
   lastDisplay?: DisplaySelector | null;
   previousDisplay?: DisplaySelector | null;
+  currentWebsite?: string;
+  currentApplication?: string;
+  currentWindow?: string;
+  currentSource?: string;
+  currentResearch?: string;
+  currentWorkspace?: string;
+  currentDisplay?: DisplaySelector | null;
+  lastResearchSources?: ResearchSourceRef[];
+  conversationLanguage?: 'th' | 'en';
+  pendingContainmentId?: string;
   lastQuery?: string;
   recentResearchSessionId?: string;
   recentResearchQuery?: string;

@@ -79,6 +79,16 @@ export function resolveResource(intent: SemanticIntent, options: ResourceResolve
 
   const sites = options.webResources ?? loadWebResourceCatalog().resources;
   const site = matchNamed(entity, sites.map(item => ({ id: item.id, names: item.names, url: item.officialUrl, evidence: item.evidence })));
+  const near = sites.find(item => (item.nearNames ?? []).some(name => collapse(name) === collapse(entity) || collapse(entity).includes(collapse(name))));
+  if (near && site.kind !== 'exact') {
+    return {
+      ok: false,
+      reasonCode: 'DID_YOU_MEAN',
+      message: `Did you mean ${near.id}?`,
+      entity,
+      suggestion: near.id,
+    };
+  }
   if (site.kind === 'exact') {
     const record = sites.find(item => item.id === site.id);
     if (!record) {

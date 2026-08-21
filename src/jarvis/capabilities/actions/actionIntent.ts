@@ -20,7 +20,7 @@ import {
   SYSTEM_STATUS,
 } from './constants';
 import { classifyVoiceFamily } from '../../intent/voiceFamilies';
-import { routeSemanticIntent } from '../../intent/semanticRoute';
+import { applyOwnerDisplaySelector, routeSemanticIntent } from '../../intent/semanticRoute';
 import { compactCapabilityCatalog } from '../../intent/catalog';
 import { SERVICE_ALIASES, type JarvisServiceId } from './services/catalog';
 import type { CapabilityCall } from './types';
@@ -139,6 +139,7 @@ export function inferActionIntent(
   }
 
   const voiceEarly = classifyVoiceFamily(raw);
+  const voiceDisplay = applyOwnerDisplaySelector(voiceEarly.display, options.aliases, raw);
   if (voiceEarly.family === 'SYSTEM_STATUS') {
     return { kind: 'action', consumed: true, calls: [{ id: SYSTEM_STATUS, input: {} }] };
   }
@@ -146,14 +147,17 @@ export function inferActionIntent(
     return {
       kind: 'action',
       consumed: true,
-      calls: voiceEarly.resources.map(resource => scopedOpenCall(resource)),
+      calls: voiceEarly.resources.map(resource => scopedOpenCall({
+        ...resource,
+        display: applyOwnerDisplaySelector(resource.display, options.aliases) || resource.display,
+      })),
     };
   }
-  if (voiceEarly.family === 'DESKTOP_OPEN' && voiceEarly.display && voiceEarly.resources[0]) {
+  if (voiceEarly.family === 'DESKTOP_OPEN' && voiceDisplay && voiceEarly.resources[0]) {
     return {
       kind: 'action',
       consumed: true,
-      calls: [scopedOpenCall(voiceEarly.resources[0])],
+      calls: [scopedOpenCall({ ...voiceEarly.resources[0], display: voiceDisplay })],
     };
   }
   if (voiceEarly.family === 'DESKTOP_PLACE' && voiceEarly.resources[0]?.applicationId) {
@@ -162,7 +166,7 @@ export function inferActionIntent(
       consumed: true,
       calls: [{
         id: DESKTOP_PLACE_WINDOW,
-        input: { applicationId: voiceEarly.resources[0].applicationId, ...(voiceEarly.display ? { display: voiceEarly.display } : {}) },
+        input: { applicationId: voiceEarly.resources[0].applicationId, ...(voiceDisplay ? { display: voiceDisplay } : {}) },
       }],
     };
   }
@@ -390,7 +394,7 @@ function isConversationAboutBlockedTopic(text: string, reasonCode: string): bool
     || reasonCode === 'BLOCKED_REGISTRY';
 }
 
-function scopedOpenCall(resource: { kind: string; applicationId?: string; url?: string; label: string; display?: { raw: string; index?: number; role?: string; name?: string } | null }): CapabilityCall {
+function scopedOpenCall(resource: { kind: string; applicationId?: string; url?: string; label: string; display?: { raw: string; index?: number; role?: string; name?: string; fingerprint?: string } | null }): CapabilityCall {
   return {
     id: DESKTOP_OPEN_SCOPED_RESOURCE,
     input: {

@@ -5,6 +5,7 @@ export type WebResourceRecord = {
   id: string;
   kind: 'website' | 'documentation';
   names: string[];
+  nearNames?: string[];
   officialUrl: string;
   evidence: 'allowlisted-web' | 'owner-catalog' | 'owner-stated';
 };

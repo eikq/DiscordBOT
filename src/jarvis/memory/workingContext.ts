@@ -13,12 +13,20 @@ export const MEMORY_TURN_BUDGET = {
 export function applyOpenedResource(
   context: InteractionContext | null | undefined,
   resource: LastOpenedResource,
-): Pick<InteractionContext, 'lastOpenedResource' | 'lastDisplay' | 'previousDisplay' | 'lastApplicationId'> {
+): Pick<InteractionContext, 'lastOpenedResource' | 'lastDisplay' | 'previousDisplay' | 'lastApplicationId' | 'currentDisplay' | 'currentWebsite' | 'currentApplication' | 'currentWindow'> {
   return {
-    lastOpenedResource: resource,
+    lastOpenedResource: {
+      ...resource,
+      placementScope: resource.placementScope || (resource.url ? 'process-window' : 'unknown'),
+      previousDisplayId: context?.lastOpenedResource?.currentDisplayId,
+    },
     previousDisplay: context?.lastDisplay,
     lastDisplay: resource.display ?? context?.lastDisplay,
+    currentDisplay: resource.display ?? context?.currentDisplay,
     lastApplicationId: resource.applicationId ?? context?.lastApplicationId,
+    currentWebsite: resource.url ?? context?.currentWebsite,
+    currentApplication: resource.applicationId ?? context?.currentApplication,
+    currentWindow: resource.windowHandle || resource.label,
   };
 }
 

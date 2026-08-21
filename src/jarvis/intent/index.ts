@@ -1,6 +1,8 @@
 export { interpretSemanticIntent } from './semanticIntent';
 export type { SemanticIntent } from './semanticIntent';
 export { routeSemanticIntent } from './semanticRoute';
+export { detectConversationLanguage, preferredLanguage } from './conversationLanguage';
+export { formatContextEvidence } from './contextEvidence';
 export { classifyVoiceFamily, isWakeUtterance } from './voiceFamilies';
 export { routeVoiceFamily } from './voiceRoute';
 export { sttMayExecute } from './sttRiskGate';

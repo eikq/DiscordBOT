@@ -7,6 +7,8 @@ import type { InteractionContext } from '../intent/types';
 import { redactSecrets } from '../security/redaction';
 import { classifyVoiceFamily } from '../intent/voiceFamilies';
 import { interpretSemanticIntent } from '../intent/semanticIntent';
+import { applyOwnerDisplaySelector } from '../intent/semanticRoute';
+import type { OwnerAliasRecord } from '../memory/ownerSemantics';
 import { createDefaultGoalCatalog, type GoalCatalog } from './catalog';
 import { createDefaultInputAdapterRegistry, directCapabilityInput, type TrustedInputAdapterRegistry } from './inputAdapters';
 import type {
@@ -22,6 +24,7 @@ export type GoalResolverOptions = {
   adapters?: TrustedInputAdapterRegistry;
   context?: InteractionContext | null;
   suggestion?: GoalSuggestion;
+  aliases?: OwnerAliasRecord[];
   attempted?: number;
   maximumAttempts?: number;
 };
@@ -47,7 +50,7 @@ export async function resolveOwnerGoal(text: string, options: GoalResolverOption
   const catalog = options.catalog ?? DEFAULT_CATALOG;
   const match = options.suggestion
     ? matchValidatedSuggestion(raw, options.suggestion, catalog)
-    : deterministicMatch(raw, catalog, options.context);
+    : deterministicMatch(raw, catalog, options.context, options.aliases);
   if (match.status === 'CLARIFICATION') {
     return {
       status: 'CLARIFICATION',
@@ -139,7 +142,12 @@ export function validateGoalSuggestion(value: unknown, catalog: GoalCatalog = DE
   };
 }
 
-function deterministicMatch(text: string, catalog: GoalCatalog, context?: InteractionContext | null): Match {
+function deterministicMatch(
+  text: string,
+  catalog: GoalCatalog,
+  context?: InteractionContext | null,
+  aliases?: OwnerAliasRecord[],
+): Match {
   const fromCatalog = (id: string) => catalog.get(id);
   if (/after setup|once (?:set ?up|configured)|need(?:s)? setup|need(?:s)? configuration|require(?:s)? setup|currently unavailable|not currently available|require(?:s)? (?:my )?permission|need(?:s)? (?:my )?permission|what requires my permission|what can you do|what goals can you|what are your capabilities|ทำอะไรได้บ้าง|ความสามารถ.*อะไร|ต้องตั้งค่า|ต้องขออนุญาต/iu.test(text)) {
     return matched(fromCatalog('self.capabilities'), 1, {}, ['matcher:self.capabilities']);
@@ -149,12 +157,14 @@ function deterministicMatch(text: string, catalog: GoalCatalog, context?: Intera
   }
   const voice = classifyVoiceFamily(text);
   const semanticOpen = interpretSemanticIntent(text);
+  const semanticDisplay = applyOwnerDisplaySelector(semanticOpen.display, aliases, semanticOpen.aliasPhrase);
+  const voiceDisplay = applyOwnerDisplaySelector(voice.display, aliases, text);
   if (semanticOpen.action === 'OPEN' && (semanticOpen.objectType === 'WEBSITE' || (semanticOpen.display && semanticOpen.entity))) {
     return matched(fromCatalog('desktop.open-resource'), 0.94, {
       resource: semanticOpen.entity,
       entity: semanticOpen.entity,
       objectType: semanticOpen.objectType,
-      ...(semanticOpen.display ? { display: semanticOpen.display } : {}),
+      ...(semanticDisplay ? { display: semanticDisplay } : {}),
     }, ['matcher:desktop.open-resource', 'matcher:resource.open']);
   }
   if (voice.family === 'DESKTOP_OPEN' || voice.family === 'COMPOUND_OPEN') {
@@ -167,7 +177,7 @@ function deterministicMatch(text: string, catalog: GoalCatalog, context?: Intera
         url: resource.url,
         label: resource.label,
       } : {}),
-      ...(voice.display ? { display: voice.display } : {}),
+      ...(voiceDisplay ? { display: voiceDisplay } : {}),
     }, ['matcher:desktop.open-resource']);
   }
   if (/\b(cctv|nvr|rtsp|onvif|camera|กล้อง)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(text) && /connect|open|view|show|check|เชื่อม|เปิด|ดู/iu.test(text)) {

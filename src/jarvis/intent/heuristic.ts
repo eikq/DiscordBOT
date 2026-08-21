@@ -22,6 +22,13 @@ import { catalogHas } from './catalog';
 import { newClarificationId } from './context';
 import type { CompactCapability, IntentResolution, InteractionContext } from './types';
 
+const SOURCE_FOLLOWUP_REASONS = new Set([
+  'RESEARCH_OFFICIAL_SOURCE',
+  'RESEARCH_SOURCE_OPEN',
+  'NO_RESEARCH_SOURCE',
+  'AMBIGUOUS_SOURCE',
+]);
+
 const SITE_URLS: Array<{ cues: string[]; url: string; label: string }> = [
   { cues: ['youtube', 'ยูทูบ', 'ยูทูป'], url: 'https://www.youtube.com', label: 'YouTube' },
   { cues: ['open.spotify.com', 'spotify web', 'เว็บ spotify'], url: 'https://open.spotify.com', label: 'Spotify Web' },
@@ -202,6 +209,14 @@ export function fastPathResolution(
     context?: InteractionContext | null;
   },
 ): IntentResolution | null {
+  const semantic = routeSemanticIntent(text, {
+    catalog: options.catalog,
+    context: options.context,
+    aliases: options.aliases,
+    applicationIds: options.applicationIds,
+    projectIds: options.projectIds,
+  });
+  if (semantic && SOURCE_FOLLOWUP_REASONS.has(semantic.reasonCode)) return semantic;
   const intent = inferActionIntent(text, {
     applicationIds: options.applicationIds,
     projectIds: options.projectIds,

@@ -19,6 +19,7 @@
       "id": "roblox",
       "kind": "website",
       "names": ["roblox"],
+      "nearNames": ["road blocks", "roadblocks", "row blocks", "rob locks"],
       "officialUrl": "https://www.roblox.com",
       "evidence": "owner-catalog"
     }

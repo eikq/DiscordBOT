@@ -78,6 +78,15 @@ import {
   rememberOwnerPreference,
 } from '../memory/ownerSemantics';
 import { applyOpenedResource } from '../memory/workingContext';
+import { mergeResearchIntoContext, sourcesFromResearch } from '../memory/activeContext';
+import { describeDisplays, fingerprintDisplay, serializeDisplayFingerprint } from '../desktop/displayIdentity';
+import { enumerateWindowsDisplays, inspectAllowlistedWindow, processNameForApplication, processNameForUrl, processNamesForUrl } from '../desktop/windowsDisplayHost';
+import { classifyWindowOnDisplays } from '../desktop/windowPlacement';
+import { evidenceFromWindowInspection, reconcileContainment } from '../safety/containmentReconcile';
+import { sharedTrustedOperatorRuntime } from '../security/trustedOperatorRuntime';
+import { preferredLanguage, speakInLanguage } from '../intent/conversationLanguage';
+import { resolveRegisteredWorkspace } from '../resources/workspaceAuthority';
+import { loadWorkspaceRegistry } from '../workspace/registry';
 import type { JarvisMemoryStore } from '../../bot/memory/jarvis/store';
 import { loadDefaultJarvisSkillRuntime } from '../skills';
 import type { JarvisSkillHost } from '../skills';
@@ -281,17 +290,21 @@ export class JarvisLabRuntime {
     this.workspace = options.workspace === false
       ? undefined
       : options.workspace ?? (options.attachDefaultCapabilities ? trySharedWorkspaceRuntime({ research: this.research }) : undefined);
+    const memoryStore = options.memoryStore ?? attached?.store;
     const capabilities = options.capabilities
       ?? (options.attachDefaultCapabilities ? createStandaloneCapabilityHost({
         reminders: this.reminders,
         research: this.research ? { runtime: this.research } : undefined,
         workspace: this.workspace ? { runtime: this.workspace } : undefined,
+        actions: {
+          displayAliases: () => listOwnerAliases(memoryStore, 'display'),
+        },
       }) : undefined);
     const skills = options.skills
       ?? (options.attachDefaultSkills ? loadDefaultJarvisSkillRuntime() : undefined);
     this.memoryAttached = Boolean(attached?.service);
     this.memorySchemaVersion = attached?.schemaVersion;
-    this.memoryStore = options.memoryStore ?? attached?.store;
+    this.memoryStore = memoryStore;
     this.capabilityHost = capabilities;
     this.capabilityIds = capabilities?.list().map(item => item.id) ?? [];
     const allowlists = loadDesktopAllowlists();
@@ -675,13 +688,15 @@ export class JarvisLabRuntime {
     }
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
-      return this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
+      const worked = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
+      await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, worked);
+      return worked;
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
       engine: this.engine,
     });
-    this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
+    await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak);
     return {
@@ -738,6 +753,7 @@ export class JarvisLabRuntime {
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
       const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
+      await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
       emit({ type: 'final', payload: output });
       if (output.speech) emit({ type: 'speech', payload: output.speech });
       return output;
@@ -747,7 +763,7 @@ export class JarvisLabRuntime {
       engine: this.engine,
       onDraft: (accumulated) => emit({ type: 'draft', text: accumulated }),
     });
-    this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
+    await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
     const finalPayload = {
@@ -1142,7 +1158,7 @@ export class JarvisLabRuntime {
       explicitCapabilities,
       capabilityCalls: input.capabilityCalls,
       catalog: compactCapabilityCatalog(this.capabilityHost),
-      context: this.intents.get(sessionId),
+      context: mergeResearchIntoContext(this.intents.get(sessionId), this.research?.snapshot().last, sessionId),
       aliases: listOwnerAliases(this.memoryStore),
       semanticResolve: this.llm?.generateText
         ? async (request) => runSemanticResolver(
@@ -1208,13 +1224,15 @@ export class JarvisLabRuntime {
     }));
   }
 
-  private rememberAfterTurn(
+  private async rememberAfterTurn(
     sessionId: string,
     resolution: IntentResolution,
     output: StandaloneTextTurnOutput,
-  ): void {
+  ): Promise<void> {
     const args = resolution.arguments ?? {};
     const research = this.research?.snapshot();
+    const existing = this.intents.get(sessionId);
+    const nextSources = sourcesFromResearch(research?.last?.sources);
     const workspace = this.workspace?.snapshot();
     const reminderIds = this.reminders?.scheduler.snapshot().reminders.map(item => item.id).slice(0, 8);
     if (resolution.clarification) {
@@ -1226,6 +1244,11 @@ export class JarvisLabRuntime {
       String(item.capabilityId || item.name || '').startsWith('desktop.open')
       && item.status === 'completed'
     ));
+    const placed = output.result.actionResults.some(item => (
+      String(item.capabilityId || item.name || '') === 'desktop.placeWindow'
+      && item.status === 'completed'
+    ));
+    const tracked = await this.inspectOpenedWindow(sessionId, args);
     this.intents.touch(sessionId, {
       activeIntent: resolution.kind,
       lastCapabilityId: resolution.capabilityId ?? this.intents.get(sessionId)?.lastCapabilityId,
@@ -1238,16 +1261,29 @@ export class JarvisLabRuntime {
           url: typeof args.url === 'string' ? args.url : undefined,
           label: String(args.label || args.applicationId || args.url || resolution.capabilityId || ''),
           display: args.display && typeof args.display === 'object' ? args.display as InteractionContext['lastDisplay'] : undefined,
-          openState: opened || resolution.capabilityId === 'desktop.placeWindow'
+          openState: opened || placed
             ? 'opened'
             : (output.pendingConfirmation ? 'intended' : this.intents.get(sessionId)?.lastOpenedResource?.openState ?? 'intended'),
+          processName: tracked.processName,
+          windowHandle: tracked.windowHandle,
+          currentDisplayId: tracked.displayId,
+          placementScope: typeof args.url === 'string' ? 'process-window' : 'unknown',
         })
         : {}),
       recentResearchQuery: typeof args.query === 'string' && String(resolution.capabilityId || '').startsWith('research.')
         ? String(args.query)
-        : research?.last?.query,
-      recentResearchSessionId: research?.last?.sessionId,
+        : research?.last?.query || existing?.recentResearchQuery,
+      recentResearchSessionId: research?.last?.sessionId || existing?.recentResearchSessionId,
+      lastResearchSources: nextSources.length ? nextSources : existing?.lastResearchSources,
+      currentResearch: research?.last?.query || existing?.currentResearch,
+      currentSource: existing?.currentSource || (nextSources.length === 1 ? nextSources[0]!.url : undefined),
+      currentWebsite: typeof args.url === 'string' ? String(args.url) : this.intents.get(sessionId)?.currentWebsite,
+      currentApplication: typeof args.applicationId === 'string' ? String(args.applicationId) : this.intents.get(sessionId)?.currentApplication,
+      currentDisplay: args.display && typeof args.display === 'object'
+        ? args.display as InteractionContext['currentDisplay']
+        : this.intents.get(sessionId)?.currentDisplay,
       recentWorkspaceId: workspace?.workspaceId ?? this.intents.get(sessionId)?.recentWorkspaceId,
+      currentWorkspace: this.intents.get(sessionId)?.currentWorkspace ?? workspace?.workspaceId,
       recentDocumentQuery: typeof args.query === 'string' && String(resolution.capabilityId || '').startsWith('workspace.')
         ? String(args.query)
         : workspace?.last?.query ?? this.intents.get(sessionId)?.recentDocumentQuery,
@@ -1286,39 +1322,210 @@ export class JarvisLabRuntime {
     };
   }
 
+  private async resolveTaughtDisplayTarget(
+    target: string,
+    sessionId: string,
+  ): Promise<{ ok: true; value: string } | { ok: false; message: string }> {
+    if (target.startsWith('display.fp:') || target === 'display.internal') return { ok: true, value: target };
+    if (target === 'display.current') {
+      return { ok: false, message: 'I cannot prove which screen is showing Jarvis right now. Tell me the monitor number instead.' };
+    }
+    const ordinal = target.match(/^ordinal:(\d+)$/u);
+    if (ordinal) {
+      const displays = await enumerateWindowsDisplays().catch(() => []);
+      const display = displays[Number(ordinal[1]) - 1];
+      if (!display) {
+        return { ok: false, message: `I only see ${displays.length} display${displays.length === 1 ? '' : 's'}. There is no monitor ${ordinal[1]}.` };
+      }
+      return { ok: true, value: serializeDisplayFingerprint(fingerprintDisplay(display, Number(ordinal[1]))) };
+    }
+    void sessionId;
+    return { ok: true, value: target };
+  }
+
+  private async inspectOpenedWindow(
+    sessionId: string,
+    args: Record<string, unknown>,
+  ): Promise<{ processName?: string; windowHandle?: string; displayId?: string }> {
+    const existing = this.intents.get(sessionId)?.lastOpenedResource;
+    const processName = typeof args.url === 'string'
+      ? processNameForUrl(String(args.url))
+      : typeof args.applicationId === 'string'
+        ? processNameForApplication(String(args.applicationId))
+        : existing?.processName;
+    if (!processName) return { processName: existing?.processName, windowHandle: existing?.windowHandle };
+    const candidates = typeof args.url === 'string'
+      ? processNamesForUrl(String(args.url))
+      : [processName];
+    let window = null as Awaited<ReturnType<typeof inspectAllowlistedWindow>>;
+    let matched = processName;
+    for (const name of candidates) {
+      window = await inspectAllowlistedWindow({
+        processName: name,
+        windowHandle: typeof args.windowHandle === 'string' ? args.windowHandle : existing?.windowHandle,
+      });
+      if (window) {
+        matched = name;
+        break;
+      }
+    }
+    if (!window) return { processName: matched, windowHandle: existing?.windowHandle };
+    const displays = await enumerateWindowsDisplays().catch(() => []);
+    return {
+      processName: matched,
+      windowHandle: window.handle,
+      displayId: classifyWindowOnDisplays(window, displays).displayId,
+    };
+  }
+
+  private async inspectPlacementContainment(sessionId: string): Promise<string> {
+    const incidents = [
+      ...sharedTrustedOperatorRuntime().containment.listActive('desktop.placeWindow'),
+      ...sharedTrustedOperatorRuntime().containment.listActive('desktop.openScopedResource'),
+    ];
+    if (!incidents.length) return 'No placement or scoped-open containment is active.';
+    const incident = incidents[0]!;
+    const context = this.intents.get(sessionId);
+    const processName = context?.lastOpenedResource?.processName
+      || (incident.affectedTargets.some(target => /^https?:/u.test(target)) ? 'msedge' : undefined);
+    const displays = await enumerateWindowsDisplays().catch(() => []);
+    const candidates = context?.lastOpenedResource?.url
+      ? processNamesForUrl(context.lastOpenedResource.url)
+      : processName
+        ? [processName]
+        : [];
+    let window = null as Awaited<ReturnType<typeof inspectAllowlistedWindow>>;
+    for (const name of candidates) {
+      window = await inspectAllowlistedWindow({
+        processName: name,
+        windowHandle: context?.lastOpenedResource?.windowHandle,
+      });
+      if (window) break;
+    }
+    const classified = classifyWindowOnDisplays(window, displays);
+    const reconciled = reconcileContainment(incident, evidenceFromWindowInspection({
+      windowFound: classified.windowFound,
+      straddling: classified.straddling,
+      fullyOnOneDisplay: classified.fullyOnOneDisplay,
+      currentDisplayId: classified.displayId,
+    }));
+    this.intents.touch(sessionId, { pendingContainmentId: reconciled.canProposeClear ? incident.id : undefined });
+    const where = !classified.windowFound
+      ? ' I do not see that window open now.'
+      : classified.displayId
+        ? ` The trusted browser window is currently on ${classified.displayId}${classified.straddling ? ' and appears to span more than one display' : ''}.`
+        : '';
+    return `${reconciled.message}${where} This is only containment ${incident.id}.`;
+  }
+
+  private clearPlacementContainment(sessionId: string, text: string): string {
+    const containment = sharedTrustedOperatorRuntime().containment;
+    const pending = this.intents.get(sessionId)?.pendingContainmentId;
+    if (!pending) {
+      return 'I can inspect the current placement containment first. Say “Check it” if you want me to review only that scope.';
+    }
+    if (!/\byes\b|clear|ล้าง|ได้/iu.test(text)) {
+      return 'Say yes if you want me to clear only that placement containment.';
+    }
+    const cleared = containment.clear(pending, 'owner');
+    this.intents.touch(sessionId, { pendingContainmentId: undefined });
+    if (!cleared) return 'I could not clear that containment. Owner recovery is still required.';
+    return 'Cleared only that placement containment. Other containment is unchanged.';
+  }
+
   private async finishOwnerMemoryTurn(
     input: JarvisLabAskInput,
     prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
   ) {
     const reason = prepared.resolution.reasonCode;
-    if (reason !== 'TEACH_ALIAS' && reason !== 'FORGET_ALIAS' && reason !== 'ASK_MEMORY' && reason !== 'REMEMBER_PREFERENCE') {
+    if (
+      reason !== 'TEACH_ALIAS'
+      && reason !== 'FORGET_ALIAS'
+      && reason !== 'ASK_MEMORY'
+      && reason !== 'REMEMBER_PREFERENCE'
+      && reason !== 'LIST_DISPLAYS'
+      && reason !== 'INSPECT_CONTAINMENT'
+      && reason !== 'CLEAR_CONTAINMENT'
+      && reason !== 'RESEARCH_OFFICIAL_SOURCE'
+    ) {
       return undefined;
     }
     const args = prepared.resolution.arguments || {};
     const phrase = String(args.aliasPhrase || args.entity || input.text);
+    const language = preferredLanguage(input.text, this.intents.get(prepared.sessionId)?.conversationLanguage);
+    this.intents.touch(prepared.sessionId, { conversationLanguage: language });
     let text = 'I can remember that if you say it as an owner preference.';
-    if (reason === 'TEACH_ALIAS') {
-      const written = rememberOwnerAlias(this.memoryStore, {
-        phrase,
-        target: String(args.target || 'display.internal'),
-        kind: 'display',
-        actor: 'owner',
-      });
-      text = written.ok
-        ? `I’ll call “${phrase}” the ${written.factKey.includes('display') ? 'display you described' : 'name you taught'}. That stays in owner memory.`
-        : written.ok === false ? written.message : 'I could not store that alias.';
+    if (reason === 'LIST_DISPLAYS') {
+      const displays = await enumerateWindowsDisplays().catch(() => []);
+      text = describeDisplays(displays);
+    } else if (reason === 'INSPECT_CONTAINMENT') {
+      text = await this.inspectPlacementContainment(prepared.sessionId);
+    } else if (reason === 'RESEARCH_OFFICIAL_SOURCE') {
+      text = prepared.resolution.userMessage || 'I do not have a current research source to open.';
+      if (typeof args.url === 'string') {
+        this.intents.touch(prepared.sessionId, { currentSource: String(args.url) });
+      }
+    } else if (reason === 'CLEAR_CONTAINMENT') {
+      text = this.clearPlacementContainment(prepared.sessionId, input.text);
+    } else if (reason === 'TEACH_ALIAS') {
+      const target = await this.resolveTaughtDisplayTarget(String(args.target || 'display.internal'), prepared.sessionId);
+      if (target.ok === false) {
+        text = target.message;
+      } else {
+        const written = rememberOwnerAlias(this.memoryStore, {
+          phrase,
+          target: target.value,
+          kind: 'display',
+          actor: 'owner',
+          evidence: 'OWNER_STATED',
+        });
+        text = written.ok
+          ? speakInLanguage(language, {
+            en: `I’ll remember “${phrase}” as that physical monitor. If it disappears I will say so instead of guessing.`,
+            th: `จำว่า “${phrase}” คือจอเครื่องนั้นแล้วครับ ถ้าจอหายไปผมจะบอก ไม่เดาจอใหม่ให้`,
+          })
+          : written.ok === false ? written.message : 'I could not store that alias.';
+      }
     } else if (reason === 'FORGET_ALIAS') {
       const forgotten = forgetOwnerAlias(this.memoryStore, phrase, 'owner');
       text = forgotten.ok ? `I’ve forgotten the “${phrase}” alias.` : forgotten.ok === false ? forgotten.message : 'I could not forget that alias.';
     } else if (reason === 'ASK_MEMORY') {
       text = formatAliasAnswer(listOwnerAliases(this.memoryStore, /monitor|screen|จอ/iu.test(input.text) ? 'display' : undefined));
     } else if (reason === 'REMEMBER_PREFERENCE') {
-      const written = rememberOwnerPreference(this.memoryStore, {
-        key: String(args.target || 'preference'),
-        value: String(args.target || input.text),
-        actor: 'owner',
-      });
-      text = written.ok ? 'I’ll keep that as an owner preference.' : written.ok === false ? written.message : 'I could not store that preference.';
+      const pref = String(args.target || '');
+      if (pref.startsWith('workspace.current=')) {
+        const named = pref.slice('workspace.current='.length);
+        const resolved = resolveRegisteredWorkspace(named, {
+          workspaces: loadWorkspaceRegistry().list().map(item => ({ id: item.id, displayName: item.displayName, root: item.root })),
+          projects: loadDesktopAllowlists().projects.map(item => ({ id: item.id, displayName: item.displayName, path: item.path, installed: item.installed })),
+        });
+        if (resolved.ok === false) {
+          text = resolved.message;
+        } else {
+          this.intents.touch(prepared.sessionId, {
+            currentWorkspace: resolved.workspaceId,
+            recentWorkspaceId: resolved.workspaceId,
+          });
+          rememberOwnerAlias(this.memoryStore, {
+            phrase: named,
+            target: resolved.workspaceId,
+            kind: 'project',
+            actor: 'owner',
+            evidence: 'OWNER_STATED',
+          });
+          text = speakInLanguage(language, {
+            en: `I’ll treat “${resolved.label}” as the current registered project. I will not store a raw filesystem path from that sentence.`,
+            th: `จำว่าโปรเจกต์ปัจจุบันคือ “${resolved.label}” จาก registry แล้วครับ จะไม่เก็บ path จากข้อความ`,
+          });
+        }
+      } else {
+        const written = rememberOwnerPreference(this.memoryStore, {
+          key: String(args.target || 'preference'),
+          value: String(args.target || input.text),
+          actor: 'owner',
+        });
+        text = written.ok ? 'I’ll keep that as an owner preference.' : written.ok === false ? written.message : 'I could not store that preference.';
+      }
     }
     const request = createJarvisRequest({ text: input.text, sessionId: prepared.sessionId, actionSource: input.actionSource });
     const result = {

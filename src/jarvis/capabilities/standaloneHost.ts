@@ -58,6 +58,7 @@ export type StandaloneCapabilityHostOptions = {
     /** Enables the real checkpoint-backed acceptance sandbox under this Jarvis-owned root. */
     recoveryRoot?: string;
     operator?: TrustedOperatorRuntime;
+    displayAliases?: ActionGateOptions['displayAliases'];
   };
 };
 
@@ -75,6 +76,7 @@ export function createStandaloneCapabilityHost(
       adapter,
       allowlists,
       systemStatus: options.actions?.systemStatus ?? { snapshot: systemHealthSnapshot },
+      displayAliases: options.actions?.displayAliases,
     });
     try {
       registerRuntimeCapabilities(registry, {
@@ -167,6 +169,7 @@ export function createStandaloneCapabilityHost(
     containment: options.actions?.containment ?? operator.containment,
     verification: operator.verification,
     journal: operator.journal,
+    displayAliases: options.actions?.displayAliases,
   };
   return createActionGate(registry, gateOptions);
 }

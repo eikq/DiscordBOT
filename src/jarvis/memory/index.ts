@@ -22,3 +22,4 @@ export {
   rememberOwnerPreference,
 } from './ownerSemantics';
 export { applyOpenedResource, MEMORY_TURN_BUDGET } from './workingContext';
+export { mergeResearchIntoContext, pickSourceByMention, referentStillValid, resolveThatSource, sourcesFromResearch } from './activeContext';
