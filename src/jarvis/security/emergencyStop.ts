@@ -41,6 +41,8 @@ export type EmergencyStopOptions = {
   events?: JarvisEventBus;
   now?: () => number;
   persistPath?: string;
+  onEngage?: (actor: 'owner' | 'system') => void;
+  onResume?: (actor: 'owner') => void;
 };
 
 /**
@@ -100,6 +102,11 @@ export class EmergencyStopController {
       revokedLeaseCount: this.state.revokedLeaseIds.length,
       cancellationStates: summarizeCancellations(this.state.cancellations),
     }, 'error');
+    try {
+      this.options.onEngage?.(actor);
+    } catch {
+      // Latch remains active; journal evidence is best-effort.
+    }
     return this.snapshot();
   }
 
@@ -125,6 +132,11 @@ export class EmergencyStopController {
     this.options.events?.emit('EMERGENCY_RESUME', 'Owner explicitly resumed autonomous execution.', {
       resumedAt: this.state.resumedAt,
     }, 'warn');
+    try {
+      this.options.onResume?.('owner');
+    } catch {
+      // Resume already persisted; journal retry authorization is best-effort.
+    }
     return this.snapshot();
   }
 

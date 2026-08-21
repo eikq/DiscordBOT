@@ -24,6 +24,7 @@ export function openOperationalSqlite(dbPath: string, label: string): { db: Data
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   const db = new DatabaseSync(resolved, { enableForeignKeyConstraints: true });
   db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA busy_timeout = 5000');
   return { db, path: resolved };
 }
 
