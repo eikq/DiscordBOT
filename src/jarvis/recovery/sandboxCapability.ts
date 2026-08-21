@@ -13,6 +13,7 @@ import type {
 import type { VerificationRegistry } from '../safety/verificationRegistry';
 import type { VerificationRecord } from '../safety/types';
 import { RecoveryCheckpointStore } from './checkpointStore';
+import type { ExecutionJournalCoordinator } from '../executionJournal';
 
 export const RECOVERY_SANDBOX_MUTATE = 'operator.sandbox.writeConfig';
 export const RECOVERY_SANDBOX_ROLLBACK = 'operator.sandbox.rollbackConfig';
@@ -38,6 +39,7 @@ export type RecoverySandboxDeps = {
   verification: VerificationRegistry;
   events?: JarvisEventBus;
   now?: () => number;
+  journal?: ExecutionJournalCoordinator;
   /** Test-only scheduling seam; production leaves this undefined. */
   beforeCommit?: (signal: AbortSignal) => Promise<void>;
 };
@@ -58,6 +60,7 @@ class RecoverySandboxRuntime {
   private readonly now: () => number;
   private readonly configPath: string;
   private readonly ledgerPath: string;
+  private readonly liveCheckpointPass = new Set<string>();
 
   public constructor(private readonly deps: RecoverySandboxDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -222,12 +225,17 @@ class RecoverySandboxRuntime {
     if (existing) {
       if (existing.inputDigest !== inputDigest) return invalidResult(RECOVERY_SANDBOX_MUTATE, 'Duplicate operationId has different input.');
       if ((existing.state === 'COMMITTED' || existing.state === 'VERIFIED') && digestCurrentFile(this.configPath) === existing.expectedDigest) {
+        this.syncJournalMutated(existing.operationId, existing.checkpointId, true);
         return mutationOk(existing, this.deps.checkpoints.get(existing.checkpointId)?.priorStateRef);
       }
       if (existing.state === 'ROLLED_BACK') return invalidResult(RECOVERY_SANDBOX_MUTATE, 'This operation was already rolled back; use a new operationId.');
       if (existing.state === 'CANCELLED') return invalidResult(RECOVERY_SANDBOX_MUTATE, 'This operation was cancelled; use a new operationId.');
       if (digestCurrentFile(this.configPath) !== existing.priorDigest) {
+        this.syncJournalAmbiguous(existing.operationId);
         return unknownOutcome(RECOVERY_SANDBOX_MUTATE, 'Interrupted mutation state does not match its checkpoint or intended result.');
+      }
+      if (existing.state === 'CHECKPOINTED' && !this.mayResumeCheckpoint(existing.operationId)) {
+        return checkpointRetryOffered(existing, this.deps.checkpoints.get(existing.checkpointId)?.priorStateRef);
       }
     }
 
@@ -255,11 +263,15 @@ class RecoverySandboxRuntime {
     if (!existing) {
       ledger.operations.push(operation);
       this.persistLedger(ledger);
+      this.liveCheckpointPass.add(operation.operationId);
+      this.syncJournalCheckpoint(operation.operationId, checkpoint.checkpointId);
       this.deps.events?.emit('CHECKPOINT_CREATED', 'Recovery checkpoint created before sandbox mutation.', {
         checkpointId: checkpoint.checkpointId,
         capabilityId: RECOVERY_SANDBOX_MUTATE,
         affectedTargets: [RECOVERY_SANDBOX_TARGET],
       });
+    } else {
+      this.liveCheckpointPass.add(operation.operationId);
     }
 
     await this.deps.beforeCommit?.(signal);
@@ -267,6 +279,7 @@ class RecoverySandboxRuntime {
       operation.state = 'CANCELLED';
       operation.updatedAt = new Date(this.now()).toISOString();
       this.persistLedger(ledger);
+      this.syncJournalCancelled(operation.operationId);
       const cancelled = cancelledCapabilityResult({
         capabilityId: RECOVERY_SANDBOX_MUTATE,
         sideEffect: 'write',
@@ -283,6 +296,7 @@ class RecoverySandboxRuntime {
     operation.state = 'COMMITTED';
     operation.updatedAt = new Date(this.now()).toISOString();
     this.persistLedger(ledger);
+    this.syncJournalMutated(operation.operationId, checkpoint.checkpointId, false);
     return mutationOk(operation, checkpoint.priorStateRef);
   }
 
@@ -294,6 +308,7 @@ class RecoverySandboxRuntime {
       checkpointId: parsed.value.checkpointId,
       rollbackId: parsed.value.rollbackId,
     }, 'warn');
+    this.syncJournalBeginRollback(parsed.value.checkpointId, parsed.value.rollbackId);
     const checkpoint = this.deps.checkpoints.get(parsed.value.checkpointId);
     if (!checkpoint || checkpoint.capabilityId !== RECOVERY_SANDBOX_MUTATE
       || checkpoint.affectedTargets.length !== 1
@@ -309,6 +324,7 @@ class RecoverySandboxRuntime {
     const prior = parsePriorState(recovery.priorState);
     if (!prior) return invalidResult(RECOVERY_SANDBOX_ROLLBACK, 'Checkpoint prior state is invalid.');
     if (checkpoint.state === 'CONSUMED' && checkpoint.rollbackVerification === 'ROLLBACK_VERIFIED') {
+      this.syncJournalRollbackVerified(parsed.value.rollbackId);
       return rollbackOk(checkpoint.checkpointId, prior.digest, true);
     }
     if (signal.aborted) {
@@ -323,6 +339,7 @@ class RecoverySandboxRuntime {
       checkpointId: checkpoint.checkpointId,
       affectedTargets: [RECOVERY_SANDBOX_TARGET],
     }, 'warn');
+    this.syncJournalRollingBack(parsed.value.rollbackId);
     if (prior.exists && typeof prior.content === 'string') atomicWrite(this.configPath, prior.content);
     else if (fs.existsSync(this.configPath)) fs.unlinkSync(this.configPath);
     const restoredDigest = digestCurrentFile(this.configPath);
@@ -350,9 +367,118 @@ class RecoverySandboxRuntime {
         checkpointId: checkpoint.checkpointId,
         restoredDigest,
       });
+      this.syncJournalRollbackVerified(parsed.value.rollbackId);
       return rollbackOk(checkpoint.checkpointId, restoredDigest, false);
     }
     return unknownOutcome(RECOVERY_SANDBOX_ROLLBACK, 'Rollback code completed, but restored state did not verify.');
+  }
+
+  private mayResumeCheckpoint(operationId: string): boolean {
+    if (this.liveCheckpointPass.has(operationId)) return true;
+    const gate = this.deps.journal?.mutationGate(operationId);
+    return gate?.allowed === true;
+  }
+
+  private syncJournalCheckpoint(operationId: string, checkpointId: string): void {
+    const journal = this.deps.journal;
+    if (!journal || journal.failClosed() || !journal.get(operationId)) return;
+    try {
+      journal.recordCheckpoint(operationId, checkpointId, 'system');
+    } catch {
+      // ActionGate still owns permission; checkpoint store remains the recovery artifact.
+    }
+  }
+
+  private syncJournalMutated(operationId: string, checkpointId: string, idempotent: boolean): void {
+    const journal = this.deps.journal;
+    const record = journal?.get(operationId);
+    if (!journal || !record) return;
+    try {
+      if (idempotent) {
+        journal.reconcile(operationId, { observed: 'INTENDED', evidenceRef: 'sandbox-idempotent' });
+        return;
+      }
+      if (record.executionState === 'CHECKPOINTED') {
+        journal.transition(operationId, 'EXECUTING', 'system', { checkpointId });
+      }
+      const latest = journal.get(operationId);
+      if (latest && (latest.executionState === 'EXECUTING' || latest.executionState === 'CHECKPOINTED' || latest.executionState === 'AUTHORIZED')) {
+        if (latest.executionState !== 'EXECUTING' && latest.executionState === 'AUTHORIZED') {
+          journal.transition(operationId, 'CHECKPOINTING', 'system');
+        }
+        if (journal.get(operationId)?.executionState === 'EXECUTING' || journal.get(operationId)?.executionState === 'CHECKPOINTED') {
+          if (journal.get(operationId)?.executionState === 'CHECKPOINTED') {
+            journal.transition(operationId, 'EXECUTING', 'system');
+          }
+          journal.transition(operationId, 'MUTATED', 'system', { checkpointId });
+        }
+      }
+    } catch {
+      // Containment observes MUTATION_OUTCOME_UNKNOWN from ActionGate when needed.
+    }
+  }
+
+  private syncJournalCancelled(operationId: string): void {
+    const journal = this.deps.journal;
+    const record = journal?.get(operationId);
+    if (!journal || !record) return;
+    try {
+      if (record.executionState !== 'CANCELLED') {
+        journal.transition(operationId, 'CANCELLATION_REQUESTED', 'system', { cancellationState: 'CANCELLED' });
+        journal.transition(operationId, 'CANCELLED', 'system', { cancellationState: 'CANCELLED' });
+      }
+    } catch {
+      // Cancellation acknowledgement from the handler remains the source of truth.
+    }
+  }
+
+  private syncJournalAmbiguous(operationId: string): void {
+    const journal = this.deps.journal;
+    if (!journal?.get(operationId)) return;
+    try {
+      journal.reconcile(operationId, { observed: 'NEITHER', evidenceRef: 'sandbox-mismatch' });
+    } catch {
+      // Fail-closed containment still activates from ActionGate unknown outcomes.
+    }
+  }
+
+  private syncJournalBeginRollback(checkpointId: string, rollbackId: string): void {
+    const journal = this.deps.journal;
+    if (!journal) return;
+    const parent = journal.store.findByCheckpoint(checkpointId).find(item => item.kind === 'MUTATION');
+    if (!parent) return;
+    try {
+      const rollback = journal.beginRollback(parent.operationId, checkpointId, rollbackId, 'system', RECOVERY_SANDBOX_ROLLBACK);
+      if (rollback.executionState === 'WAITING_PERMISSION') {
+        journal.transition(rollback.operationId, 'AUTHORIZED', 'system');
+      }
+    } catch {
+      // Invalid rollback checkpoints fail closed from the handler result.
+    }
+  }
+
+  private syncJournalRollingBack(rollbackId: string): void {
+    const journal = this.deps.journal;
+    const record = journal?.get(rollbackId);
+    if (!journal || !record) return;
+    try {
+      if (record.executionState === 'AUTHORIZED') journal.transition(rollbackId, 'ROLLBACK_PENDING', 'system');
+      if (journal.get(rollbackId)?.executionState === 'ROLLBACK_PENDING') {
+        journal.transition(rollbackId, 'ROLLING_BACK', 'system');
+      }
+    } catch {
+      // Rollback handler verification still records ROLLBACK_VERIFIED independently.
+    }
+  }
+
+  private syncJournalRollbackVerified(rollbackId: string): void {
+    const journal = this.deps.journal;
+    if (!journal?.get(rollbackId)) return;
+    try {
+      journal.recordVerification(rollbackId, 'VERIFIED');
+    } catch {
+      // Checkpoint CONSUMED remains the rollback idempotency authority.
+    }
   }
 
   private loadLedger(): SandboxLedger {
@@ -416,6 +542,27 @@ function parsePriorState(value: unknown): { exists: boolean; content?: string; d
   if (typeof record.exists !== 'boolean' || typeof record.digest !== 'string') return undefined;
   if (record.exists && typeof record.content !== 'string') return undefined;
   return { exists: record.exists, ...(typeof record.content === 'string' ? { content: record.content } : {}), digest: record.digest };
+}
+
+function checkpointRetryOffered(operation: SandboxOperation, priorStateRef?: string): CapabilityResult {
+  return {
+    capabilityId: RECOVERY_SANDBOX_MUTATE,
+    status: 'rejected',
+    structured: {
+      status: 'rejected',
+      reasonCode: 'CHECKPOINT_RETRY_NOT_AUTHORIZED',
+      operationId: operation.operationId,
+      checkpointId: operation.checkpointId,
+      priorStateRef,
+      recoveryDisposition: 'RETRY_OFFERED',
+      affectedTargets: [RECOVERY_SANDBOX_TARGET],
+    },
+    content: 'Checkpoint exists and the target is still in the prior state. Owner retry is required; mutation was not replayed.',
+    sourceUrls: [],
+    untrustedOutput: false,
+    sideEffect: 'write',
+    error: 'Checkpointed mutation was not replayed automatically.',
+  };
 }
 
 function mutationOk(operation: SandboxOperation, priorStateRef?: string): CapabilityResult {

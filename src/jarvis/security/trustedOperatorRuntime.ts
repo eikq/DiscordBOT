@@ -5,6 +5,7 @@ import { EmergencyStopController } from './emergencyStop';
 import { sharedJarvisEventBus, type JarvisEventBus } from './eventBus';
 import { PrivilegeLeaseStore } from './privilegeLease';
 import { RecoveryCheckpointStore } from '../recovery';
+import { ExecutionJournalCoordinator } from '../executionJournal';
 import { VerificationRegistry } from '../safety/verificationRegistry';
 
 export type TrustedOperatorRuntimeOptions = {
@@ -20,6 +21,8 @@ export type TrustedOperatorSnapshot = {
   leases: ReturnType<PrivilegeLeaseStore['listInventory']>;
   containment: ReturnType<FailureContainment['list']>;
   checkpoints: ReturnType<RecoveryCheckpointStore['list']>;
+  journalActive: number;
+  journalFailClosed: boolean;
 };
 
 export class TrustedOperatorRuntime {
@@ -29,6 +32,7 @@ export class TrustedOperatorRuntime {
   public readonly containment: FailureContainment;
   public readonly checkpoints?: RecoveryCheckpointStore;
   public readonly verification: VerificationRegistry;
+  public readonly journal?: ExecutionJournalCoordinator;
 
   public constructor(options: TrustedOperatorRuntimeOptions = {}) {
     this.events = options.events ?? sharedJarvisEventBus();
@@ -39,6 +43,15 @@ export class TrustedOperatorRuntime {
       events: this.events,
       now: options.now,
       persistPath: options.emergencyPersistPath ?? (options.runtimeRoot ? path.join(options.runtimeRoot, 'security', 'emergency-stop.json') : undefined),
+      onEngage: actor => {
+        if (!this.journal || this.journal.failClosed()) return;
+        for (const record of this.journal.discoverActive()) {
+          this.journal.markEmergencyStop(record.operationId, actor);
+        }
+      },
+      onResume: actor => {
+        this.journal?.noteEmergencyResume(actor);
+      },
     });
     this.containment = new FailureContainment(
       this.events,
@@ -48,6 +61,15 @@ export class TrustedOperatorRuntime {
     this.checkpoints = options.runtimeRoot
       ? new RecoveryCheckpointStore(path.join(options.runtimeRoot, 'recovery', 'checkpoints'), options.now)
       : undefined;
+    this.journal = options.runtimeRoot
+      ? new ExecutionJournalCoordinator({
+          dbPath: path.join(options.runtimeRoot, 'execution-journal.db'),
+          now: options.now,
+          checkpoints: this.checkpoints,
+          containment: this.containment,
+          events: this.events,
+        })
+      : undefined;
   }
 
   public snapshot(): TrustedOperatorSnapshot {
@@ -56,6 +78,8 @@ export class TrustedOperatorRuntime {
       leases: this.leases.listInventory(),
       containment: this.containment.list(),
       checkpoints: this.checkpoints?.list() ?? [],
+      journalActive: this.journal && !this.journal.failClosed() ? this.journal.discoverActive().length : 0,
+      journalFailClosed: this.journal?.failClosed() === true,
     };
   }
 }

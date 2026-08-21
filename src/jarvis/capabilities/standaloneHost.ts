@@ -140,6 +140,7 @@ export function createStandaloneCapabilityHost(
       verification: operator.verification,
       events: options.actions?.events ?? operator.events,
       now: options.actions?.now,
+      journal: operator.journal,
     });
   }
   if (options.reminders !== false && options.reminders?.store && !operator.verification.has(REMINDER_CREATE_VERIFIER_ID)) {
@@ -160,6 +161,7 @@ export function createStandaloneCapabilityHost(
     emergency: options.actions?.emergency ?? operator.emergency,
     containment: options.actions?.containment ?? operator.containment,
     verification: operator.verification,
+    journal: operator.journal,
   };
   return createActionGate(registry, gateOptions);
 }

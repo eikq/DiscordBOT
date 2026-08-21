@@ -33,6 +33,7 @@ import type { OperationalRiskLevel, VerificationRecord } from '../../safety/type
 import type { FailureContainment } from '../../safety/failureContainment';
 import type { EmergencyStopController } from '../../security/emergencyStop';
 import type { VerificationRegistry } from '../../safety/verificationRegistry';
+import { toJournalOperationId, type ExecutionJournalCoordinator } from '../../executionJournal';
 
 export type ActionGateOptions = {
   policy?: PermissionPolicy | null;
@@ -47,6 +48,7 @@ export type ActionGateOptions = {
   emergency?: EmergencyStopController;
   containment?: FailureContainment;
   verification?: VerificationRegistry;
+  journal?: ExecutionJournalCoordinator;
 };
 
 export interface ActionHost extends CapabilityHost {
@@ -189,6 +191,8 @@ class ActionGate implements ActionHost {
     }
 
     const proposal = this.createProposal(request, validated.value, descriptor);
+    const journalBlock = this.prepareJournal(proposal, validated.value, request);
+    if (journalBlock) return journalBlock;
     const baseDecision = this.policy.evaluate(proposal, this.options.allowlists);
     const containment = proposal.preflight
       ? this.options.containment?.blocks(proposal.capabilityId, proposal.preflight)
@@ -260,6 +264,7 @@ class ActionGate implements ActionHost {
           proposalId: proposal.proposalId,
           risk: proposal.preflight?.risk,
         }, 'warn');
+        this.noteJournalWaiting(proposal, validated.value, request);
         return this.requireConfirmation(proposal, decision);
       }
       const stored = this.confirmations.peek(request.confirmation.proposalId);
@@ -419,6 +424,8 @@ class ActionGate implements ActionHost {
         proposalId: proposal.proposalId,
         preflightId: proposal.preflight?.id,
       });
+      const journalGate = this.authorizeJournalExecution(proposal, input, request);
+      if (journalGate) return journalGate;
       const result = await this.inner.invoke({
         id: proposal.capabilityId,
         input,
@@ -505,6 +512,7 @@ class ActionGate implements ActionHost {
         state: verification?.state || 'UNVERIFIED',
         failedCheckCount: verification?.failedChecks.length || 0,
       }, verification?.state === 'FAILED_VERIFICATION' ? 'error' : 'info');
+      this.finishJournal(proposal, input, request, decorated, verification);
       if (rollback?.state === 'AVAILABLE' || rollback?.state === 'PARTIAL') {
         this.options.events?.emit('ROLLBACK_AVAILABLE', 'A recorded recovery path is available.', {
           capabilityId: proposal.capabilityId,
@@ -727,9 +735,219 @@ class ActionGate implements ActionHost {
     );
   }
 
+  private prepareJournal(
+    proposal: ActionProposal,
+    input: Record<string, unknown>,
+    request: CapabilityInvokeRequest,
+  ): CapabilityResult | undefined {
+    const journal = this.options.journal;
+    if (!journal || !shouldJournal(proposal.capabilityId, this.inner.lookup(proposal.capabilityId)?.sideEffect)) {
+      return undefined;
+    }
+    if (journal.failClosed()) {
+      return this.terminal(
+        proposal.capabilityId,
+        'denied',
+        'JOURNAL_FAIL_CLOSED',
+        'The execution journal is fail-closed after corrupt or ambiguous recovery evidence.',
+        'BLOCKED',
+        proposal.proposalId,
+      );
+    }
+    try {
+      const record = journal.propose({
+        operationId: journalOperationId(input, request, proposal.proposalId),
+        kind: proposal.capabilityId === 'operator.sandbox.rollbackConfig' ? 'ROLLBACK' : 'MUTATION',
+        capabilityId: proposal.capabilityId,
+        action: journaledAction(proposal.capabilityId, input),
+        scope: proposal.preflight?.affectedTargets ?? [proposal.capabilityId],
+        idempotencyClass: journalIdempotencyClass(proposal.capabilityId),
+        idempotencyKey: journalIdempotencyKey(proposal.capabilityId, input),
+        taskId: request.sessionId,
+        stepId: request.requestId,
+        checkpointId: typeof input.checkpointId === 'string' ? input.checkpointId : undefined,
+        parentOperationId: typeof input.rollbackOf === 'string' ? input.rollbackOf : undefined,
+      });
+      if (record.executionState === 'PROPOSED') {
+        journal.transition(record.operationId, 'PREFLIGHTED', 'system');
+      }
+      return undefined;
+    } catch (error) {
+      const reasonCode = error && typeof error === 'object' && 'reasonCode' in error
+        ? String((error as { reasonCode?: string }).reasonCode)
+        : 'JOURNAL_SECRET_REJECTED';
+      return this.terminal(
+        proposal.capabilityId,
+        'denied',
+        reasonCode,
+        error instanceof Error ? error.message : 'Execution journal rejected this operation.',
+        'BLOCKED',
+        proposal.proposalId,
+      );
+    }
+  }
+
+  private noteJournalWaiting(
+    proposal: ActionProposal,
+    input: Record<string, unknown>,
+    request: CapabilityInvokeRequest,
+  ): void {
+    const journal = this.options.journal;
+    if (!journal || journal.failClosed()) return;
+    const record = journal.get(journalOperationId(input, request, proposal.proposalId));
+    if (!record || record.executionState !== 'PREFLIGHTED') return;
+    try {
+      journal.transition(record.operationId, 'WAITING_PERMISSION', 'system');
+    } catch {
+      // Journal evidence remains at PREFLIGHTED; permission still comes from ActionGate.
+    }
+  }
+
+  private authorizeJournalExecution(
+    proposal: ActionProposal,
+    input: Record<string, unknown>,
+    request: CapabilityInvokeRequest,
+  ): CapabilityResult | undefined {
+    const journal = this.options.journal;
+    if (!journal || !shouldJournal(proposal.capabilityId, this.inner.lookup(proposal.capabilityId)?.sideEffect)) {
+      return undefined;
+    }
+    const operationId = journalOperationId(input, request, proposal.proposalId);
+    const record = journal.get(operationId);
+    if (!record) return undefined;
+    try {
+      if (record.executionState === 'PREFLIGHTED' || record.executionState === 'WAITING_PERMISSION') {
+        journal.transition(operationId, record.executionState === 'PREFLIGHTED' ? 'WAITING_PERMISSION' : 'AUTHORIZED', 'system');
+        if (journal.get(operationId)?.executionState === 'WAITING_PERMISSION') {
+          journal.transition(operationId, 'AUTHORIZED', 'system');
+        }
+      }
+      const latest = journal.get(operationId);
+      if (latest?.executionState === 'CHECKPOINTED' && request.confirmation) {
+        journal.authorizeRetry(operationId, 'owner');
+      }
+      const gate = journal.mutationGate(operationId);
+      if (!gate.allowed && !gate.verifyOnly) {
+        return this.terminal(
+          proposal.capabilityId,
+          'denied',
+          gate.reasonCode || 'JOURNAL_TRANSITION_FORBIDDEN',
+          'The execution journal refused automatic mutation replay.',
+          'BLOCKED',
+          proposal.proposalId,
+        );
+      }
+      return undefined;
+    } catch (error) {
+      const reasonCode = error && typeof error === 'object' && 'reasonCode' in error
+        ? String((error as { reasonCode?: string }).reasonCode)
+        : 'JOURNAL_TRANSITION_FORBIDDEN';
+      return this.terminal(
+        proposal.capabilityId,
+        'denied',
+        reasonCode,
+        error instanceof Error ? error.message : 'Execution journal blocked this mutation.',
+        'BLOCKED',
+        proposal.proposalId,
+      );
+    }
+  }
+
+  private finishJournal(
+    proposal: ActionProposal,
+    input: Record<string, unknown>,
+    request: CapabilityInvokeRequest,
+    result: CapabilityResult,
+    verification?: VerificationRecord,
+  ): void {
+    const journal = this.options.journal;
+    if (!journal || journal.failClosed()) return;
+    const operationId = journalOperationId(input, request, proposal.proposalId);
+    const record = journal.get(operationId);
+    if (!record) return;
+    try {
+      if (result.status === 'cancelled' || result.status === 'timeout') {
+        if (record.executionState !== 'CANCELLED' && record.executionState !== 'CONTAINED') {
+          journal.transition(operationId, 'CANCELLATION_REQUESTED', 'system', {
+            cancellationState: result.status === 'timeout' ? 'CANCELLATION_REQUESTED' : 'CANCELLED',
+            recoveryDisposition: result.status === 'timeout' ? 'OWNER_REVIEW' : 'NONE',
+          });
+          if (result.status === 'cancelled') {
+            journal.transition(operationId, 'CANCELLED', 'system', { cancellationState: 'CANCELLED' });
+          } else {
+            journal.reconcile(operationId, { observed: 'UNKNOWN', evidenceRef: 'timeout' });
+          }
+        }
+        return;
+      }
+      if (result.structured?.reasonCode === 'CHECKPOINT_RETRY_NOT_AUTHORIZED') return;
+      if (result.status === 'ok' && ['AUTHORIZED', 'CHECKPOINTING', 'CHECKPOINTED', 'EXECUTING'].includes(record.executionState)) {
+        if (result.structured?.idempotent === true || journal.mutationGate(operationId).verifyOnly) {
+          if (record.executionState === 'CHECKPOINTED' || record.executionState === 'MUTATED' || record.executionState === 'EXECUTING') {
+            journal.reconcile(operationId, { observed: 'INTENDED', evidenceRef: 'handler-idempotent' });
+          }
+        }
+      }
+      if (verification?.state === 'VERIFIED' || verification?.state === 'PARTIALLY_VERIFIED' || verification?.state === 'FAILED_VERIFICATION') {
+        const latest = journal.get(operationId);
+        if (latest && (latest.executionState === 'MUTATED' || latest.executionState === 'VERIFYING' || latest.executionState === 'ROLLING_BACK' || latest.executionState === 'FAILED_VERIFICATION' || latest.executionState === 'PARTIALLY_VERIFIED')) {
+          journal.recordVerification(operationId, verification.state);
+        }
+      }
+    } catch {
+      // Handler result remains authoritative; journal fail-closed is evaluated on the next mutating request.
+    }
+  }
+
   private now(): number {
     return this.options.now?.() ?? Date.now();
   }
+}
+
+function shouldJournal(capabilityId: string, sideEffect?: string): boolean {
+  if (isReadOnlyGatedCapability(capabilityId) || sideEffect === 'read') return false;
+  return sideEffect === 'write' || !isReadOnlyGatedCapability(capabilityId);
+}
+
+function journaledAction(capabilityId: string, input: Record<string, unknown>): Record<string, unknown> {
+  if (capabilityId === 'operator.sandbox.writeConfig') {
+    return { operationId: input.operationId, value: input.value };
+  }
+  if (capabilityId === 'operator.sandbox.rollbackConfig') {
+    return { checkpointId: input.checkpointId };
+  }
+  if (capabilityId === 'reminders.create') {
+    return { title: input.title, whenText: input.whenText, message: input.message };
+  }
+  return input;
+}
+
+function journalOperationId(
+  input: Record<string, unknown>,
+  request: CapabilityInvokeRequest,
+  proposalId: string,
+): string {
+  if (typeof input.operationId === 'string' && input.operationId.trim()) return toJournalOperationId(input.operationId);
+  if (typeof input.rollbackId === 'string' && input.rollbackId.trim()) return toJournalOperationId(input.rollbackId);
+  return toJournalOperationId(String(request.requestId || proposalId));
+}
+
+function journalIdempotencyClass(capabilityId: string): 'IDEMPOTENT' | 'UNKNOWN' {
+  if (capabilityId === 'operator.sandbox.writeConfig' || capabilityId === 'operator.sandbox.rollbackConfig' || capabilityId === 'reminders.create') {
+    return 'IDEMPOTENT';
+  }
+  return 'UNKNOWN';
+}
+
+function journalIdempotencyKey(capabilityId: string, input: Record<string, unknown>): string | undefined {
+  if (capabilityId === 'operator.sandbox.writeConfig' && typeof input.operationId === 'string') return input.operationId;
+  if (capabilityId === 'operator.sandbox.rollbackConfig' && typeof input.checkpointId === 'string') {
+    return `rollback:${input.checkpointId}`;
+  }
+  if (capabilityId === 'reminders.create') {
+    return `${String(input.title || '')}|${String(input.whenText || '')}|${String(input.message || '')}`;
+  }
+  return undefined;
 }
 
 function forwardAbort(source: AbortSignal | undefined, target: AbortController): () => void {
