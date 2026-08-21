@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import type { HostSecuritySnapshot } from '../../security/types';
 import type { CommandCenterClientSnapshot } from '../../standalone/commandCenterView';
+import type { TrustedOperatorSnapshot } from '../../security/trustedOperatorRuntime';
 import type { GraphSnapshot } from '../graph/graphTypes';
 import {
   formatMb,
@@ -69,7 +70,14 @@ export type PersonalAiRuntimeStatus = {
   ready: boolean;
   coreState: string;
   memory: { attached: boolean; schemaVersion?: number };
-  llm?: { enabled?: boolean; reachable?: boolean; model?: string; loaded?: boolean };
+  llm?: {
+    enabled?: boolean;
+    reachable?: boolean;
+    model?: string;
+    loaded?: boolean;
+    provider?: string;
+    profile?: { id: string; displayName: string; family?: string; runtime: string; certificationState?: string };
+  };
   stt?: { reachable?: boolean; model?: string; reason?: string };
   runtime?: { id?: string; keepAlive?: string | number; contextTokens?: number };
   services?: LabServiceView[];
@@ -117,6 +125,7 @@ type Props = {
   research: LabResearchSnapshot | null;
   workspace: LabWorkspaceSnapshot | null;
   commandCenter: CommandCenterClientSnapshot | null;
+  operator: TrustedOperatorSnapshot | null;
   graph: GraphSnapshot | null;
   coreTitle: string;
   coreSubtitle: string;
@@ -139,6 +148,7 @@ type Props = {
   onDemo: (id: 'research' | 'coding' | 'evolution' | 'monitoring') => void;
   onNight: (action: 'run' | 'resume' | 'pause' | 'cancel') => void;
   onSimulation: (enabled: boolean) => void;
+  onRevokeLease: (leaseId: string) => void;
   onReminder: (capabilityId: string, input: Record<string, unknown>) => void;
   onAckReminder: (action: 'dismiss' | 'complete' | 'snooze', delivery: ReminderSnapshotView['pendingDeliveries'][number], minutes?: number) => void;
   onService: (capabilityId: 'jarvis.startService' | 'jarvis.restartService', serviceId: string) => void;
@@ -167,6 +177,7 @@ function HomePage(props: Props) {
   const task = props.commandCenter?.task;
   const waiting = Boolean(task?.waitingPermission || props.pendingRisk);
   const problems = [
+    props.operator?.emergency.active ? 'Emergency Stop is active' : null,
     props.status?.llm?.reachable === false ? 'Model runtime is unavailable' : null,
     props.conversation.error || null,
     props.security && Object.values(pickProtections(props.security)).some(item => item.state === 'OFF') ? 'A host protection reports OFF' : null,
@@ -431,6 +442,7 @@ function SecurityPage(props: Props) {
   const protections = props.security ? Object.entries(pickProtections(props.security)) : [];
   const control = props.commandCenter?.control;
   const decisions = (props.commandCenter?.operations ?? []).filter(event => /PERMISSION|PRIVILEGE/iu.test(event.type)).slice(-6).reverse();
+  const activeLeases = props.operator?.leases.filter(lease => lease.state === 'ACTIVE') ?? [];
   return (
     <div className="jai-page">
       <PageHeader eyebrow="OWNER CONTROL CENTER" title="Security and authority" description="Maximum capability, minimum necessary privilege, transparent risk, reversible actions." />
@@ -443,11 +455,14 @@ function SecurityPage(props: Props) {
         {props.security ? <TrustedOperatorNote>Jarvis reports weakenedByJarvis={String(props.security.weakenedByJarvis)}. Device encryption was not modified.</TrustedOperatorNote> : null}
       </SectionCard>
       <div className="jai-two-column">
-        <SectionCard title="Privilege leases" description="Scoped, expiring, action-counted authority" tone="amber"><ActivePrivilegeLease /><ExpertDetails summary="Lease internals"><p>The current UI intentionally does not claim lease IDs, scopes, or expiries without a read-only endpoint.</p></ExpertDetails></SectionCard>
+        <SectionCard title="Privilege leases" description="Scoped, expiring, action-counted authority" tone={activeLeases.length ? 'amber' : 'green'}>{activeLeases.length ? activeLeases.map(lease => <ActivePrivilegeLease key={lease.id} lease={lease} busy={props.busy} onRevoke={props.onRevokeLease} />) : <ActivePrivilegeLease />}<ExpertDetails summary="Lease inventory"><p>{props.operator ? `${props.operator.leases.length} recorded lease(s): ${props.operator.leases.map(lease => `${lease.id} ${lease.state}`).join(' · ') || 'none'}` : 'Operator inventory endpoint unavailable.'}</p><p>Approval tokens are not returned by this endpoint.</p></ExpertDetails></SectionCard>
         <SectionCard title="Recent owner decisions" description="Approved, denied, or waiting permission events" tone="neutral">{!decisions.length ? <EmptyState title="No recent decisions" detail="The redacted event window contains no permission event." /> : <ul className="jai-compact-list">{decisions.map(event => <li key={event.id}><span>{event.type.includes('DENIED') ? <Ban size={16} /> : event.type.includes('APPROVED') ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}</span><div><strong>{humanEventType(event.type)}</strong><small>{event.summary} · {new Date(event.at).toLocaleTimeString()}</small></div></li>)}</ul>}</SectionCard>
       </div>
       <SectionCard title="Trust boundaries" description="These are product invariants" tone="neutral"><ul className="jai-principles"><li>Discover ≠ Install ≠ Review ≠ Trust ≠ Execute</li><li>Data ≠ Authority</li><li>LLM output ≠ Execution</li><li>See ≠ Click ≠ Type ≠ Submit</li><li>View ≠ Control ≠ Configure ≠ Admin</li></ul></SectionCard>
-      <PreparedFeature label="PREPARED" title="Emergency Stop runtime" detail="The always-accessible, confirmation-gated UI contract is present. Runtime cancellation, lease revocation, autonomy suspension, and evidence preservation are not falsely claimed as connected." next="Connect only after a typed owner-only endpoint and restart recovery policy are implemented." />
+      <SectionCard title="Emergency Stop" description="Owner-controlled execution interlock" tone={props.operator?.emergency.active ? 'red' : props.operator ? 'green' : 'amber'}>
+        {!props.operator ? <EmptyState title="Operator endpoint unavailable" detail="The interface does not claim an Emergency Stop runtime connection." /> : <div className="jai-verification"><div className="jai-verification__state">{props.operator.emergency.active ? <TriangleAlert size={21} /> : <ShieldCheck size={21} />}<span><strong>{props.operator.emergency.active ? 'ACTIVE' : 'Ready'}</strong><small>{props.operator.emergency.active ? 'New autonomous execution and lease grants are blocked' : 'Owner-only activation and resume endpoint connected'}</small></span></div><dl><div><dt>Engaged</dt><dd>{props.operator.emergency.engagedAt || 'not active'}</dd></div><div><dt>Leases revoked</dt><dd>{props.operator.emergency.revokedLeaseIds.length}</dd></div><div><dt>Cancellations</dt><dd>{props.operator.emergency.cancellations.length ? props.operator.emergency.cancellations.map(item => `${item.workId}: ${item.state}`).join(' · ') : 'none'}</dd></div></dl></div>}
+        <TrustedOperatorNote>The runtime cannot claim arbitrary OS process termination; non-cancellable handlers are reported honestly.</TrustedOperatorNote>
+      </SectionCard>
     </div>
   );
 }
@@ -461,7 +476,7 @@ function SystemPage(props: Props) {
       <PageHeader eyebrow="RUNTIME CENTER" title="System and capabilities" description="Useful health first; raw telemetry and provider metadata on demand." />
       <div className="jai-status-grid jai-status-grid--four"><Metric label="CPU" value={props.system?.cpu ? formatPct(props.system.cpu.usagePct) : 'Unknown'} detail={props.system?.cpu ? `${props.system.cpu.cores} cores` : 'not measured'} /><Metric label="RAM" value={props.system?.ram ? formatPct(props.system.ram.usedPct) : 'Unknown'} detail={props.system?.ram ? `${formatMb(props.system.ram.totalMb - props.system.ram.freeMb)} / ${formatMb(props.system.ram.totalMb)}` : 'not measured'} /><Metric label="GPU" value={props.system?.gpu ? formatPct(props.system.gpu.utilizationPct) : 'Unavailable'} detail={props.system?.gpu?.name || props.system?.gpuUnavailableReason || 'not measured'} /><Metric label="Disk" value={props.system?.disk ? formatPct(props.system.disk.usedPct) : 'Unknown'} detail={props.system?.disk ? `${props.system.disk.freeGb} GB free` : 'not measured'} /></div>
       <div className="jai-two-column">
-        <SectionCard title="Model / inference" description={props.status?.llm?.reachable === true ? 'Configured runtime reachable' : props.status?.llm?.reachable === false ? 'Runtime unavailable' : 'Runtime state unknown'} tone={props.status?.llm?.reachable ? 'cyan' : 'amber'}><div className="jai-model-card"><Cpu size={25} /><div><span>Model</span><strong>{props.status?.llm?.model || 'Not reported'}</strong><small>{props.status?.runtime?.contextTokens ? `${props.status.runtime.contextTokens.toLocaleString()} context tokens` : 'Context unknown'}</small></div></div><dl className="jai-data-list"><div><dt>Loaded</dt><dd>{props.status?.llm?.loaded === undefined ? 'unknown' : String(props.status.llm.loaded)}</dd></div><div><dt>Keep alive</dt><dd>{String(props.status?.runtime?.keepAlive || 'unknown')}</dd></div><div><dt>VRAM</dt><dd>{props.system?.gpu?.vramTotalMb ? `${formatMb(props.system.gpu.vramUsedMb)} / ${formatMb(props.system.gpu.vramTotalMb)}` : 'unavailable'}</dd></div><div><dt>Last turn</dt><dd>{props.conversation.modelMetrics?.tokensPerSec ? `${props.conversation.modelMetrics.tokensPerSec.toFixed(1)} tok/s · ${props.conversation.modelMetrics.outputTokens ?? '—'} output tokens` : 'not recorded'}</dd></div></dl><ExpertDetails summary="Inference details"><dl className="jai-data-list"><div><dt>Prompt tokens</dt><dd>{props.conversation.modelMetrics?.promptTokens ?? 'not recorded'}</dd></div><div><dt>Prompt rate</dt><dd>{props.conversation.modelMetrics?.promptTokensPerSec ? `${props.conversation.modelMetrics.promptTokensPerSec.toFixed(1)} tok/s` : 'not recorded'}</dd></div><div><dt>Load time</dt><dd>{props.conversation.modelMetrics?.loadMs !== undefined ? `${Math.round(props.conversation.modelMetrics.loadMs)} ms` : 'not recorded'}</dd></div><div><dt>Queue / active requests</dt><dd>not exposed by the current status contract</dd></div></dl></ExpertDetails></SectionCard>
+        <SectionCard title="Model / inference" description={props.status?.llm?.reachable === true ? 'Configured runtime reachable' : props.status?.llm?.reachable === false ? 'Runtime unavailable' : 'Runtime state unknown'} tone={props.status?.llm?.reachable ? 'cyan' : 'amber'}><div className="jai-model-card"><Cpu size={25} /><div><span>Model</span><strong>{props.status?.llm?.model || 'Not reported'}</strong><small>{props.status?.runtime?.contextTokens ? `${props.status.runtime.contextTokens.toLocaleString()} context tokens` : 'Context unknown'}</small></div></div><dl className="jai-data-list"><div><dt>Loaded</dt><dd>{props.status?.llm?.loaded === undefined ? 'unknown' : String(props.status.llm.loaded)}</dd></div><div><dt>Provider boundary</dt><dd>{props.status?.llm?.profile?.runtime || props.status?.llm?.provider || 'unknown'}</dd></div><div><dt>Certification</dt><dd>{props.status?.llm?.profile?.certificationState || 'NOT_TESTED'}</dd></div><div><dt>Keep alive</dt><dd>{String(props.status?.runtime?.keepAlive || 'unknown')}</dd></div><div><dt>VRAM</dt><dd>{props.system?.gpu?.vramTotalMb ? `${formatMb(props.system.gpu.vramUsedMb)} / ${formatMb(props.system.gpu.vramTotalMb)}` : 'unavailable'}</dd></div><div><dt>Last turn</dt><dd>{props.conversation.modelMetrics?.tokensPerSec ? `${props.conversation.modelMetrics.tokensPerSec.toFixed(1)} tok/s · ${props.conversation.modelMetrics.outputTokens ?? '—'} output tokens` : 'not recorded'}</dd></div></dl><ExpertDetails summary="Inference details"><dl className="jai-data-list"><div><dt>Family</dt><dd>{props.status?.llm?.profile?.family || 'unknown'}</dd></div><div><dt>Prompt tokens</dt><dd>{props.conversation.modelMetrics?.promptTokens ?? 'not recorded'}</dd></div><div><dt>Prompt rate</dt><dd>{props.conversation.modelMetrics?.promptTokensPerSec ? `${props.conversation.modelMetrics.promptTokensPerSec.toFixed(1)} tok/s` : 'not recorded'}</dd></div><div><dt>Load time</dt><dd>{props.conversation.modelMetrics?.loadMs !== undefined ? `${Math.round(props.conversation.modelMetrics.loadMs)} ms` : 'not recorded'}</dd></div><div><dt>Queue / active requests</dt><dd>not exposed by the current provider contract</dd></div></dl></ExpertDetails></SectionCard>
         <SectionCard title="Services" description="Typed lifecycle actions only" tone="neutral"><ServiceList services={props.status?.services ?? []} busy={props.busy} onService={props.onService} /></SectionCard>
       </div>
       <SectionCard title="Capability Explorer" description="Registered contracts are not proof of live provider health" tone="cyan" action={<label className="jai-inline-search"><Search size={15} /><input value={capabilityQuery} onChange={event => setCapabilityQuery(event.target.value)} placeholder="Search capabilities" /></label>}>

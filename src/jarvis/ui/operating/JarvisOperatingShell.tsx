@@ -110,6 +110,11 @@ type Props = {
   children: ReactNode;
   onNavigate: (page: JarvisPageId) => void;
   onFocusAsk: () => void;
+  emergencyAvailable: boolean;
+  emergencyActive: boolean;
+  emergencyBusy?: boolean;
+  onEmergencyActivate: () => void;
+  onEmergencyResume: () => void;
 };
 
 export default function JarvisOperatingShell({
@@ -120,6 +125,11 @@ export default function JarvisOperatingShell({
   children,
   onNavigate,
   onFocusAsk,
+  emergencyAvailable,
+  emergencyActive,
+  emergencyBusy,
+  onEmergencyActivate,
+  onEmergencyResume,
 }: Props) {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -259,7 +269,15 @@ export default function JarvisOperatingShell({
         </div>
       ) : null}
 
-      <EmergencyStop open={emergencyOpen} available={false} onClose={() => setEmergencyOpen(false)} />
+      <EmergencyStop
+        open={emergencyOpen}
+        available={emergencyAvailable}
+        active={emergencyActive}
+        busy={emergencyBusy}
+        onClose={() => setEmergencyOpen(false)}
+        onActivate={onEmergencyActivate}
+        onResume={onEmergencyResume}
+      />
     </div>
   );
 }

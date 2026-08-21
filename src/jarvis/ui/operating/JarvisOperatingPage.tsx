@@ -10,6 +10,7 @@ import {
 } from '../../presentation/types';
 import type { HostSecuritySnapshot } from '../../security/types';
 import type { CommandCenterClientSnapshot } from '../../standalone/commandCenterView';
+import type { TrustedOperatorSnapshot } from '../../security/trustedOperatorRuntime';
 import { BrowserMicrophoneInput } from '../browserMicrophone';
 import JarvisCoreVisual from '../JarvisCoreVisual';
 import type { GraphSnapshot } from '../graph/graphTypes';
@@ -41,7 +42,7 @@ import type { CoreSceneLayers } from '../three/CoreScene';
 import { webglAvailable } from '../three/webglAvailability';
 import JarvisOperatingShell, { parseJarvisPage, type JarvisPageId, type ShellStatus } from './JarvisOperatingShell';
 import JarvisPages, { type ConversationView, type PersonalAiRuntimeStatus } from './JarvisPages';
-import { OwnerApprovalDialog, type RiskBriefModel } from './TrustedOperator';
+import { OwnerApprovalDialog, riskBriefFromPreflight, type RiskBriefModel } from './TrustedOperator';
 
 const CoreScene = lazy(() => import('../three/CoreScene'));
 
@@ -107,6 +108,7 @@ export default function JarvisOperatingPage() {
   const [research, setResearch] = useState<LabResearchSnapshot | null>(null);
   const [workspace, setWorkspace] = useState<LabWorkspaceSnapshot | null>(null);
   const [commandCenter, setCommandCenter] = useState<CommandCenterClientSnapshot | null>(null);
+  const [operator, setOperator] = useState<TrustedOperatorSnapshot | null>(null);
   const [graph, setGraph] = useState<GraphSnapshot | null>(null);
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<LabPendingConfirmation | null>(null);
@@ -158,6 +160,7 @@ export default function JarvisOperatingPage() {
   const refreshResearch = useCallback(() => readJson<LabResearchSnapshot>('/api/jarvis/research').then(setResearch).catch(() => undefined), []);
   const refreshWorkspace = useCallback(() => readJson<LabWorkspaceSnapshot>('/api/jarvis/workspace').then(setWorkspace).catch(() => undefined), []);
   const refreshCommandCenter = useCallback(() => readJson<CommandCenterClientSnapshot>('/api/jarvis/command-center').then(setCommandCenter).catch(() => undefined), []);
+  const refreshOperator = useCallback(() => readJson<TrustedOperatorSnapshot>('/api/jarvis/operator').then(setOperator).catch(() => undefined), []);
   const refreshGraph = useCallback(() => readJson<GraphSnapshot>('/api/jarvis/memory/graph').then(setGraph).catch(() => undefined), []);
 
   useEffect(() => {
@@ -169,6 +172,7 @@ export default function JarvisOperatingPage() {
     void refreshResearch();
     void refreshWorkspace();
     void refreshCommandCenter();
+    void refreshOperator();
     void refreshGraph();
     try { setQualityMode(parseQualityMode(window.localStorage.getItem(QUALITY_STORAGE_KEY))); } catch { /* storage is optional */ }
   }, []);
@@ -181,6 +185,7 @@ export default function JarvisOperatingPage() {
       void refreshReminders();
       void refreshResearch();
       void refreshWorkspace();
+      void refreshOperator();
     }, 5_000);
     const background = window.setInterval(() => {
       void refreshStatus().catch(() => undefined);
@@ -188,7 +193,7 @@ export default function JarvisOperatingPage() {
       void refreshNight();
     }, 30_000);
     return () => { window.clearInterval(foreground); window.clearInterval(background); };
-  }, [documentHidden, refreshCommandCenter, refreshNight, refreshReminders, refreshResearch, refreshSecurity, refreshStatus, refreshSystem, refreshWorkspace]);
+  }, [documentHidden, refreshCommandCenter, refreshNight, refreshOperator, refreshReminders, refreshResearch, refreshSecurity, refreshStatus, refreshSystem, refreshWorkspace]);
 
   useEffect(() => {
     const syncVisibility = () => setDocumentHidden(document.hidden);
@@ -234,6 +239,20 @@ export default function JarvisOperatingPage() {
       const payload = await reply.json() as CommandCenterClientSnapshot & { error?: string };
       if (!reply.ok) throw new Error(payload.error || `Command Center returned ${reply.status}`);
       setCommandCenter(payload);
+    } catch (err) {
+      setError(safeError(err));
+    } finally {
+      setOpsBusy(false);
+    }
+  };
+
+  const postOperator = async (url: string, body: Record<string, unknown> = {}) => {
+    setOpsBusy(true);
+    try {
+      const reply = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const payload = await reply.json() as { error?: string };
+      if (!reply.ok) throw new Error(payload.error || `Owner control returned ${reply.status}`);
+      await Promise.all([refreshOperator(), refreshCommandCenter()]);
     } catch (err) {
       setError(safeError(err));
     } finally {
@@ -541,22 +560,26 @@ export default function JarvisOperatingPage() {
     </Suspense>
   ) : <JarvisCoreVisual phase={phase} fx={reducedMotion ? 'off' : 'full'} memoryActive={memoryRefs.length > 0} toolActive={tools.length > 0} />;
 
-  const pendingRisk: RiskBriefModel | null = pendingConfirmation ? {
-    action: pendingConfirmation.displayName,
-    why: pendingConfirmation.reason,
-    risk: pendingConfirmation.risk || 'CONFIRM_REQUIRED',
-    possibleImpact: ['The declared target may be opened or changed by the requested capability.'],
-    changes: [pendingConfirmation.summary || 'Only the proposal-bound action declared by the capability.'],
-    protection: ['Single-use proposal token', 'Owner confirmation', `Expires ${pendingConfirmation.expiresAt}`],
-    rollback: 'not_declared',
-    permissionScope: [pendingConfirmation.capabilityId, pendingConfirmation.target],
-    target: pendingConfirmation.target,
-  } : null;
+  const pendingRisk: RiskBriefModel | null = pendingConfirmation?.preflight
+    ? riskBriefFromPreflight(pendingConfirmation.preflight)
+    : commandCenter?.permission.preflight
+      ? riskBriefFromPreflight(commandCenter.permission.preflight)
+      : pendingConfirmation ? {
+          action: pendingConfirmation.displayName,
+          why: pendingConfirmation.reason,
+          risk: pendingConfirmation.risk || 'CONFIRM_REQUIRED',
+          possibleImpact: ['The current capability contract did not expose detailed effects for this older proposal.'],
+          changes: [pendingConfirmation.summary || 'Only the proposal-bound action declared by the capability.'],
+          protection: ['Single-use proposal token', 'Owner confirmation', `Expires ${pendingConfirmation.expiresAt}`],
+          rollback: 'not_declared',
+          permissionScope: [pendingConfirmation.capabilityId, pendingConfirmation.target],
+          target: pendingConfirmation.target,
+        } : null;
 
   const shellStatuses: ShellStatus[] = [
     { label: 'Core', value: status?.ready ? 'Ready' : status ? 'Degraded' : 'Checking', tone: status?.ready ? 'active' : status ? 'warning' : 'neutral' },
     { label: 'Memory', value: status?.memory.attached ? 'Healthy' : status ? 'Unavailable' : 'Checking', tone: status?.memory.attached ? 'healthy' : status ? 'warning' : 'neutral' },
-    { label: 'Security', value: hostSecuritySummary(security), tone: hostSecurityTone(security) },
+    { label: 'Security', value: operator?.emergency.active ? 'Stopped' : hostSecuritySummary(security), tone: operator?.emergency.active ? 'critical' : hostSecurityTone(security) },
     { label: 'Tasks', value: commandCenter?.task?.waitingPermission ? 'Waiting' : commandCenter?.task?.active ? 'Running' : 'Idle', tone: commandCenter?.task?.waitingPermission ? 'warning' : commandCenter?.task?.active ? 'active' : 'neutral' },
   ];
 
@@ -615,7 +638,19 @@ export default function JarvisOperatingPage() {
 
   return (
     <div className="jarvis-lab jai" data-quality={String(effectiveQuality)} data-hidden={documentHidden ? 'true' : 'false'}>
-      <JarvisOperatingShell activePage={page} statuses={shellStatuses} pendingApprovals={pendingRisk || commandCenter?.permission.waiting ? 1 : 0} simulation={Boolean(commandCenter?.simulationMode)} onNavigate={navigate} onFocusAsk={() => askField.current?.focus()}>
+      <JarvisOperatingShell
+        activePage={page}
+        statuses={shellStatuses}
+        pendingApprovals={pendingRisk || commandCenter?.permission.waiting ? 1 : 0}
+        simulation={Boolean(commandCenter?.simulationMode)}
+        onNavigate={navigate}
+        onFocusAsk={() => askField.current?.focus()}
+        emergencyAvailable={Boolean(operator)}
+        emergencyActive={Boolean(operator?.emergency.active)}
+        emergencyBusy={opsBusy}
+        onEmergencyActivate={() => { void postOperator('/api/jarvis/emergency-stop', { reason: 'Owner activated Emergency Stop from the Jarvis interface.' }); }}
+        onEmergencyResume={() => { void postOperator('/api/jarvis/emergency-resume', { reason: 'Owner explicitly resumed operation from the Jarvis interface.' }); }}
+      >
         <JarvisPages
           page={page}
           status={status}
@@ -626,6 +661,7 @@ export default function JarvisOperatingPage() {
           research={research}
           workspace={workspace}
           commandCenter={commandCenter}
+          operator={operator}
           graph={graph}
           coreTitle={phase}
           coreSubtitle={coreSubtitle(phase)}
@@ -648,6 +684,7 @@ export default function JarvisOperatingPage() {
           onDemo={scenario => { void postCommandCenter('/api/jarvis/command-center/demo', { scenario }); }}
           onNight={action => { void postCommandCenter('/api/jarvis/command-center/night', { action }); }}
           onSimulation={enabled => { void postCommandCenter('/api/jarvis/command-center/control', { simulationMode: enabled }); }}
+          onRevokeLease={leaseId => { void postOperator('/api/jarvis/leases/revoke', { leaseId }); }}
           onReminder={(capabilityId, input) => { void requestReminderMutation(capabilityId, input, personaProfileId, voiceProfileId, oneTurn).then(() => refreshReminders()).catch(err => setError(safeError(err))); }}
           onAckReminder={(action, delivery, minutes) => { void ackReminder(action, delivery, minutes).then(setReminders).catch(err => setError(safeError(err))); }}
           onService={(capabilityId, serviceId) => { void requestServiceAction(capabilityId, serviceId, personaProfileId, voiceProfileId, oneTurn, speakEnabled).then(payload => { setResponse(payload); setPendingConfirmation(payload.pendingConfirmation ?? null); playSpeech(payload.speech); void refreshStatus(); }).catch(err => setError(safeError(err))); }}

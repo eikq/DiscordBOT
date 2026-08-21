@@ -1696,6 +1696,7 @@
 .jai-badge { display: inline-flex; align-items: center; width: fit-content; padding: 0.22rem 0.45rem; border: 1px solid rgb(160 190 218 / 0.15); border-radius: 999px; color: var(--jai-soft); font-size: 0.59rem; font-style: normal; font-weight: 700; letter-spacing: 0.055em; text-transform: uppercase; }
 .jai-badge--simulation { border-color: rgb(167 139 250 / 0.28); background: rgb(167 139 250 / 0.1); color: #c8b8fb; }
 .jai-badge--neutral { background: rgb(255 255 255 / 0.025); }
+.jai-badge--real { border-color: rgb(87 224 184 / 0.3); background: rgb(87 224 184 / 0.1); color: var(--jai-success); }
 .jai-dropzone { display: grid; place-items: center; gap: 0.45rem; min-height: 16rem; border: 1px dashed rgb(103 215 244 / 0.24); border-radius: 0.9rem; color: var(--jai-soft); }
 .jai-dropzone svg { color: var(--jai-cyan); }
 .jai-dropzone span { color: var(--jai-muted); font-size: 0.75rem; }
