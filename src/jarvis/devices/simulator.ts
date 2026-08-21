@@ -4,7 +4,7 @@ export class SimulatedDeviceProvider implements DeviceProvider {
   constructor(private readonly devices: DeviceRecord[] = defaultDevices()) {}
 
   public list(): DeviceRecord[] {
-    return this.devices.map(item => ({ ...item, capabilities: [...item.capabilities] }));
+    return this.devices.map(item => ({ ...item, capabilities: [...item.capabilities], distribution: [...item.distribution] }));
   }
 
   public capability(deviceId: string, cls: DeviceCapabilityClass): boolean {
@@ -22,6 +22,7 @@ export function defaultDevices(): DeviceRecord[] {
       status: 'online',
       capabilities: ['VIEW'],
       simulated: true,
+      distribution: ['OWNER_ONLY', 'COMMUNITY_EXCLUDED', 'DEMO_EXCLUDED'],
       detail: 'SIMULATION',
     },
     {
@@ -31,6 +32,7 @@ export function defaultDevices(): DeviceRecord[] {
       status: 'offline',
       capabilities: ['VIEW'],
       simulated: true,
+      distribution: ['OWNER_ONLY', 'COMMUNITY_EXCLUDED', 'DEMO_EXCLUDED'],
       detail: 'SIMULATION',
     },
     {
@@ -40,6 +42,7 @@ export function defaultDevices(): DeviceRecord[] {
       status: 'online',
       capabilities: ['VIEW'],
       simulated: true,
+      distribution: ['OWNER_ONLY', 'COMMUNITY_EXCLUDED', 'DEMO_EXCLUDED'],
       detail: 'SIMULATION · status only',
     },
     {
@@ -49,6 +52,7 @@ export function defaultDevices(): DeviceRecord[] {
       status: 'warning',
       capabilities: ['VIEW'],
       simulated: true,
+      distribution: ['OWNER_ONLY', 'COMMUNITY_EXCLUDED', 'DEMO_EXCLUDED'],
       detail: 'SIMULATION',
     },
   ];

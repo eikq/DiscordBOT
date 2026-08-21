@@ -11,6 +11,7 @@ export type DeviceRecord = {
   status: DeviceStatus;
   capabilities: DeviceCapabilityClass[];
   simulated: boolean;
+  distribution: Array<'OWNER_ONLY' | 'COMMUNITY_EXCLUDED' | 'DEMO_EXCLUDED'>;
   detail?: string;
 };
 
