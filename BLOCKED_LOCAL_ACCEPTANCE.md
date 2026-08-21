@@ -212,3 +212,31 @@ LA-014 → LA-013.
 - Security Academy reference/sandbox design (no external project executed)
 - Emergency Stop runtime/UI are cloud-tested; owner Windows execution,
   restart, browser, and actual provider cancellation remain LA-015.
+
+## LA-017 Execution cancellation and checkpoint recovery
+
+- Purpose: accept the cooperative handler cancellation and real checkpoint /
+  verify / rollback vertical slice on the owner installation without touching
+  owner files or OS security.
+- Preconditions: local loopback dashboard; a disposable runtime directory;
+  `operator.sandbox.writeConfig` and `operator.sandbox.rollbackConfig`
+  registered; no real owner file is selected.
+- Exact verification: request one sandbox value; inspect Risk Brief; Allow Once;
+  confirm `CHECKPOINT_CREATED` precedes mutation; confirm deterministic
+  `VERIFIED` and `AVAILABLE`; restart Jarvis and repeat the same operation id;
+  confirm no second effect and the same checkpoint; request rollback and approve
+  it as a new action; confirm `ROLLBACK_VERIFIED`; request the same checkpoint
+  again and confirm idempotent success. During a separate operation, cancel
+  before commit and activate Emergency Stop while its cooperative handler is
+  waiting; confirm `CANCELLATION_REQUESTED` refines to `CANCELLED`. Run a
+  non-cancellable fixture and confirm it reports `COMPLETED_BEFORE_CANCEL` or
+  `NOT_CANCELLABLE`, never false `CANCELLED`.
+- Expected: only the fixed Jarvis-owned sandbox target changes; checkpoint
+  integrity and scope validate; timeout/unknown mutation activates containment;
+  owner resume/recovery remains required; Activity contains no secret input.
+- Failure evidence: `/api/jarvis/operator`, task snapshot, checkpoint state,
+  redacted event sequence, sandbox target digest, and restart logs. Do not attach
+  checkpoint state containing private owner data.
+- Not claimed by cloud: Windows process cancellation, browser visual behavior,
+  filesystem/antivirus interactions on the owner PC, or any arbitrary external
+  process termination.

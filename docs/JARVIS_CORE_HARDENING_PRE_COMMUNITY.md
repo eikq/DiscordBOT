@@ -5,6 +5,10 @@ Updated: 2026-08-21
 This is the runtime maturity record for `work/jarvis-core-hardening-pre-community`.
 It describes code and cloud-test evidence only. It is not owner-machine acceptance.
 
+Continuation note: `work/jarvis-execution-recovery-hardening` implements the
+previously prepared handler AbortSignal and one real checkpoint/verify/rollback
+slice. See `docs/JARVIS_EXECUTION_RECOVERY_HARDENING.md` for current semantics.
+
 ## Execution boundary
 
 Every registered mutating capability must use ActionGate. A mutating capability

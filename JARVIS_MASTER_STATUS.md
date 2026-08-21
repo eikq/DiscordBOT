@@ -60,6 +60,38 @@ remaining limitations. Community installer, hardware profiler, Hugging Face
 browser/downloader, GGUF picker, and automatic runtime installation are not part
 of this branch.
 
+## Execution reliability and recovery hardening
+
+Branch: `work/jarvis-execution-recovery-hardening` from exact remote source
+`work/jarvis-core-hardening-pre-community` at
+`e7101599ed55f042d703f788884a4a5002466571`.
+
+- WorkAgent cancellation and Emergency Stop now propagate one runtime-owned
+  `AbortSignal` through CapabilityHost to cooperative typed handlers. Owner
+  cancel, Emergency Stop, and timeout remain distinct structured reasons.
+- Cancellation records distinguish request, handler acknowledgement, completion
+  before cancellation, unsupported cancellation, and failed cancellation.
+- A generic integrity-checked checkpoint inventory records actual prior recovery
+  state under the configured Jarvis runtime root. Approval secrets are neither
+  accepted nor stored.
+- `operator.sandbox.writeConfig` is one bounded disposable mutation used to
+  exercise preflight, owner approval, checkpoint, commit, deterministic re-read
+  verification, restart idempotency, and rollback availability.
+- `operator.sandbox.rollbackConfig` is a separate owner-authorized policy action.
+  It validates checkpoint scope, restores only the fixed Jarvis-owned sandbox
+  target, re-reads the restored state, and records `ROLLBACK_VERIFIED` only when
+  the prior digest matches. Duplicate rollback is safe.
+- Mutating timeout/unknown partial effect activates scoped containment. Shared
+  runtime containment persists a minimal redacted inventory and reloads
+  fail-closed.
+- Task Center, Verification Report, Security checkpoint inventory, Activity,
+  and owner approval reuse these real records. Raw checkpoint/cancellation IDs
+  remain in Expert Details.
+
+See `docs/JARVIS_EXECUTION_RECOVERY_HARDENING.md`. Community Edition, Setup
+Wizard, Hugging Face selection/download, hardware profiling, runtime installers,
+and distribution filtering remain explicitly out of scope.
+
 Future providers remain honest contracts: MinerU, Tokei, social/video,
 Content Studio, and local computer use are `PREPARE_CONTRACT`; OpenHarness,
 Awesome LLM Apps and Security Academy sources are `REFERENCE_ONLY`;

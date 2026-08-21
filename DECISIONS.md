@@ -923,4 +923,52 @@ Core needed a clean boundary before later Community Edition model selection.
 
 See `docs/JARVIS_CORE_HARDENING_PRE_COMMUNITY.md`.
 
+---
+
+## ADR-024 — Cooperative cancellation and checkpoint-backed recovery stay below the model
+
+Date: 2026-08-21
+Status: Accepted for Core cloud hardening; owner-machine acceptance pending
+
+### Context
+
+WorkAgent owned an AbortController, but CapabilityHost dropped its signal and
+timeouts abandoned only the caller. Rollback metadata could name a checkpoint,
+but Core had no generic integrity-checked recovery store or complete acceptance
+mutation. Emergency Stop therefore could not refine a running handler beyond a
+request or unsupported state.
+
+### Decision
+
+- Propagate one runtime-owned AbortSignal from WorkAgent through ActionGate and
+  CapabilityRegistry into the optional typed handler invocation context. Do not
+  create a parallel cancellation authority.
+- Distinguish OWNER_CANCEL, EMERGENCY_STOP, and TIMEOUT. A signal alone is not
+  proof of cancellation; only a cooperative handler acknowledgement records
+  `CANCELLED`.
+- Keep non-cancellable handlers supported and honest. Record completion before
+  cancel or failure to cancel, and never claim arbitrary OS process termination.
+- Use a generic Jarvis-owned checkpoint inventory with SHA-256 integrity,
+  bounded scope, expiry/state, and separate prior-state blobs. Reject secret-like
+  checkpoint state and never store reusable approval credentials.
+- Establish one deliberately disposable sandbox mutation as the complete
+  acceptance slice. Deterministic verifiers re-read actual state; no LLM can
+  mint `VERIFIED`.
+- Treat rollback as a fresh typed, policy-checked, owner-authorized mutation.
+  Mark it verified only after independently comparing restored state with the
+  recorded prior digest. Consumed checkpoints make duplicate rollback safe.
+- Persist minimal redacted containment for mutating timeout or unknown partial
+  effect. Corrupt containment persistence fails closed.
+
+### Consequences
+
+- Cancellation, checkpoint, verification, rollback, and containment records can
+  be shown by existing Trusted Operator UI without examples or fake success.
+- Restart between checkpoint, commit, and verification can be reconciled through
+  the persistent operation ledger and actual target digests.
+- The new execution/recovery boundary imports no model family, provider, or
+  tokenizer behavior. Model output remains unable to bypass policy or recovery.
+- Windows/browser/process behavior remains `BLOCKED_LOCAL_ACCEPTANCE`.
+
+See `docs/JARVIS_EXECUTION_RECOVERY_HARDENING.md`.
 
