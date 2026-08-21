@@ -12,7 +12,7 @@ export function PresenceApproval(props: {
   return (
     <aside className="jp-approve" role="dialog" aria-modal="true" aria-label="Owner approval">
       <header>
-        <span>Permission</span>
+        <span>Owner authority required</span>
         <em>{model.risk.replaceAll('_', ' ')}</em>
       </header>
       <dl>

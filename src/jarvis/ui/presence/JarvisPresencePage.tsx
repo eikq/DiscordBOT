@@ -6,17 +6,20 @@ import { JARVIS_PERSONA_ID, JARVIS_VOICE_ID } from '../../presentation/types';
 import type { CommandCenterClientSnapshot } from '../../standalone/commandCenterView';
 import type { TrustedOperatorSnapshot } from '../../security/trustedOperatorRuntime';
 import { BrowserMicrophoneInput } from '../browserMicrophone';
-import JarvisCoreVisual from '../JarvisCoreVisual';
 import type { LabPendingConfirmation } from '../labUiState';
 import type { LabResearchSnapshot, ReminderSnapshotView, SystemHealthView } from '../labViewModels';
-import { PulseBus } from '../three/pulseBus';
-import { parseQualityMode, qualityPreset, QUALITY_STORAGE_KEY, resolveQualityLevel, type QualityMode } from '../three/quality';
-import { sceneMoodFor } from '../three/sceneState';
+import { parseQualityMode, QUALITY_STORAGE_KEY, resolveQualityLevel, type QualityMode } from '../three/quality';
 import { webglAvailable } from '../three/webglAvailability';
 import EmergencyStop, { riskBriefFromPreflight, type RiskBriefModel } from '../operating/TrustedOperator';
 import type { PersonalAiRuntimeStatus } from '../operating/JarvisPages';
 import { PresenceApproval } from './PresenceApproval';
-import { PresenceHud } from './PresenceHud';
+import { PresenceCoreFallback } from './cinematic/PresenceCoreFallback';
+import { PresenceSpatialHud } from './cinematic/PresenceSpatialHud';
+import { composePresenceVisual, latestResearchStage, researchActiveFromRuntime } from './cinematic/presenceVisualModel';
+import { pcmAmplitude } from './cinematic/pcmAmplitude';
+import { isResearchOperationType, type ResearchVisualStage } from './cinematic/researchEvents';
+import { presenceTierFromLabLevel } from './cinematic/presenceQuality';
+import { parsePresenceVisualScene } from './cinematic/visualFixtures';
 import {
   collectPresenceAttention,
   derivePresenceHud,
@@ -28,13 +31,13 @@ import {
   interpretPresenceShellCommand,
   isPresenceAmbientPath,
   presencePhaseLabel,
-  presencePhaseToLab,
   resolvePresenceApproval,
 } from './presenceRuntime';
 import '../jarvis-lab.css';
 import './presence.css';
+import './cinematic/cinematic.css';
 
-const CoreScene = lazy(() => import('../three/CoreScene'));
+const PresenceCore = lazy(() => import('./cinematic/PresenceCoreScene'));
 
 type RuntimeStatus = PersonalAiRuntimeStatus;
 type MicState = 'idle' | 'listening' | 'transcribing' | 'permission-denied' | 'unavailable';
@@ -106,8 +109,13 @@ export default function JarvisPresencePage() {
   const currentSpeechTurn = useRef<string | null>(null);
   const playGeneration = useRef(0);
   const confirming = useRef(false);
-  const pulses = useRef(new PulseBus());
   const webglOk = useMemo(() => webglAvailable(), []);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [amplitude, setAmplitude] = useState(0);
+  const [researchStage, setResearchStage] = useState<ResearchVisualStage | null>(null);
+  const [researchIntent, setResearchIntent] = useState(false);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const visualScene = useMemo(() => parsePresenceVisualScene(window.location.search), []);
 
   const refreshStatus = useCallback(() => readJson<RuntimeStatus>('/api/jarvis/status').then(setStatus), []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
@@ -159,9 +167,21 @@ export default function JarvisPresencePage() {
   useEffect(() => {
     if (documentHidden) return;
     const source = new EventSource('/api/jarvis/events?stream=1');
-    source.onmessage = () => { void refreshCommandCenter(); };
+    source.onmessage = event => {
+      void refreshCommandCenter();
+      try {
+        const payload = JSON.parse(event.data) as { type?: string; visualState?: string; level?: string; payload?: Record<string, unknown>; summary?: string };
+        if (!payload.type) return;
+        const typed = { ...payload, type: payload.type };
+        const stage = latestResearchStage([typed]);
+        if (stage) setResearchStage(stage);
+        if (isResearchOperationType(payload.type) || stage) void refreshResearch();
+      } catch {
+        /* heartbeat or malformed */
+      }
+    };
     return () => source.close();
-  }, [documentHidden, refreshCommandCenter]);
+  }, [documentHidden, refreshCommandCenter, refreshResearch]);
 
   useEffect(() => () => {
     unsubMic.current?.();
@@ -171,8 +191,15 @@ export default function JarvisPresencePage() {
 
   const setAmbientMode = (next: boolean) => {
     setAmbient(next);
-    const url = next ? '/jarvis?mode=ambient' : '/jarvis';
-    window.history.replaceState(null, '', url);
+    const params = new URLSearchParams(window.location.search);
+    if (next) params.set('mode', 'ambient');
+    else {
+      params.delete('mode');
+      if (params.get('visualScene') === 'ambient') params.delete('visualScene');
+    }
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `/jarvis?${query}` : '/jarvis');
+    // Canonical ambient URL remains /jarvis?mode=ambient when no other query is present.
   };
 
   const openControlCenter = () => { window.location.assign('/jarvis-lab'); };
@@ -470,6 +497,7 @@ export default function JarvisPresencePage() {
     }
 
     setLastAsk(payloadText);
+    if (/research|ค้นหา|ค้นเว็บ|qwen/i.test(payloadText)) setResearchIntent(true);
     setBusy(true);
     setError(null);
     setDraft('Working…');
@@ -497,6 +525,7 @@ export default function JarvisPresencePage() {
   const stopMic = async () => {
     unsubMic.current?.();
     unsubMic.current = null;
+    setAmplitude(0);
     await microphone.current?.stop();
   };
 
@@ -547,6 +576,7 @@ export default function JarvisPresencePage() {
       if (!started.ok) throw new Error('Audio pipeline is busy.');
       unsubMic.current?.();
       unsubMic.current = microphone.current.onFrame(frame => {
+        setAmplitude(pcmAmplitude(frame.pcm));
         const result = speechTurns.current.pushFrame(frame);
         if (result.kind === 'utterance') void transcribe(result.turn);
       });
@@ -582,9 +612,8 @@ export default function JarvisPresencePage() {
     waitingOwnerInput: commandCenter?.task?.waitingOwnerInput,
     taskActive: commandCenter?.task?.active,
   });
-  const labPhase = presencePhaseToLab(phase);
-  const mood = sceneMoodFor(labPhase);
   const effectiveQuality = resolveQualityLevel(qualityMode, 'high');
+  const qualityTier = presenceTierFromLabLevel(effectiveQuality);
   const use3d = webglOk && !webglLost && qualityMode !== '2d';
   const attention = collectPresenceAttention({
     emergencyActive: operator?.emergency.active,
@@ -598,14 +627,39 @@ export default function JarvisPresencePage() {
     degraded: status?.ready === false,
   });
   const desktopClass = inferDesktopAuthorityClass(lastAsk);
+  const researchLive = researchActiveFromRuntime({
+    phase,
+    liveStage: researchStage,
+    currentAskResearch: researchIntent || /research|ค้นหา|ค้นเว็บ/i.test(lastAsk),
+  });
   const hudKind = derivePresenceHud({
     phase,
     waitingPermission: commandCenter?.permission.waiting || Boolean(pendingConfirmation),
     waitingOwnerInput: commandCenter?.task?.waitingOwnerInput,
     taskActive: commandCenter?.task?.active,
     verificationComplete: commandCenter?.task?.verification?.state === 'VERIFIED',
-    researchActive: Boolean(research?.last?.sources.length) && /research|ค้นหา|qwen/i.test(lastAsk + (response?.presented.text ?? '')),
-    researchSources: research?.last?.sources.length,
+    researchActive: researchLive,
+    systemAsked: /system status|สถานะระบบ|runtime/i.test(lastAsk),
+    reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0 && /remind|เตือน|attention/i.test(lastAsk),
+    reminderActive: /remind|เตือน/i.test(lastAsk),
+    cctvAsked: /cctv|camera|กล้อง/i.test(lastAsk),
+    mediaAsked: /spotify|music|เพลง|youtube/i.test(lastAsk),
+    desktopAsked: Boolean(desktopClass),
+    attentionCount: attention.length,
+  });
+  const visual = composePresenceVisual({
+    phase,
+    hudKind,
+    search: window.location.search,
+    lastAsk,
+    emergency: operator?.emergency.active,
+    waitingPermission: commandCenter?.permission.waiting || Boolean(pendingConfirmation),
+    waitingOwnerInput: commandCenter?.task?.waitingOwnerInput,
+    taskActive: commandCenter?.task?.active,
+    verificationComplete: commandCenter?.task?.verification?.state === 'VERIFIED',
+    research,
+    researchLive,
+    researchStage,
     systemAsked: /system status|สถานะระบบ|runtime/i.test(lastAsk),
     reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0,
     reminderActive: /remind|เตือน/i.test(lastAsk),
@@ -613,58 +667,60 @@ export default function JarvisPresencePage() {
     mediaAsked: /spotify|music|เพลง|youtube/i.test(lastAsk),
     desktopAsked: Boolean(desktopClass),
     attentionCount: attention.length,
+    stepsDone: commandCenter?.task?.steps.filter(step => step.state === 'done').length,
+    stepsTotal: commandCenter?.task?.steps.length,
+    quality: qualityTier,
+    reducedMotion,
   });
-  const showPermission = Boolean(pendingRisk) && (approvalTarget.kind === 'confirm' || approvalTarget.kind === 'grant');
+  const showPermission = Boolean(pendingRisk) && (approvalTarget.kind === 'confirm' || approvalTarget.kind === 'grant' || visual.phase === 'WAITING_OWNER');
   const approvalLabel = approvalTarget.kind === 'confirm' || approvalTarget.kind === 'grant' ? approvalTarget.label : 'this request';
   const answer = draft || response?.presented.text || response?.workOutcome?.text;
-  const tone = phase === 'EMERGENCY_STOP' || phase === 'CRITICAL' ? 'critical' : phase === 'WARNING' || phase === 'WAITING_OWNER' ? 'warning' : phase === 'IDLE' ? 'ok' : undefined;
+  const tone = visual.phase === 'EMERGENCY_STOP' || visual.phase === 'CRITICAL' ? 'critical' : visual.phase === 'WARNING' || visual.phase === 'WAITING_OWNER' ? 'warning' : visual.phase === 'IDLE' ? 'ok' : undefined;
   const timeLabel = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(clock);
   const dateLabel = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(clock);
   const systemLines = system ? [
-    system.cpu ? `CPU ${Math.round(system.cpu.usagePct)}%` : null,
-    system.ram ? `RAM ${Math.round(system.ram.usedPct)}%` : null,
-    system.gpu?.name ? system.gpu.name : null,
-  ].filter((line): line is string => Boolean(line)) : [];
+    typeof system.cpu?.usagePct === 'number' ? `CPU ${Math.round(system.cpu.usagePct)}%` : null,
+    typeof system.ram?.usedPct === 'number' ? `Memory ${Math.round(system.ram.usedPct)}%` : null,
+    typeof system.gpu?.utilizationPct === 'number' ? `GPU ${Math.round(system.gpu.utilizationPct)}%` : system.gpu?.name || null,
+  ].filter((line): line is string => Boolean(line)) : ['UNKNOWN'];
+  const composerExpanded = composerOpen || Boolean(text) || micState === 'listening' || micState === 'transcribing';
+  const ambientNow = ambient || visualScene === 'ambient' || visual.fixture === 'ambient';
 
   const coreVisual = use3d ? (
-    <Suspense fallback={<JarvisCoreVisual phase={labPhase} fx={reducedMotion ? 'off' : 'full'} memoryActive={false} toolActive={hudKind === 'research'} />}>
-      <CoreScene
-        mood={mood}
-        quality={qualityPreset(effectiveQuality === '2d' ? 'minimal' : effectiveQuality)}
+    <Suspense fallback={<PresenceCoreFallback phase={visual.phase} />}>
+      <PresenceCore
+        phase={visual.phase}
+        quality={qualityTier}
         reducedMotion={reducedMotion}
         hidden={documentHidden}
-        graph={null}
-        layers={{ graph: false, rings: true, filaments: true, tools: hudKind === 'research' || hudKind === 'execution' }}
-        visibleCategories={null}
-        searchMatches={null}
-        selectedId={null}
-        pathIds={null}
-        tools={[]}
-        pulses={pulses.current}
-        cameraAction={null}
-        onSelectNode={() => undefined}
+        amplitude={micState === 'listening' || speechState === 'speaking' ? amplitude : 0}
+        nodes={visual.research?.nodes ?? []}
+        links={visual.research?.links ?? []}
+        emergency={visual.phase === 'EMERGENCY_STOP'}
+        onSelectNode={setSelectedSourceId}
         onFps={() => undefined}
         onContextLost={() => setWebglLost(true)}
       />
     </Suspense>
-  ) : <JarvisCoreVisual phase={labPhase} fx={reducedMotion ? 'off' : 'full'} memoryActive={false} toolActive={false} />;
+  ) : <PresenceCoreFallback phase={visual.phase} />;
 
   return (
-    <div className="jp jai" data-ambient={ambient ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={phase}>
+    <div className="jp jai" data-cinematic="true" data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase}>
+      {visual.fixtureLabel ? <div className="jp-fixture" role="status">{visual.fixtureLabel}</div> : null}
       <div className="jp-orbit" aria-hidden="true" />
       <header className="jp-mark">
         <strong>JARVIS</strong>
-        <span>{ambient ? 'Ambient presence' : 'Presence'}</span>
+        <span>{ambientNow ? 'Ambient presence' : 'Presence'}</span>
       </header>
       <div className="jp-clock">
         <time dateTime={clock.toISOString()}>{timeLabel}</time>
         <small>{dateLabel}</small>
       </div>
       <div className="jp-state" data-tone={tone}>
-        <em>{phase.replaceAll('_', ' ')}</em>
-        <p>{presencePhaseLabel(phase)}</p>
+        <em>{visual.phase.replaceAll('_', ' ')}</em>
+        <p>{presencePhaseLabel(visual.phase)}</p>
       </div>
-      {attention[0] && hudKind !== 'permission' ? (
+      {attention[0] && visual.hud?.kind !== 'permission' && (ambientNow || attention[0].tone !== 'info') ? (
         <div className="jp-attention" data-tone={attention[0].tone}>
           <span>Attention</span>
           <p>{attention[0].title}</p>
@@ -680,56 +736,75 @@ export default function JarvisPresencePage() {
           onAllow={() => { void settleApproval('allow'); }}
         />
       ) : (
-        <PresenceHud
-          kind={hudKind === 'permission' ? 'none' : hudKind}
-          phase={phase}
-          researchSources={research?.last?.sources.map(source => ({ id: source.sourceId, title: source.title || source.domain, url: source.url, status: source.status }))}
+        <PresenceSpatialHud
+          slot={visual.hud}
+          phase={visual.phase}
+          research={visual.research}
+          selectedSourceId={selectedSourceId}
+          onSelectSource={setSelectedSourceId}
           systemLines={systemLines}
           taskObjective={commandCenter?.task?.objective}
           taskStatus={commandCenter?.task?.status}
-          stepsDone={commandCenter?.task?.steps.filter(step => step.state === 'done').length}
-          stepsTotal={commandCenter?.task?.steps.length}
-          verificationState={commandCenter?.task?.verification?.state}
-          verificationSummary={commandCenter?.task?.verification?.summary}
+          progress={visual.progress}
+          verification={{
+            requested: Boolean(commandCenter?.task),
+            executed: commandCenter?.task?.status === 'COMPLETED' || commandCenter?.task?.verification?.state === 'VERIFIED' || visual.phase === 'VERIFYING',
+            verified: commandCenter?.task?.verification?.state === 'VERIFIED',
+            failed: commandCenter?.task?.verification?.state === 'FAILED_VERIFICATION' || commandCenter?.task?.verification?.passed === false,
+            summary: commandCenter?.task?.verification?.summary,
+          }}
           reminderTitle={reminders?.pendingDeliveries[0]?.title || reminders?.reminders[0]?.title}
+          reminderWhen={reminders?.pendingDeliveries[0]?.scheduledLocal}
           waitingQuestion={commandCenter?.task?.waitingInput?.question}
-          simulated={commandCenter?.simulationMode}
+          simulated={Boolean(commandCenter?.simulationMode || visual.fixture)}
           desktopNote={desktopClass ? desktopAuthorityMaturity(desktopClass).note : undefined}
           cctvNote="Camera context is prepared. Live CCTV stays PREPARE_CONTRACT until a reviewed provider is accepted."
         />
       )}
       {error ? <p className="jp-error">{error}</p> : null}
-      {!ambient ? (
+      {!ambientNow ? (
         <div className="jp-dock">
-          <div className="jp-reply" data-empty={answer ? 'false' : 'true'}>
-            {heard ? <div className="jp-heard">{heard}</div> : null}
-            {answer || 'Speak or type. Jarvis will operate the system.'}
-          </div>
-          <form className="jp-composer" onSubmit={submitAsk} aria-busy={busy}>
+          {answer || heard ? (
+            <div className="jp-reply" data-empty={answer ? 'false' : 'true'}>
+              {heard ? <div className="jp-heard">{heard}</div> : null}
+              {answer}
+            </div>
+          ) : null}
+          <form className="jp-composer" data-collapsed={composerExpanded ? 'false' : 'true'} onSubmit={submitAsk} aria-busy={busy}>
             <button type="button" className={`jp-icon${micState === 'listening' ? ' is-on' : ''}`} onClick={() => { void toggleMic(); }} aria-label="Listen" disabled={busy}>
               <Mic size={16} />
             </button>
-            <textarea
-              ref={askField}
-              rows={1}
-              value={text}
-              onChange={event => setText(event.target.value)}
-              onKeyDown={onComposerKey}
-              placeholder="Talk to Jarvis"
-              aria-label="Talk to Jarvis"
-            />
-            <button type="button" className={`jp-icon${speakEnabled ? ' is-on' : ''}`} onClick={() => setSpeakEnabled(value => !value)} aria-label="Speech">
-              <Volume2 size={16} />
-            </button>
-            <button type="submit" className="jp-send" disabled={busy || !text.trim()} aria-label="Send">
-              <Send size={16} />
-            </button>
+            {composerExpanded ? (
+              <textarea
+                ref={askField}
+                rows={1}
+                value={text}
+                onChange={event => setText(event.target.value)}
+                onKeyDown={onComposerKey}
+                placeholder="Talk to Jarvis"
+                aria-label="Talk to Jarvis"
+              />
+            ) : (
+              <button type="button" className="jp-talk" onClick={() => { setComposerOpen(true); window.setTimeout(() => askField.current?.focus(), 0); }}>
+                Talk to Jarvis
+              </button>
+            )}
+            {composerExpanded ? (
+              <>
+                <button type="button" className={`jp-icon${speakEnabled ? ' is-on' : ''}`} onClick={() => setSpeakEnabled(value => !value)} aria-label="Speech">
+                  <Volume2 size={16} />
+                </button>
+                <button type="submit" className="jp-send" disabled={busy || !text.trim()} aria-label="Send">
+                  <Send size={16} />
+                </button>
+              </>
+            ) : null}
           </form>
         </div>
       ) : null}
       <nav className="jp-ghost">
         <button type="button" onClick={openControlCenter}>Control Center</button>
-        <button type="button" onClick={() => setAmbientMode(!ambient)}>{ambient ? 'Leave ambient' : 'Ambient'}</button>
+        <button type="button" onClick={() => setAmbientMode(!ambientNow)}>{ambientNow ? 'Leave ambient' : 'Ambient'}</button>
         <button type="button" onClick={() => setEmergencyOpen(true)}>Emergency Stop</button>
       </nav>
       <EmergencyStop

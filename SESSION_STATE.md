@@ -3,6 +3,25 @@
 Updated: 2026-08-21
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
+## This turn — Cinematic Presence visual system
+
+Branch: `local/jarvis-cinematic-presence-v3-2026-08-21` from exact
+`5315ebb0990d32ec40af2519e4eb16f75ff06eb7`. Did not modify `main`.
+
+Primary URL: `http://127.0.0.1:3000/jarvis`  
+Ambient: `http://127.0.0.1:3000/jarvis?mode=ambient`  
+Control Center: `http://127.0.0.1:3000/jarvis-lab`  
+Fixture example: `http://127.0.0.1:3000/jarvis?visualScene=research`
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **OWNER_VISUAL_VERIFIED** is not claimed.
+
+- Structured Presence Core (nucleus/rings/nodes), not the lab particle field.
+- Contextual HUD composition with permission and Emergency Stop override.
+- Research stages mapped from existing SSE events; leftover sources stay off idle.
+- Fixtures require `visualScene` and stay labelled DEVELOPMENT FIXTURE.
+
+See `docs/JARVIS_CINEMATIC_PRESENCE.md`.
+
 ## This turn — Presence-first interface
 
 Branch: `local/jarvis-presence-interface-2026-08-21` from exact
