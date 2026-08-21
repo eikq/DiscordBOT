@@ -51,7 +51,7 @@ Failure experiences classify capability, stage, blocker, reason, and next possib
 
 ## Assistant and UI
 
-Assistant answers capability summary, CCTV status, computer-control status, unavailable capability, blocker, and verified-improvement questions from bounded Self Knowledge rather than asking the model to imagine an answer. The System Capability Explorer presents human state/reason/requirements/risk first and moves IDs, provider details, maturity, distribution, and evidence into Expert Details. Task Center shows structured blockers and the safest next path.
+Assistant answers capability summary, what is available now / after setup, what needs setup or permission, CCTV status, computer-control status, unavailable capability, blocker, and “why can’t you / what do you need from me” gap questions from bounded Self Knowledge rather than asking the model to imagine an answer. Unregistered tools such as unrestricted PowerShell are explained from policy and registry evidence; they do not unlock a production shell. The System Capability Explorer presents human state/reason/requirements/risk first and moves IDs, provider details, maturity, distribution, and evidence into Expert Details. Task Center shows structured blockers and the safest next path.
 
 ## CCTV owner-only contract
 

@@ -3,6 +3,31 @@
 Updated: 2026-08-21
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
+## This turn — Local acceptance completion
+
+Branch: `local/jarvis-acceptance-completion-2026-08-21` from exact
+`0cd7b0da462ae0f5baf083c05db81ea9f94100c0`. Did not modify `main` or rewrite
+the journal recovery branch.
+
+Labels: **CODE_FIXED** + **UNIT_VERIFIED** + **LIVE_VERIFIED** (HTTP/SSE/goals).
+**OWNER_VERIFIED** is not claimed. Dashboard:
+`http://127.0.0.1:3000/jarvis-lab`.
+
+- Self Knowledge: setup / unavailable / permission / gap / PowerShell questions
+  now answer from Capability Intelligence evidence. Live HTTP confirmed both
+  previously failing queries.
+- Command Center presents `WAITING_PERMISSION` ahead of `WAITING_INPUT`.
+- LA-019 HTTP live turns PASS. Public research executed via `research.current`
+  (morning harness had `research: false`).
+- LA-020 HTTP continuation + Allow Once via `/api/jarvis/command-center/grant`.
+  Windows toast remains **BLOCKED**. Restart/expiry remain unit-only this pass.
+- SSE: connect, increment, unique seq, 15s heartbeat, replay/redaction.
+- WorldIntel: healthy + bounded `intel_status`. Unit tests keep `worldIntel: false`.
+- Verification: `npx tsc --noEmit` PASS; `npm run test:cloud` **571 / 571**;
+  `npm run build` PASS.
+
+See `docs/JARVIS_LOCAL_ACCEPTANCE_2026-08-21.md`.
+
 ## This turn — Persistent execution journal recovery
 
 Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for the reconstructed journal.

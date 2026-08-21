@@ -293,6 +293,9 @@ LA-014 → LA-013.
 - Not claimed by cloud: Windows, owner filesystem behavior, actual notification
   delivery, Ollama, browser visuals, CCTV/RTSP/ONVIF, phone/screen/voice, GPU, or
   Whonix.
+- 2026-08-21 HTTP progress (not a visual upgrade): loopback Goal Catalog turns
+  in `docs/JARVIS_LOCAL_ACCEPTANCE_2026-08-21.md`. LA-002 owner visual and this
+  procedure’s Expert Details / browser steps remain required.
 
 ## LA-020 Pending-goal continuation owner acceptance
 
@@ -317,6 +320,10 @@ LA-014 → LA-013.
   missing field, expiry, Activity event sequence, ActionGate proposal, reminder
   record count, and VerificationReport. Never attach private reminder text,
   credentials, tokens, or CCTV footage.
+- 2026-08-21 HTTP progress (not a visual or toast upgrade): pending-goal
+  continuation and command-center Allow Once were exercised on loopback; Windows
+  notification delivery and LA-002 visual QA remain required. See
+  `docs/JARVIS_LOCAL_ACCEPTANCE_2026-08-21.md`.
 - Not claimed by cloud: Windows notification display, browser visual behavior,
   owner-runtime restart behavior, Ollama/GPU, actual CCTV/RTSP/ONVIF, owner LAN,
   phone/screen/voice, or Whonix.
