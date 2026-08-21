@@ -150,6 +150,34 @@ See `docs/JARVIS_GOAL_CATALOG_INPUT_ADAPTERS.md`. Full document parsing, real
 CCTV/devices, owner filesystem/provider behavior, and browser/hardware acceptance
 remain partial, prepared, or `BLOCKED_LOCAL_ACCEPTANCE` as documented.
 
+## Secure pending-goal continuation
+
+Branch: `work/jarvis-pending-goal-continuation` from exact remote source
+`work/jarvis-goal-catalog-input-adapters` at
+`a7a11f5e8cafe17f26d1cece7e6f6bb4bad99b03`.
+
+- Missing declared inputs create one expiring, session-bound PendingGoal and one
+  honest `WAITING_INPUT` WorkAgent task.
+- Persisted context contains redacted intent, GoalCatalog identity/version,
+  validated fields, missing fields, scope, route/adapter evidence, expiry, and
+  bounded idempotency receipts. It contains no execution authority or secrets.
+- Continuation fills only the declared missing field, detects cancellation,
+  revision and goal drift, and requires explicit selection for ambiguous or
+  cross-session context.
+- Resume revalidates the goal, trusted adapter, capability schema, availability,
+  gap, ActionGate, permission/lease, Emergency Stop, containment, and
+  verification. Concurrent duplicate resume is serialized.
+- Reminder creation is the cloud-safe verified mutation: no record before owner
+  approval, one typed record after approval, independent store re-read yields
+  VERIFIED, and duplicate continuation does not create another record.
+- CCTV brand/model continuation re-runs the provider gap and remains owner-only
+  `PREPARE_CONTRACT`; no credentials, LAN scanning, or real connection are
+  claimed.
+
+See `docs/JARVIS_PENDING_GOAL_CONTINUATION.md`. Owner notification delivery,
+Windows/process restart acceptance, browser visuals, live CCTV/providers, local
+models, and hardware remain `BLOCKED_LOCAL_ACCEPTANCE`.
+
 Future providers remain honest contracts: MinerU, Tokei, social/video,
 Content Studio, and local computer use are `PREPARE_CONTRACT`; OpenHarness,
 Awesome LLM Apps and Security Academy sources are `REFERENCE_ONLY`;

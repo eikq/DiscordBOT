@@ -1069,3 +1069,50 @@ invent a route or capability input would confuse representation with authority.
   hardware remain `BLOCKED_LOCAL_ACCEPTANCE`.
 
 See `docs/JARVIS_GOAL_CATALOG_INPUT_ADAPTERS.md`.
+
+---
+
+## ADR-027 — Pending goal context is expiring state, never reusable authority
+
+Date: 2026-08-21
+Status: Accepted for Core cloud implementation; owner acceptance pending
+
+### Context
+
+GoalCatalog could identify the smallest missing owner field, but a later reply
+was rematched as a new request. Reusing generic conversation memory would risk
+goal drift, stale capability assumptions, duplicate mutations, and accidental
+authority persistence.
+
+### Decision
+
+- Add one PendingGoal continuation protocol over GoalCatalog, WorkAgent,
+  CapabilityGapResolver, CapabilityHost, and Trusted Operator. Add no planner,
+  permission system, or canonical conversation memory.
+- Persist only redacted goal context with opaque identity, bounded expiry and
+  idempotency receipts. Never persist permission/lease/confirmation tokens,
+  credentials, hidden reasoning, or model/provider authority.
+- Bind continuation text to only the declared missing field. Detect explicit
+  cancellation, revision, new-goal drift, multi-pending ambiguity, expiry, and
+  cross-session use before adapting the value.
+- Revalidate current route/schema/availability/policy at resume. Context and a
+  continuation ID cannot approve or execute an action.
+- Preserve one `WAITING_INPUT` WorkAgent task, serialize concurrent resume, and
+  leave interrupted running-mutation recovery to existing checkpoint,
+  containment, verification, and no-blind-retry rules.
+- Treat waiting, clarification, cancellation, and expiry as neutral competence
+  events rather than capability failure.
+
+### Consequences
+
+- Reminder missing-time continuation now reaches one ActionGate-approved,
+  independently verified store mutation without duplicate creation.
+- Workspace/public scope remains owner-selected; CCTV identity continuation
+  stays owner-only `PREPARE_CONTRACT` and does not request secrets early.
+- Unknown goals, unregistered missing-field adapters, expired/cancelled context,
+  and arbitrary multi-field revisions still require owner restatement or a new
+  declared request.
+- Owner Windows notification, process restart, browser, local-model, hardware,
+  and CCTV acceptance remain `BLOCKED_LOCAL_ACCEPTANCE`.
+
+See `docs/JARVIS_PENDING_GOAL_CONTINUATION.md`.

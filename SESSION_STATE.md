@@ -3,6 +3,40 @@
 Updated: 2026-08-21
 Agent/model: ChatGPT Work / Codex (cloud)
 
+## This turn — Secure pending-goal continuation
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for cloud-safe declared-goal
+continuation. **OWNER_VERIFIED** and live owner-machine/provider verification are
+not claimed.
+
+Branch: `work/jarvis-pending-goal-continuation` from exact remote source
+`work/jarvis-goal-catalog-input-adapters` at
+`a7a11f5e8cafe17f26d1cece7e6f6bb4bad99b03`.
+
+- Added an expiring, scope/session-bound PendingGoal record and optional SQLite
+  store. Persisted context is redacted and contains no permission, lease,
+  confirmation, credential, or model authority.
+- Added typed one-field continuation, cancellation, explicit revision, goal
+  drift detection, multi-pending disambiguation, cross-session explicit
+  selection, bounded receipt idempotency, and restart-safe context reload.
+- WorkAgent now represents `WAITING_INPUT` and `EXPIRED`, preserves the same
+  task, and rebuilds a current bounded plan without replaying mutations.
+- Resume re-runs GoalCatalog/adapters, capability availability, Gap Resolver,
+  Emergency Stop, ActionGate, permission, lease, containment, and verification
+  boundaries. An in-process claim serializes concurrent duplicate resumes.
+- Reminder creation now has a deterministic registered verifier that re-reads
+  the isolated store. The tested continuation waits for Allow Once, creates one
+  reminder, verifies its typed state, and does not duplicate on retry.
+- Home and Task Center show the human waiting question; IDs, missing fields,
+  adapter/route evidence, and expiry stay in Expert Details.
+
+Verification: focused goal/continuation suite **39/39**;
+`npx tsc --noEmit` PASS; `npm run test:cloud` **545/545**; production client and
+server build PASS with the pre-existing CoreScene chunk and CJS `import.meta`
+warnings. Windows, owner files, actual reminder delivery, browser visuals,
+CCTV/RTSP/ONVIF, Ollama/GPU, phone/screen/voice, and Whonix remain
+`BLOCKED_LOCAL_ACCEPTANCE`.
+
 ## This turn — Authoritative Goal Catalog and typed input adapters
 
 Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for existing cloud-safe workflows.

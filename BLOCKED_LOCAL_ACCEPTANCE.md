@@ -291,3 +291,30 @@ LA-014 → LA-013.
 - Not claimed by cloud: Windows, owner filesystem behavior, actual notification
   delivery, Ollama, browser visuals, CCTV/RTSP/ONVIF, phone/screen/voice, GPU, or
   Whonix.
+
+## LA-020 Pending-goal continuation owner acceptance
+
+- Purpose: accept multi-turn missing-input continuation on the owner runtime
+  without scope drift, stale authority, or duplicate mutation.
+- Preconditions: local loopback dashboard; configured reminder service; an
+  isolated disposable reminder database; no real CCTV credentials or LAN scan.
+- Exact verification: ask `Remind me to test Jarvis`; confirm Task Center shows
+  `WAITING_INPUT` and asks only for time; answer `Tomorrow at 15:00`; confirm the
+  same task/goal is used, ActionGate still waits for Allow Once, and no reminder
+  exists before approval; approve once and confirm deterministic VERIFIED plus
+  one reminder; replay the same continuation/idempotency key and confirm no
+  duplicate. Repeat across a Jarvis restart while still waiting; test expiry,
+  `Never mind`, explicit correction, a different-goal reply, two pending goals,
+  and workspace-vs-web clarification. Activate Emergency Stop before resume and
+  confirm context remains non-authoritative and no execution starts.
+- Expected: expiry updates the task to EXPIRED; a new session does not consume
+  old context without explicit selection; no permission/lease/token/credential
+  is present in pending SQLite or Activity; current provider availability is
+  rechecked; actual Windows notification delivery is separately observed.
+- Failure evidence: redacted pending-goal/task snapshots, Goal ID/version,
+  missing field, expiry, Activity event sequence, ActionGate proposal, reminder
+  record count, and VerificationReport. Never attach private reminder text,
+  credentials, tokens, or CCTV footage.
+- Not claimed by cloud: Windows notification display, browser visual behavior,
+  owner-runtime restart behavior, Ollama/GPU, actual CCTV/RTSP/ONVIF, owner LAN,
+  phone/screen/voice, or Whonix.
