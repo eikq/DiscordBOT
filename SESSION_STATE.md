@@ -3,7 +3,26 @@
 Updated: 2026-08-21
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Cinematic Presence visual system
+## This turn — Cinematic Presence v4
+
+Branch: `local/jarvis-cinematic-presence-v4-2026-08-21` from exact
+`8c938ae40fe3beeb87e6ba4d0bcba9bea9323f59`. Did not modify `main`.
+
+Primary URL: `http://127.0.0.1:3000/jarvis`  
+Ambient: `http://127.0.0.1:3000/jarvis?mode=ambient`  
+Control Center: `http://127.0.0.1:3000/jarvis-lab`  
+Replay: `http://127.0.0.1:3000/jarvis?visualReplay=1`  
+Fixture example: `http://127.0.0.1:3000/jarvis?visualScene=research`
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **OWNER_VISUAL_VERIFIED** is not claimed.
+
+- Full-viewport WebGL Core with energy shaders, 3-axis gyros, structured particles, and UnrealBloom.
+- Research constellation, activity telemetry, and DEVELOPMENT REPLAY stay query-gated.
+- Pointer hover/select is presentation only and cannot grant authority.
+
+See `docs/JARVIS_CINEMATIC_PRESENCE.md`.
+
+## Previous — Cinematic Presence visual system
 
 Branch: `local/jarvis-cinematic-presence-v3-2026-08-21` from exact
 `5315ebb0990d32ec40af2519e4eb16f75ff06eb7`. Did not modify `main`.
