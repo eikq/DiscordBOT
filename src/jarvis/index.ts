@@ -255,6 +255,8 @@ export {
 } from './evolution';
 export * from './models';
 export * from './safety';
+export * from './recovery';
+export * from './executionJournal';
 export * from './intelligence';
 export * from './goals';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForGoalResolution, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';

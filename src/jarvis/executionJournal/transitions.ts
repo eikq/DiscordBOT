@@ -1,0 +1,48 @@
+import { journalError } from './fingerprints';
+import type { ExecutionJournalState, JournalActor } from './types';
+
+const ALLOWED: Record<ExecutionJournalState, readonly ExecutionJournalState[]> = {
+  PROPOSED: ['PREFLIGHTED', 'FAILED', 'CANCELLED', 'CONTAINED'],
+  PREFLIGHTED: ['WAITING_PERMISSION', 'AUTHORIZED', 'FAILED', 'CANCELLED', 'CONTAINED'],
+  WAITING_PERMISSION: ['AUTHORIZED', 'CANCELLED', 'FAILED', 'CONTAINED', 'CANCELLATION_REQUESTED'],
+  AUTHORIZED: ['CHECKPOINTING', 'EXECUTING', 'ROLLBACK_PENDING', 'CANCELLED', 'FAILED', 'CONTAINED', 'CANCELLATION_REQUESTED'],
+  CHECKPOINTING: ['CHECKPOINTED', 'FAILED', 'CANCELLED', 'AMBIGUOUS', 'CONTAINED', 'CANCELLATION_REQUESTED'],
+  CHECKPOINTED: ['EXECUTING', 'MUTATED', 'CANCELLED', 'FAILED', 'AMBIGUOUS', 'CONTAINED', 'CANCELLATION_REQUESTED'],
+  EXECUTING: ['MUTATED', 'CANCELLATION_REQUESTED', 'CANCELLED', 'FAILED', 'AMBIGUOUS', 'CONTAINED'],
+  MUTATED: ['VERIFYING', 'AMBIGUOUS', 'CONTAINED', 'CANCELLATION_REQUESTED', 'FAILED_VERIFICATION'],
+  VERIFYING: ['VERIFIED', 'PARTIALLY_VERIFIED', 'FAILED_VERIFICATION', 'AMBIGUOUS', 'CONTAINED', 'CANCELLATION_REQUESTED'],
+  VERIFIED: ['COMPLETED', 'ROLLBACK_PENDING', 'CONTAINED'],
+  PARTIALLY_VERIFIED: ['VERIFYING', 'FAILED_VERIFICATION', 'CONTAINED', 'ROLLBACK_PENDING'],
+  FAILED_VERIFICATION: ['VERIFYING', 'CONTAINED', 'ROLLBACK_PENDING', 'AMBIGUOUS'],
+  CANCELLATION_REQUESTED: ['CANCELLED', 'FAILED', 'AMBIGUOUS', 'CONTAINED', 'MUTATED'],
+  CANCELLED: [],
+  FAILED: ['CONTAINED'],
+  AMBIGUOUS: ['CONTAINED'],
+  CONTAINED: [],
+  ROLLBACK_PENDING: ['ROLLING_BACK', 'CANCELLED', 'FAILED', 'CONTAINED'],
+  ROLLING_BACK: ['ROLLED_BACK', 'ROLLBACK_FAILED', 'AMBIGUOUS', 'CONTAINED', 'CANCELLATION_REQUESTED'],
+  ROLLED_BACK: ['COMPLETED'],
+  ROLLBACK_FAILED: ['CONTAINED', 'ROLLBACK_PENDING'],
+  COMPLETED: [],
+};
+
+export function assertJournalTransition(
+  from: ExecutionJournalState,
+  to: ExecutionJournalState,
+  actor: JournalActor,
+): void {
+  if (actor === 'model' || actor === 'jarvis') {
+    throw journalError('MODEL_CANNOT_SET_JOURNAL_STATE', 'Model identity cannot set execution journal state.');
+  }
+  if (from === to) return;
+  if (!ALLOWED[from]?.includes(to)) {
+    throw journalError(
+      'JOURNAL_TRANSITION_FORBIDDEN',
+      `Impossible journal transition ${from} → ${to} failed closed.`,
+    );
+  }
+}
+
+export function isJournalTerminal(state: ExecutionJournalState): boolean {
+  return ALLOWED[state]?.length === 0;
+}

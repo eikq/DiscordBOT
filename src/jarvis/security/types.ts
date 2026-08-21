@@ -163,7 +163,10 @@ export type JarvisOperationEventType =
   | 'GOAL_REVISED'
   | 'GOAL_EXPIRED'
   | 'GOAL_CANCELLED'
-  | 'GOAL_RESUMED';
+  | 'GOAL_RESUMED'
+  | 'JOURNAL_PROPOSED'
+  | 'JOURNAL_STATE'
+  | 'JOURNAL_RECONCILED';
 
 export type JarvisOperationEvent = {
   id: string;
