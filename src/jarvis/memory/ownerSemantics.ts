@@ -38,7 +38,7 @@ export function displayAliasKey(phrase: string): string {
 export function listOwnerAliases(store: JarvisMemoryStore | undefined, kind?: OwnerAliasRecord['kind']): OwnerAliasRecord[] {
   if (!store) return [];
   const prefix = kind ? `${OWNER_ALIAS_PREFIX}${kind}.` : OWNER_ALIAS_PREFIX;
-  return store.listFacts({ limit: 24 })
+  return store.listFacts({ limit: 80 })
     .filter(item => item.status === 'active' && item.factKey.startsWith(prefix))
     .map(item => ({
       factKey: item.factKey,
@@ -98,7 +98,14 @@ export function rememberOwnerPreference(
 export function resolveDisplayAlias(aliases: OwnerAliasRecord[], phrase: string | undefined): string | undefined {
   if (!phrase) return undefined;
   const slug = slugAlias(phrase);
-  return aliases.find(item => item.kind === 'display' && (slugAlias(item.phrase) === slug || phrase.toLocaleLowerCase().includes(item.phrase.toLocaleLowerCase())))?.target;
+  const lowered = phrase.toLocaleLowerCase();
+  return aliases.find(item => {
+    if (item.kind !== 'display') return false;
+    const itemSlug = slugAlias(item.phrase);
+    return itemSlug === slug
+      || lowered.includes(item.phrase.toLocaleLowerCase())
+      || slug.includes(itemSlug);
+  })?.target;
 }
 
 export function formatAliasAnswer(aliases: OwnerAliasRecord[]): string {
@@ -108,8 +115,13 @@ export function formatAliasAnswer(aliases: OwnerAliasRecord[]): string {
 }
 
 export function normalizeAliasTarget(target: string): string {
-  if (/built-?in|internal|notebook|laptop|จอโน้ต|จอเครื่อง/iu.test(target)) return 'display.internal';
-  return target.trim();
+  const trimmed = target.trim();
+  if (trimmed.startsWith('display.fp:') || trimmed.startsWith('{')) return trimmed;
+  if (/^\\\\\.\\DISPLAY/iu.test(trimmed) || /^display-/iu.test(trimmed)) return trimmed;
+  if (/built-?in|internal|notebook|laptop|จอโน้ต|จอเครื่อง/iu.test(trimmed) && !/\d/.test(trimmed)) {
+    return 'display.internal';
+  }
+  return trimmed;
 }
 
 function gateWrite(store: JarvisMemoryStore | undefined, actor: string, payload: string): OwnerSemanticWrite | undefined {

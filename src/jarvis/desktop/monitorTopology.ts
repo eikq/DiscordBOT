@@ -2,6 +2,8 @@
  * Honest monitor topology. Never invent a display that was not observed.
  */
 
+import { matchDisplayFingerprint, parseDisplayFingerprint } from './displayIdentity';
+
 export type DisplayRole = 'primary' | 'secondary' | 'left' | 'right' | 'upper' | 'lower' | 'current' | 'internal' | 'other';
 
 export type DisplayInfo = {
@@ -13,12 +15,21 @@ export type DisplayInfo = {
   y: number;
   width: number;
   height: number;
+  deviceName?: string;
+  devicePath?: string;
+  adapterId?: string;
+  targetId?: string;
+  manufacturer?: string;
+  model?: string;
+  serial?: string;
+  connectionType?: string;
 };
 
 export type DisplaySelector = {
   index?: number;
   role?: DisplayRole;
   name?: string;
+  fingerprint?: string;
   raw: string;
 };
 
@@ -29,10 +40,74 @@ export type DisplayResolveFail = {
     | 'DISPLAY_TOPOLOGY_UNKNOWN'
     | 'DISPLAY_NOT_FOUND'
     | 'DISPLAY_AMBIGUOUS'
-    | 'DISPLAY_SELECTOR_MISSING';
+    | 'DISPLAY_SELECTOR_MISSING'
+    | 'KNOWN_ALIAS_TARGET_OFFLINE';
   message: string;
   candidates?: DisplayInfo[];
 };
+
+const DISPLAY_ROLES = new Set<DisplayRole>([
+  'primary', 'secondary', 'left', 'right', 'upper', 'lower', 'current', 'internal', 'other',
+]);
+
+export function hasConcreteDisplayIdentity(selector?: DisplaySelector | null): boolean {
+  if (!selector) return false;
+  if (typeof selector.fingerprint === 'string' && isFingerprintToken(selector.fingerprint)) return true;
+  if (typeof selector.name === 'string' && (isFingerprintToken(selector.name) || isDeviceName(selector.name))) return true;
+  return typeof selector.index === 'number' && selector.index >= 1;
+}
+
+export function preferConcreteDisplay(
+  preferred?: DisplaySelector | null,
+  fallback?: DisplaySelector | null,
+): DisplaySelector | undefined {
+  const first = isSelector(preferred) ? preferred : undefined;
+  const second = isSelector(fallback) ? fallback : undefined;
+  const winner = hasConcreteDisplayIdentity(first) ? first : hasConcreteDisplayIdentity(second) ? second : first || second;
+  if (!winner) return undefined;
+  if (hasConcreteDisplayIdentity(winner) && winner.role === 'internal') {
+    const { role: _role, ...rest } = winner;
+    return rest;
+  }
+  return { ...winner };
+}
+
+export function sanitizeDisplaySelector(value: unknown): DisplaySelector | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const selector: DisplaySelector = {
+    raw: typeof raw.raw === 'string' ? raw.raw.slice(0, 240) : '',
+  };
+  if (typeof raw.index === 'number' && Number.isInteger(raw.index) && raw.index >= 1 && raw.index <= 16) {
+    selector.index = raw.index;
+  }
+  if (typeof raw.role === 'string' && DISPLAY_ROLES.has(raw.role as DisplayRole)) {
+    selector.role = raw.role as DisplayRole;
+  }
+  if (typeof raw.name === 'string' && raw.name.trim() && raw.name.length <= 400) {
+    selector.name = raw.name;
+  }
+  if (typeof raw.fingerprint === 'string' && raw.fingerprint.length <= 400 && isFingerprintToken(raw.fingerprint)) {
+    selector.fingerprint = raw.fingerprint;
+  }
+  if (!selector.raw && selector.index === undefined && !selector.role && !selector.name && !selector.fingerprint) {
+    return undefined;
+  }
+  if (selector.fingerprint && selector.role === 'internal') delete selector.role;
+  return selector;
+}
+
+function isSelector(value: unknown): value is DisplaySelector {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFingerprintToken(value: string): boolean {
+  return value.startsWith('display.fp:') || value.startsWith('{');
+}
+
+function isDeviceName(value: string): boolean {
+  return /^\\\\\.\\DISPLAY/iu.test(value) || /^display-/iu.test(value);
+}
 
 export function parseDisplaySelector(text: string): DisplaySelector | null {
   const raw = text.trim();
@@ -52,7 +127,7 @@ export function parseDisplaySelector(text: string): DisplaySelector | null {
   if (/\bright\b|จอขวา/iu.test(raw)) return { role: 'right', raw };
   if (/upper|top (?:monitor|display|screen)|จอบน/iu.test(raw)) return { role: 'upper', raw };
   if (/lower|bottom (?:monitor|display|screen)|จอล่าง/iu.test(raw)) return { role: 'lower', raw };
-  if (/this window|current (?:monitor|display)|หน้าต่างนี้/iu.test(raw)) return { role: 'current', raw };
+  if (/this window|current (?:monitor|display)|หน้าต่างนี้|จอนี้/iu.test(raw)) return { role: 'current', raw };
   return null;
 }
 
@@ -65,6 +140,8 @@ export function resolveDisplaySelector(
   if (displays.length === 0) {
     return { ok: false, reasonCode: 'DISPLAY_TOPOLOGY_UNKNOWN', message: 'I cannot verify the monitor layout right now.' };
   }
+  const identity = resolveFingerprintSelector(displays, selector);
+  if (identity) return identity;
   if (selector.index !== undefined) {
     const hit = displays[selector.index - 1];
     if (!hit) {
@@ -142,6 +219,21 @@ function resolveAxis(
     return ambiguous(displays, `I see ${displays.length} displays. Which one do you mean by the ${label} monitor?`);
   }
   return { ok: true, display: first, confidence: 'HIGH' };
+}
+
+function resolveFingerprintSelector(
+  displays: DisplayInfo[],
+  selector: DisplaySelector,
+): DisplayResolveOk | DisplayResolveFail | undefined {
+  const raw = selector.fingerprint || selector.name || '';
+  if (!raw.startsWith('display.fp:') && !raw.startsWith('{')) return undefined;
+  const fingerprint = parseDisplayFingerprint(raw);
+  if (!fingerprint) {
+    return { ok: false, reasonCode: 'KNOWN_ALIAS_TARGET_OFFLINE', message: 'That stored monitor identity is not valid.' };
+  }
+  const matched = matchDisplayFingerprint(displays, fingerprint);
+  if (matched.ok === true) return { ok: true, display: matched.display, confidence: matched.confidence };
+  return { ok: false, reasonCode: 'KNOWN_ALIAS_TARGET_OFFLINE', message: matched.message, candidates: displays };
 }
 
 function ambiguous(displays: DisplayInfo[], message: string): DisplayResolveFail {
