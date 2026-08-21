@@ -25,6 +25,11 @@ import { urlTargetClass } from './urlSafety';
 import { capabilityRequiresLease } from '../../security/constants';
 import { isPrivilegeDenied, type PrivilegeLeaseStore } from '../../security/privilegeLease';
 import type { JarvisEventBus } from '../../security/eventBus';
+import { DestructiveActionCircuitBreaker } from '../../safety/circuitBreaker';
+import { rollbackForResult, verificationForResult } from '../../safety/lifecycle';
+import type { OperationalRiskLevel } from '../../safety/types';
+import type { FailureContainment } from '../../safety/failureContainment';
+import type { EmergencyStopController } from '../../security/emergencyStop';
 
 export type ActionGateOptions = {
   policy?: PermissionPolicy | null;
@@ -35,6 +40,9 @@ export type ActionGateOptions = {
   services?: import('./services').JarvisServiceController;
   leases?: PrivilegeLeaseStore;
   events?: JarvisEventBus;
+  circuitBreaker?: DestructiveActionCircuitBreaker;
+  emergency?: EmergencyStopController;
+  containment?: FailureContainment;
 };
 
 export interface ActionHost extends CapabilityHost {
@@ -63,6 +71,7 @@ class ActionGate implements ActionHost {
   public readonly services?: import('./services').JarvisServiceController;
   private readonly policy: PermissionPolicy | null;
   private readonly confirmations: ConfirmationStore;
+  private readonly circuitBreaker: DestructiveActionCircuitBreaker;
   private readonly completed = new Map<string, CapabilityResult>();
   private readonly inflight = new Map<string, Promise<CapabilityResult>>();
 
@@ -72,7 +81,25 @@ class ActionGate implements ActionHost {
   ) {
     this.policy = options.policy === undefined ? new PermissionPolicy() : options.policy;
     this.confirmations = options.confirmations ?? new ConfirmationStore({ now: options.now });
+    this.circuitBreaker = options.circuitBreaker ?? new DestructiveActionCircuitBreaker();
     this.services = options.services;
+    options.emergency?.register({
+      id: 'capability-host',
+      cancelForEmergency: () => [
+        ...this.confirmations.denyAll().map(proposalId => ({
+          ownerId: 'capability-host',
+          workId: proposalId,
+          state: 'CANCELLED' as const,
+          detail: 'Pending single-use confirmation was invalidated.',
+        })),
+        ...[...this.inflight.keys()].map(key => ({
+          ownerId: 'capability-host',
+          workId: key.slice(0, 180),
+          state: 'NOT_CANCELLABLE' as const,
+          detail: 'The typed handler API has no cancellation signal; completion will be recorded, but no new action may start.',
+        })),
+      ],
+    });
   }
 
   public register(handler: CapabilityHandler): void {
@@ -92,10 +119,34 @@ class ActionGate implements ActionHost {
   }
 
   public async invoke(request: CapabilityInvokeRequest): Promise<CapabilityResult> {
+    const knownDescriptor = this.inner.lookup(request.id);
+    if (knownDescriptor && this.options.emergency && !this.options.emergency.allows(sourceOf(request), knownDescriptor.sideEffect)) {
+      return this.terminal(
+        request.id,
+        'denied',
+        'EMERGENCY_STOP_ACTIVE',
+        'Emergency Stop is active. Only the owner can resume operation.',
+        'BLOCKED',
+      );
+    }
     if (!isGatedCapabilityId(request.id)) {
+      if (knownDescriptor?.sideEffect === 'write') {
+        this.options.events?.emit('PERMISSION_DENIED', 'Ungated mutation was blocked by the capability boundary.', {
+          capabilityId: request.id,
+          reasonCode: 'UNGATED_MUTATION_FORBIDDEN',
+        }, 'warn');
+        return this.terminal(
+          request.id,
+          'denied',
+          'UNGATED_MUTATION_FORBIDDEN',
+          'Mutating capabilities must use the typed ActionGate policy path.',
+          'BLOCKED',
+        );
+      }
       return this.inner.invoke(request);
     }
-    if (!this.inner.lookup(request.id)) {
+    const descriptor = knownDescriptor;
+    if (!descriptor) {
       return this.terminal(request.id, 'unavailable', 'UNKNOWN_CAPABILITY', 'Unknown capability.', 'BLOCKED');
     }
     if (!this.policy) {
@@ -121,9 +172,36 @@ class ActionGate implements ActionHost {
       });
     }
 
-    const proposal = this.createProposal(request, validated.value);
-    const decision = this.policy.evaluate(proposal, this.options.allowlists);
+    const proposal = this.createProposal(request, validated.value, descriptor);
+    const baseDecision = this.policy.evaluate(proposal, this.options.allowlists);
+    const containment = proposal.preflight
+      ? this.options.containment?.blocks(proposal.capabilityId, proposal.preflight)
+      : undefined;
+    const decision = containment
+      ? {
+          ...baseDecision,
+          decision: 'deny' as const,
+          reasonCode: 'FAILURE_CONTAINMENT_ACTIVE',
+          userMessage: 'Related mutation remains stopped after an unexpected action result. Owner recovery review is required.',
+          risk: 'BLOCKED' as const,
+        }
+      : applyCircuitBreakerDecision(baseDecision, proposal.preflight);
     proposal.permissionDecision = decision;
+    proposal.risk = decision.risk;
+    this.options.events?.emit('RISK_ASSESSED', 'Capability risk assessed from typed action effects.', {
+      capabilityId: proposal.capabilityId,
+      proposalId: proposal.proposalId,
+      risk: proposal.preflight?.risk,
+      reviewRequired: proposal.preflight?.reviewRequired,
+      blocked: proposal.preflight?.blocked,
+      reasonCodes: proposal.preflight?.reasonCodes,
+    }, proposal.preflight?.risk === 'CRITICAL' ? 'warn' : 'info');
+    this.options.events?.emit('PREFLIGHT_CREATED', 'Structured action preflight created.', {
+      capabilityId: proposal.capabilityId,
+      proposalId: proposal.proposalId,
+      preflightId: proposal.preflight?.id,
+      affectedTargetCount: proposal.preflight?.affectedTargets.length || 0,
+    });
     if (!(decision.risk === 'READ_ONLY' && proposal.source === 'system')) {
       this.audit({
         proposalId: proposal.proposalId,
@@ -138,6 +216,11 @@ class ActionGate implements ActionHost {
     }
 
     if (decision.decision === 'deny') {
+      this.options.events?.emit('PERMISSION_DENIED', decision.userMessage, {
+        capabilityId: proposal.capabilityId,
+        proposalId: proposal.proposalId,
+        reasonCode: decision.reasonCode,
+      }, 'warn');
       const status = unavailableReason(decision.reasonCode) ? 'unavailable' : 'denied';
       return this.terminal(
         proposal.capabilityId,
@@ -156,11 +239,12 @@ class ActionGate implements ActionHost {
 
     if (decision.decision === 'confirm') {
       if (!request.confirmation) {
+        this.options.events?.emit('PERMISSION_REQUESTED', decision.userMessage, {
+          capabilityId: proposal.capabilityId,
+          proposalId: proposal.proposalId,
+          risk: proposal.preflight?.risk,
+        }, 'warn');
         return this.requireConfirmation(proposal, decision);
-      }
-      if (request.confirmation.proposalId !== proposal.proposalId
-        && request.confirmation.proposalId !== this.confirmations.peek(request.confirmation.proposalId)?.proposalId) {
-        // Confirm path uses stored proposal via confirm(); invoke-with-token must match hashes.
       }
       const stored = this.confirmations.peek(request.confirmation.proposalId);
       if (stored && stored.capabilityId !== request.id) {
@@ -197,6 +281,11 @@ class ActionGate implements ActionHost {
           request.confirmation.proposalId,
         );
       }
+      this.options.events?.emit('PERMISSION_GRANTED', 'Owner permission consumed for this proposal.', {
+        capabilityId: proposal.capabilityId,
+        proposalId: proposal.proposalId,
+        scope: proposal.preflight?.permissionScope,
+      });
       return this.execute(proposal, validated.value, request);
     }
 
@@ -262,6 +351,7 @@ class ActionGate implements ActionHost {
       risk: (structured.risk as ActionRisk) || 'CONFIRM_REQUIRED',
       reason: String(structured.reason ?? 'Confirmation required.'),
       expiresAt: String(structured.expiresAt ?? ''),
+      ...(isRecord(structured.preflight) ? { preflight: structured.preflight as PendingConfirmation['preflight'] } : {}),
     };
   }
 
@@ -304,12 +394,28 @@ class ActionGate implements ActionHost {
           );
         }
       }
+      this.options.events?.emit('ACTION_STARTED', 'Typed capability execution started.', {
+        capabilityId: proposal.capabilityId,
+        proposalId: proposal.proposalId,
+        preflightId: proposal.preflight?.id,
+      });
       const result = await this.inner.invoke({
         id: proposal.capabilityId,
         input,
         timeoutMs: request.timeoutMs,
       });
       const completedAt = new Date(this.now()).toISOString();
+      const descriptor = this.inner.lookup(proposal.capabilityId);
+      const verification = descriptor
+        ? verificationForResult(descriptor, result, this.now())
+        : undefined;
+      const rollback = descriptor
+        ? rollbackForResult(descriptor, result)
+        : proposal.preflight?.rollback;
+      this.options.events?.emit('VERIFICATION_STARTED', 'Post-action verification lifecycle started.', {
+        capabilityId: proposal.capabilityId,
+        proposalId: proposal.proposalId,
+      });
       const decorated: CapabilityResult = {
         ...result,
         structured: {
@@ -318,8 +424,45 @@ class ActionGate implements ActionHost {
           startedAt,
           completedAt,
           risk: result.structured?.risk ?? proposal.risk,
+          preflight: proposal.preflight,
+          verification,
+          rollback,
         },
       };
+      this.options.events?.emit('ACTION_COMPLETED', 'Typed capability execution completed.', {
+        capabilityId: proposal.capabilityId,
+        proposalId: proposal.proposalId,
+        status: decorated.status,
+      }, decorated.status === 'ok' ? 'info' : 'warn');
+      this.options.events?.emit('VERIFICATION_COMPLETED', 'Post-action verification lifecycle completed.', {
+        capabilityId: proposal.capabilityId,
+        proposalId: proposal.proposalId,
+        state: verification?.state || 'UNVERIFIED',
+        failedCheckCount: verification?.failedChecks.length || 0,
+      }, verification?.state === 'FAILED_VERIFICATION' ? 'error' : 'info');
+      if (rollback?.state === 'AVAILABLE' || rollback?.state === 'PARTIAL') {
+        this.options.events?.emit('ROLLBACK_AVAILABLE', 'A recorded recovery path is available.', {
+          capabilityId: proposal.capabilityId,
+          proposalId: proposal.proposalId,
+          state: rollback.state,
+        });
+      }
+      const incident = proposal.preflight && rollback
+        ? this.options.containment?.observe({
+            capabilityId: proposal.capabilityId,
+            preflight: proposal.preflight,
+            result,
+            recovery: rollback,
+            taskId: proposal.provenance.sessionId,
+          })
+        : undefined;
+      if (incident) {
+        decorated.structured.containment = {
+          incidentId: incident.id,
+          reasonCode: incident.reasonCode,
+          active: incident.active,
+        };
+      }
       this.audit({
         proposalId: proposal.proposalId,
         capabilityId: proposal.capabilityId,
@@ -358,6 +501,7 @@ class ActionGate implements ActionHost {
         reason: decision.userMessage,
         reasonCode: decision.reasonCode,
         expiresAt: new Date(issued.record.expiresAt).toISOString(),
+        preflight: proposal.preflight,
       },
       content: proposal.capabilityId === 'desktop.openTrustedUrl'
         ? 'ต้องการให้ผมเปิดเว็บไซต์นี้ไหม?'
@@ -371,10 +515,11 @@ class ActionGate implements ActionHost {
   private createProposal(
     request: CapabilityInvokeRequest,
     input: Record<string, unknown>,
+    descriptor: CapabilityDescriptor,
   ): ActionProposal {
     const now = this.now();
     const meta = describeProposal(request.id, input, this.options.allowlists);
-    return {
+    const proposal: ActionProposal = {
       proposalId: request.confirmation?.proposalId || createProposalId(),
       capabilityId: request.id,
       displayName: meta.displayName,
@@ -393,6 +538,14 @@ class ActionGate implements ActionHost {
         source: sourceOf(request),
       },
     };
+    proposal.preflight = this.circuitBreaker.createPreflight({
+      descriptor,
+      capabilityInput: input,
+      action: meta.summary,
+      why: `Capability ${request.id} was proposed for this ${sourceOf(request)} request; policy approval is evaluated separately.`,
+      permissionScope: meta.target ? [meta.target] : [],
+    });
+    return proposal;
   }
 
   private denyAndAudit(input: {
@@ -642,4 +795,40 @@ function targetClassOf(proposal: ActionProposal, lists: DesktopAllowlists): stri
     return `workspace:${String(proposal.normalizedArguments.documentId || proposal.normalizedArguments.workspaceId || 'registry')}`;
   }
   return 'system:status';
+}
+
+function applyCircuitBreakerDecision(
+  decision: PermissionDecision,
+  preflight: ActionProposal['preflight'],
+): PermissionDecision {
+  if (!preflight) return decision;
+  if (preflight.blocked) {
+    return {
+      ...decision,
+      decision: 'deny',
+      reasonCode: preflight.reasonCodes[0] || 'CIRCUIT_BREAKER_BLOCKED',
+      userMessage: 'The destructive action scope is not explicit, so the safety circuit breaker blocked execution.',
+      risk: 'BLOCKED',
+    };
+  }
+  if (preflight.reviewRequired && decision.decision === 'allow') {
+    return {
+      ...decision,
+      decision: 'confirm',
+      reasonCode: preflight.reasonCodes[0] || 'PREFLIGHT_REVIEW_REQUIRED',
+      userMessage: 'Review the structured risk brief before this action executes.',
+      risk: actionRiskFor(preflight.risk),
+    };
+  }
+  return decision;
+}
+
+function actionRiskFor(risk: OperationalRiskLevel): ActionRisk {
+  if (risk === 'SAFE') return 'READ_ONLY';
+  if (risk === 'LOW') return 'LOW_RISK_ACTION';
+  return 'CONFIRM_REQUIRED';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }

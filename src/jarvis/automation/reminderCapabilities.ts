@@ -61,6 +61,21 @@ function createHandler(id: string, deps: ReminderCapabilityDeps): CapabilityHand
       providerKind: 'local',
       timeoutMs: 3_000,
       untrustedOutput: false,
+      effects: read ? undefined : [{
+        kind: 'DATA_CHANGE',
+        description: 'Change one Jarvis reminder record and its notification schedule.',
+        destructive: false,
+        reversible: id !== REMINDERS_COMPLETE && id !== REMINDERS_DISMISS,
+        privilege: 'standard_user',
+        targetInputFields: ['reminderId', 'title'],
+        estimatedAffectedObjects: 1,
+      }],
+      verification: read
+        ? { mode: 'not_applicable', description: 'Read-only reminder lookup.' }
+        : { mode: 'handler_result', description: 'Confirm the reminder store accepted the typed mutation.' },
+      rollback: read
+        ? { mode: 'not_required', strategy: 'Read-only operation.' }
+        : { mode: 'manual_recovery', strategy: 'A later typed reminder mutation may restore the prior state.', priorStateField: 'priorStateId' },
     }),
     availability: async () => ({
       id,

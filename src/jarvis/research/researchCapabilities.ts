@@ -165,6 +165,17 @@ function createPrivateBrowseHandler(deps: ResearchCapabilityDeps): CapabilityHan
       providerKind: 'http',
       timeoutMs: 30_000,
       untrustedOutput: true,
+      effects: [{
+        kind: 'NETWORK_ACCESS',
+        description: 'Use the isolated private-browser route for one bounded research request.',
+        destructive: false,
+        reversible: true,
+        privilege: 'owner_approval',
+        targetInputFields: ['url', 'query'],
+        estimatedAffectedObjects: 1,
+      }],
+      verification: { mode: 'handler_result', description: 'Confirm the isolated gateway returned a bounded research result.' },
+      rollback: { mode: 'not_required', strategy: 'The isolated browser session is ephemeral and does not mutate owner browser state.' },
     }),
     availability: async () => {
       const health = await deps.privateGateway?.healthCheck();

@@ -1,4 +1,5 @@
 import type { CapabilitySideEffect } from '../types';
+import type { ActionPreflight } from '../../safety/types';
 
 export type ActionRisk = 'READ_ONLY' | 'LOW_RISK_ACTION' | 'CONFIRM_REQUIRED' | 'BLOCKED';
 export type PermissionVerdict = 'allow' | 'confirm' | 'deny';
@@ -40,6 +41,7 @@ export type ActionProposal = {
     sessionId?: string;
     source: ActionSource;
   };
+  preflight?: ActionPreflight;
 };
 
 export type PendingConfirmation = {
@@ -52,6 +54,7 @@ export type PendingConfirmation = {
   risk: ActionRisk;
   reason: string;
   expiresAt: string;
+  preflight?: ActionPreflight;
 };
 
 export type DesktopLaunchStatus = 'started' | 'failed' | 'unavailable';

@@ -46,6 +46,9 @@ export type CommandCenterClientSnapshot = {
     steps: LiveOpsStep[];
     evidence: string[];
     errors: string[];
+    verification?: NonNullable<CommandCenterSnapshot['task']>['verification'];
+    rollback?: NonNullable<CommandCenterSnapshot['task']>['rollback'];
+    preflight?: NonNullable<CommandCenterSnapshot['task']>['plan'][number]['preflight'];
   } | null;
   recentTasks: Array<{ id: string; objective: string; status: string; simulated?: boolean }>;
   evolution: {
@@ -72,7 +75,14 @@ export type CommandCenterClientSnapshot = {
     modelAdaptation: { trained: false; candidates: number };
   };
   request: { route: string; socialAction: string; agentic: boolean; reason: string } | null;
-  permission: { waiting: boolean; taskId?: string; stepId?: string; capability?: string; proposalId?: string };
+  permission: {
+    waiting: boolean;
+    taskId?: string;
+    stepId?: string;
+    capability?: string;
+    proposalId?: string;
+    preflight?: CommandCenterSnapshot['permission']['preflight'];
+  };
   memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: Array<{
     id: string;
@@ -124,6 +134,11 @@ export function presentCommandCenter(
           steps: liveOpsSteps(task),
           evidence: task.evidence.slice(0, 6),
           errors: task.errors.map(item => item.message).slice(0, 4),
+          ...(task.verification ? { verification: task.verification } : {}),
+          ...(task.rollback ? { rollback: task.rollback } : {}),
+          ...([...task.plan].reverse().find(step => step.preflight)?.preflight
+            ? { preflight: [...task.plan].reverse().find(step => step.preflight)!.preflight }
+            : {}),
           ...(task.outcome ? { outcome: task.outcome } : {}),
         }
       : null,
@@ -190,6 +205,7 @@ export function presentCommandCenter(
       stepId: snapshot.permission.stepId,
       capability: snapshot.permission.capability,
       proposalId: snapshot.permission.proposalId,
+      preflight: snapshot.permission.preflight,
     },
     memoryActivity: snapshot.memoryActivity,
     devices: snapshot.devices.map(device => ({

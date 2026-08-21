@@ -51,6 +51,19 @@ export function parseStepId(value: unknown): string | undefined {
   return /^[a-z][a-z0-9_]{2,40}$/iu.test(id) ? id : undefined;
 }
 
+export function parseOperatorReason(value: unknown): string | undefined {
+  if (value === undefined) return '';
+  if (typeof value !== 'string') return undefined;
+  const reason = value.trim();
+  return reason.length <= 240 ? reason : undefined;
+}
+
+export function parsePrivilegeLeaseId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const id = value.trim();
+  return /^lease_[a-f0-9]{16}$/u.test(id) ? id : undefined;
+}
+
 export function parsePermissionGrant(body: unknown): {
   taskId?: string;
   stepId?: string;

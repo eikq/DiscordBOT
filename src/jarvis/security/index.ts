@@ -11,6 +11,9 @@ export {
 export { JarvisEventBus, resetSharedJarvisEventBus, sharedJarvisEventBus } from './eventBus';
 export { probeHostSecurity } from './hostBaseline';
 export { PrivilegeLeaseStore, defaultPrivilegeLeasePath, isPrivilegeDenied } from './privilegeLease';
+export { EmergencyStopController } from './emergencyStop';
+export type { EmergencyCancellationResult, EmergencyCancellationState, EmergencyStopSnapshot } from './emergencyStop';
+export { TrustedOperatorRuntime, resetSharedTrustedOperatorRuntime, sharedTrustedOperatorRuntime } from './trustedOperatorRuntime';
 export { looksLikeSecret, redactDeep, redactSecrets } from './redaction';
 export type {
   EncryptionStatus,
@@ -22,4 +25,6 @@ export type {
   PrivilegeActor,
   PrivilegeDecision,
   PrivilegeLease,
+  PrivilegeLeaseInventoryItem,
+  PrivilegeLeaseState,
 } from './types';

@@ -122,10 +122,22 @@ function structuredVerify(task: WorkTask): WorkStepResult {
       errorCode: 'VERIFICATION_FAILED',
     };
   }
+  const failedVerification = task.plan.find(item => item.verification?.state === 'FAILED_VERIFICATION');
+  if (failedVerification) {
+    return {
+      ok: false,
+      summary: `Verification failed for ${failedVerification.capability || failedVerification.title}.`,
+      errorCode: 'VERIFICATION_FAILED',
+    };
+  }
+  const unverified = task.plan.filter(item => item.preflight?.effects.some(effect => effect.kind !== 'READ')
+    && (!item.verification || item.verification.state === 'UNVERIFIED'));
   return {
     ok: true,
-    summary: task.toolResults.length
-      ? 'Structured check of prior capability results passed.'
+    summary: unverified.length > 0
+      ? `${unverified.length} mutating result(s) still require independent verification.`
+      : task.toolResults.length
+      ? 'Structured verification records contain no failed checks.'
       : 'No capability observations to verify; cognitive steps completed.',
   };
 }
@@ -141,6 +153,9 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
     ...result.sourceUrls.slice(0, 6),
     result.untrustedOutput ? `untrusted:${result.capabilityId}` : '',
   ].filter(Boolean);
+  const preflight = actionPreflight(result.structured?.preflight);
+  const verification = verificationRecord(result.structured?.verification);
+  const rollback = rollbackContract(result.structured?.rollback);
 
   if (result.status === 'confirmation_required') {
     const structured = result.structured ?? {};
@@ -157,13 +172,16 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
             risk: String(structured.risk || 'CONFIRM_REQUIRED'),
             expiresAt: typeof structured.expiresAt === 'string' ? structured.expiresAt : undefined,
             summary: typeof structured.summary === 'string' ? structured.summary : result.error,
+            ...(preflight ? { preflight } : {}),
           }
         : {
             proposalId: `${result.capabilityId}:pending`,
             capability: result.capabilityId,
             risk: String(structured.risk || 'CONFIRM_REQUIRED'),
+            ...(preflight ? { preflight } : {}),
           },
       confirmToken: typeof structured.confirmToken === 'string' ? structured.confirmToken : undefined,
+      ...(preflight ? { preflight } : {}),
     };
   }
   if (result.status === 'rejected') {
@@ -172,6 +190,9 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
       summary: result.error || 'Capability denied.',
       errorCode: 'CAPABILITY_DENIED',
       toolResult,
+      ...(preflight ? { preflight } : {}),
+      ...(verification ? { verification } : {}),
+      ...(rollback ? { rollback } : {}),
     };
   }
   if (result.status === 'unavailable' || result.status === 'timeout') {
@@ -180,6 +201,9 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
       summary: result.error || `Capability ${result.capabilityId} is ${result.status}.`,
       errorCode: result.status === 'timeout' ? 'RESEARCH_TIMEOUT' : 'PROVIDER_UNAVAILABLE',
       toolResult,
+      ...(preflight ? { preflight } : {}),
+      ...(verification ? { verification } : {}),
+      ...(rollback ? { rollback } : {}),
     };
   }
   if (result.status !== 'ok') {
@@ -188,6 +212,9 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
       summary: result.error || summary,
       errorCode: classifyFailure({ message: result.error || summary }) as JarvisErrorCode,
       toolResult,
+      ...(preflight ? { preflight } : {}),
+      ...(verification ? { verification } : {}),
+      ...(rollback ? { rollback } : {}),
     };
   }
   return {
@@ -195,5 +222,27 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
     summary: toolResult.summary,
     toolResult,
     evidence,
+    ...(preflight ? { preflight } : {}),
+    ...(verification ? { verification } : {}),
+    ...(rollback ? { rollback } : {}),
   };
+}
+
+function actionPreflight(value: unknown): WorkStepResult['preflight'] {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.risk !== 'string' || !Array.isArray(value.effects)) return undefined;
+  return value as WorkStepResult['preflight'];
+}
+
+function verificationRecord(value: unknown): WorkStepResult['verification'] {
+  if (!isRecord(value) || typeof value.state !== 'string' || !Array.isArray(value.evidence) || !Array.isArray(value.failedChecks)) return undefined;
+  return value as WorkStepResult['verification'];
+}
+
+function rollbackContract(value: unknown): WorkStepResult['rollback'] {
+  if (!isRecord(value) || typeof value.state !== 'string' || typeof value.strategy !== 'string') return undefined;
+  return value as WorkStepResult['rollback'];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }

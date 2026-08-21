@@ -22,6 +22,9 @@ import { PrivateResearchGateway } from '../research/private/privateGateway';
 import { PrivilegeLeaseStore } from '../security/privilegeLease';
 import { sharedJarvisEventBus } from '../security/eventBus';
 import type { JarvisEventBus } from '../security/eventBus';
+import type { EmergencyStopController } from '../security/emergencyStop';
+import type { FailureContainment } from '../safety/failureContainment';
+import { sharedTrustedOperatorRuntime, TrustedOperatorRuntime } from '../security/trustedOperatorRuntime';
 import type { WorkspaceCapabilityDeps } from '../workspace/workspaceCapabilities';
 import { registerWorkspaceCapabilities } from '../workspace/workspaceCapabilities';
 import { registerRuntimeCapabilities } from './actions/runtimeCapabilities';
@@ -47,6 +50,8 @@ export type StandaloneCapabilityHostOptions = {
     services?: JarvisServiceController;
     leases?: PrivilegeLeaseStore;
     events?: JarvisEventBus;
+    emergency?: EmergencyStopController;
+    containment?: FailureContainment;
   };
 };
 
@@ -111,6 +116,14 @@ export function createStandaloneCapabilityHost(
 
   if (options.actions === false || !allowlists) return registry;
 
+  const operator = options.actions?.leases || options.actions?.events || options.actions?.now
+    ? new TrustedOperatorRuntime({
+        leases: options.actions?.leases,
+        events: options.actions?.events ?? sharedJarvisEventBus(),
+        now: options.actions?.now,
+      })
+    : sharedTrustedOperatorRuntime();
+
   const gateOptions: ActionGateOptions = {
     allowlists,
     policy: options.actions?.policy === undefined ? new PermissionPolicy() : options.actions.policy,
@@ -120,8 +133,10 @@ export function createStandaloneCapabilityHost(
       : options.actions?.audit ?? new ActionAuditLog(defaultActionAuditPath()),
     now: options.actions?.now,
     services: options.actions?.services ?? sharedJarvisServiceController(),
-    leases: options.actions?.leases ?? new PrivilegeLeaseStore(),
-    events: options.actions?.events ?? sharedJarvisEventBus(),
+    leases: options.actions?.leases ?? operator.leases,
+    events: options.actions?.events ?? operator.events,
+    emergency: options.actions?.emergency ?? operator.emergency,
+    containment: options.actions?.containment ?? operator.containment,
   };
   return createActionGate(registry, gateOptions);
 }

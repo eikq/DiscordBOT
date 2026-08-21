@@ -214,6 +214,9 @@ export {
   PrivilegeLeaseStore,
   JarvisEventBus,
   sharedJarvisEventBus,
+  EmergencyStopController,
+  TrustedOperatorRuntime,
+  sharedTrustedOperatorRuntime,
   probeHostSecurity,
   capabilityRequiresLease,
   isForbiddenGenericShell,
@@ -242,6 +245,8 @@ export {
   affectCannotAuthorize,
   applyTaskOutcome,
 } from './evolution';
+export * from './models';
+export * from './safety';
 export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
 export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
 export { OwnerControl } from './control';

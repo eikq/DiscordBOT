@@ -36,7 +36,7 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
   }
   const outcome = task.outcome === 'success'
     ? 'success'
-    : task.outcome === 'cancelled'
+    : task.outcome === 'cancelled' || task.outcome === 'degraded'
       ? 'partial'
       : 'failure';
   const experience = stores.experiences.createIfSignificant({

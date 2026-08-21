@@ -17,6 +17,22 @@ export type PrivilegeLease = {
   reason: string;
   ownerApproved: boolean;
   revokedAt?: string;
+  consumedAt?: string;
+  taskId?: string;
+  stepId?: string;
+  risk?: 'SAFE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  approvalProvenance?: {
+    actor: 'owner';
+    approvedAt: string;
+    proposalId?: string;
+    requestId?: string;
+  };
+};
+
+export type PrivilegeLeaseState = 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'CONSUMED';
+
+export type PrivilegeLeaseInventoryItem = PrivilegeLease & {
+  state: PrivilegeLeaseState;
 };
 
 export type PrivilegeDecision =
@@ -30,6 +46,10 @@ export type IssueLeaseInput = {
   ttlMs?: number;
   maxActions?: number;
   ownerApproved?: boolean;
+  taskId?: string;
+  stepId?: string;
+  risk?: PrivilegeLease['risk'];
+  approvalProvenance?: Omit<NonNullable<PrivilegeLease['approvalProvenance']>, 'actor' | 'approvedAt'>;
 };
 
 export type HostControlState = 'ON' | 'OFF' | 'UNKNOWN';
@@ -108,7 +128,22 @@ export type JarvisOperationEventType =
   | 'SPEECH'
   | 'LISTENING'
   | 'MEMORY'
-  | 'WORKSPACE';
+  | 'WORKSPACE'
+  | 'RISK_ASSESSED'
+  | 'PREFLIGHT_CREATED'
+  | 'PERMISSION_REQUESTED'
+  | 'PERMISSION_GRANTED'
+  | 'PERMISSION_DENIED'
+  | 'LEASE_CREATED'
+  | 'LEASE_REVOKED'
+  | 'ACTION_STARTED'
+  | 'ACTION_COMPLETED'
+  | 'VERIFICATION_STARTED'
+  | 'VERIFICATION_COMPLETED'
+  | 'ROLLBACK_AVAILABLE'
+  | 'EMERGENCY_STOP'
+  | 'EMERGENCY_RESUME'
+  | 'FAILURE_CONTAINED';
 
 export type JarvisOperationEvent = {
   id: string;

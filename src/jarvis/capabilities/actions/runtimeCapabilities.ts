@@ -295,6 +295,25 @@ function lifecycleHandler(
       providerKind: 'local',
       timeoutMs: 8_000,
       untrustedOutput: false,
+      effects: [{
+        kind: 'SERVICE_CONTROL',
+        description: `${id === JARVIS_START_SERVICE ? 'Start' : id === JARVIS_STOP_SERVICE ? 'Stop' : 'Restart'} one registered Jarvis-owned service.`,
+        destructive: false,
+        reversible: id !== JARVIS_RESTART_SERVICE,
+        privilege: id === JARVIS_START_SERVICE ? 'standard_user' : 'owner_approval',
+        riskLevel: id === JARVIS_START_SERVICE ? 'LOW' : 'MEDIUM',
+        targetInputFields: ['serviceId'],
+        estimatedAffectedObjects: 1,
+      }],
+      verification: {
+        mode: 'structured_postcondition',
+        description: 'Verify the service controller reported completed lifecycle execution.',
+        structuredField: 'status',
+        expectedValue: 'completed',
+      },
+      rollback: id === JARVIS_START_SERVICE
+        ? { mode: 'manual_recovery', strategy: 'Stop the same registered service.', priorStateField: 'serviceId' }
+        : { mode: 'manual_recovery', strategy: 'Restore the prior service lifecycle state.', priorStateField: 'priorLifecycle' },
     }),
     availability: async () => ({ id, availability: 'up', degraded: false }),
     invoke: async (input) => {

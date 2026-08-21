@@ -18,9 +18,10 @@ import { nightAgentSnapshot, systemHealthSnapshot } from "./src/jarvis/standalon
 import { assertLocalMutationRequest, enforceLoopbackBindHost } from "./src/jarvis/standalone/localMutationGuard";
 import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants";
 import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
+import { sharedTrustedOperatorRuntime } from "./src/jarvis/security/trustedOperatorRuntime";
 import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
 import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
-import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parsePermissionGrant, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
+import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parseOperatorReason, parsePermissionGrant, parsePrivilegeLeaseId, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
 dotenv.config({ quiet: true });
 if (process.env.JARVIS_STANDALONE === '1') {
@@ -1130,6 +1131,55 @@ async function startServer() {
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }
+  });
+  app.get('/api/jarvis/operator', (_req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis operator state is restricted to the local dashboard.' });
+    }
+    return res.json(sharedTrustedOperatorRuntime().snapshot());
+  });
+  app.post('/api/jarvis/emergency-stop', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis operator controls are restricted to the local dashboard.' });
+    }
+    const reason = parseOperatorReason(req.body?.reason);
+    if (reason === undefined) return res.status(400).json({ error: 'reason must be at most 240 characters.', reasonCode: 'PLAN_INVALID' });
+    try {
+      return res.json(sharedTrustedOperatorRuntime().emergency.engage('owner', reason || 'Owner activated Emergency Stop.'));
+    } catch (error) {
+      return res.status(400).json({
+        error: error instanceof Error ? error.message : String(error),
+        reasonCode: error && typeof error === 'object' && 'reasonCode' in error ? error.reasonCode : 'EMERGENCY_STOP_FAILED',
+      });
+    }
+  });
+  app.post('/api/jarvis/emergency-resume', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis operator controls are restricted to the local dashboard.' });
+    }
+    const reason = parseOperatorReason(req.body?.reason);
+    if (reason === undefined) return res.status(400).json({ error: 'reason must be at most 240 characters.', reasonCode: 'PLAN_INVALID' });
+    try {
+      return res.json(sharedTrustedOperatorRuntime().emergency.resume('owner', reason || 'Owner explicitly resumed operation.'));
+    } catch (error) {
+      return res.status(400).json({
+        error: error instanceof Error ? error.message : String(error),
+        reasonCode: error && typeof error === 'object' && 'reasonCode' in error ? error.reasonCode : 'EMERGENCY_RESUME_FAILED',
+      });
+    }
+  });
+  app.post('/api/jarvis/leases/revoke', (req, res) => {
+    if (rejectIfMutationBlocked(req, res)) return;
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis operator controls are restricted to the local dashboard.' });
+    }
+    const leaseId = parsePrivilegeLeaseId(req.body?.leaseId);
+    if (!leaseId) return res.status(400).json({ error: 'A valid leaseId is required.', reasonCode: 'PLAN_INVALID' });
+    const result = sharedTrustedOperatorRuntime().leases.revoke(leaseId, 'owner');
+    if (result.ok === false) return res.status(400).json({ error: result.userMessage, reasonCode: result.reasonCode });
+    return res.json({ lease: sharedTrustedOperatorRuntime().leases.listInventory().find(item => item.id === leaseId) });
   });
   app.get('/api/jarvis/security', async (_req, res) => {
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {

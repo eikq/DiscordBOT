@@ -75,6 +75,17 @@ export class ConfirmationStore {
     return record;
   }
 
+  public denyAll(): string[] {
+    const denied: string[] = [];
+    for (const record of this.records.values()) {
+      if (record.used || record.denied || this.now() > record.expiresAt) continue;
+      record.denied = true;
+      record.used = true;
+      denied.push(record.proposalId);
+    }
+    return denied;
+  }
+
   private now(): number {
     return this.options.now?.() ?? Date.now();
   }

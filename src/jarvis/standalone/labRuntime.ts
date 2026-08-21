@@ -20,6 +20,7 @@ import { sharedJarvisEventBus } from '../security/eventBus';
 import { PrivateResearchGateway } from '../research/private/privateGateway';
 import type { HostSecuritySnapshot } from '../security/types';
 import type { PrivateRouteHealth } from '../research/private/types';
+import { configuredLocalModelProfile, type ModelProfile } from '../models';
 import { isWorkspaceResult, workspaceFactsFromResult } from '../workspace/workspaceFacts';
 import {
   ActionAuditLog,
@@ -127,6 +128,8 @@ export type JarvisLabStatus = {
     enabled?: boolean;
     reachable?: boolean;
     model?: string;
+    provider?: 'ollama' | 'openai-compatible';
+    profile?: ModelProfile;
   };
   stt: SttRuntimeProbe;
   runtime?: JarvisRuntimeProfile;
@@ -182,7 +185,7 @@ export type JarvisLabRuntimeOptions = {
   skills?: JarvisSkillHost;
   persona?: PersonaProvider;
   voices?: VoiceProfileResolver;
-  llm?: StandaloneLlm & { getRuntimeStatus?: () => Promise<{ enabled?: boolean; reachable?: boolean; model?: string }> };
+  llm?: StandaloneLlm & { getRuntimeStatus?: () => Promise<{ enabled?: boolean; reachable?: boolean; model?: string; provider?: 'ollama' | 'openai-compatible' }> };
   attachDefaultMemory?: boolean;
   attachDefaultCapabilities?: boolean;
   attachDefaultSkills?: boolean;
@@ -288,7 +291,19 @@ export class JarvisLabRuntime {
   public async status(sessionId = 'jarvis-lab'): Promise<JarvisLabStatus> {
     let llm: JarvisLabStatus['llm'];
     try {
-      llm = this.llm?.getRuntimeStatus ? await this.llm.getRuntimeStatus() : undefined;
+      const runtime = this.llm?.getRuntimeStatus ? await this.llm.getRuntimeStatus() : undefined;
+      llm = runtime
+        ? {
+            ...runtime,
+            ...(runtime.model ? {
+              profile: configuredLocalModelProfile({
+                id: runtime.model,
+                displayName: runtime.model,
+                runtime: runtime.provider ?? 'unknown',
+              }),
+            } : {}),
+          }
+        : undefined;
     } catch {
       llm = { enabled: false, reachable: false };
     }
@@ -802,6 +817,7 @@ export class JarvisLabRuntime {
           risk: 'CONFIRM_REQUIRED' as const,
           reason: waiting.pendingConfirmation.summary || 'Owner permission required.',
           expiresAt: waiting.pendingConfirmation.expiresAt || '',
+          preflight: waiting.pendingConfirmation.preflight || waiting.preflight,
         },
       } : {}),
     };

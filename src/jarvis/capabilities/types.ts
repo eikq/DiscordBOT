@@ -7,6 +7,12 @@
 
 export type JsonSchema = Record<string, unknown>;
 
+import type {
+  ActionEffectTemplate,
+  CapabilityRollbackSpec,
+  CapabilityVerificationSpec,
+} from '../safety/types';
+
 /** Side-effect class for policy/routing. Write classes exist for later JF-010. */
 export type CapabilitySideEffect = 'read' | 'write';
 
@@ -37,6 +43,10 @@ export interface CapabilityDescriptor {
   providerKind: CapabilityProviderKind;
   timeoutMs: number;
   untrustedOutput: boolean;
+  /** Runtime-authored safety metadata. Model output cannot override this. */
+  effects?: ActionEffectTemplate[];
+  verification?: CapabilityVerificationSpec;
+  rollback?: CapabilityRollbackSpec;
 }
 
 export interface CapabilityAvailabilityState {

@@ -104,6 +104,17 @@ function cloneDescriptor(descriptor: CapabilityDescriptor): CapabilityDescriptor
     ...descriptor,
     inputSchema: { ...descriptor.inputSchema },
     outputSchema: { ...descriptor.outputSchema },
+    ...(descriptor.effects
+      ? {
+          effects: descriptor.effects.map(effect => ({
+            ...effect,
+            ...(effect.targets ? { targets: [...effect.targets] } : {}),
+            ...(effect.targetInputFields ? { targetInputFields: [...effect.targetInputFields] } : {}),
+          })),
+        }
+      : {}),
+    ...(descriptor.verification ? { verification: { ...descriptor.verification } } : {}),
+    ...(descriptor.rollback ? { rollback: { ...descriptor.rollback } } : {}),
   };
 }
 

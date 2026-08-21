@@ -1,4 +1,5 @@
 import type { JarvisErrorCode } from '../ops/types';
+import type { ActionPreflight, RollbackContract, VerificationRecord, VerificationState } from '../safety/types';
 
 export const WORK_TASK_STATUSES = [
   'RECEIVED',
@@ -71,6 +72,7 @@ export type PendingStepConfirmation = {
   risk: string;
   expiresAt?: string;
   summary?: string;
+  preflight?: ActionPreflight;
 };
 
 export type PermissionGrantInput = {
@@ -101,6 +103,9 @@ export type PlanStep = {
   pendingConfirmation?: PendingStepConfirmation;
   permissionLease?: PermissionLease;
   deniedPermission?: boolean;
+  preflight?: ActionPreflight;
+  verification?: VerificationRecord;
+  rollback?: RollbackContract;
 };
 
 export type WorkTaskOutcome = 'success' | 'failure' | 'cancelled' | 'blocked' | 'degraded';
@@ -119,7 +124,14 @@ export type WorkTask = {
   retriesUsed: number;
   errors: Array<{ at: string; code: JarvisErrorCode; message: string; stepId?: string }>;
   rollbackInfo?: string;
-  verification?: { passed: boolean; summary: string };
+  rollback?: RollbackContract;
+  verification?: {
+    passed: boolean;
+    summary: string;
+    state: VerificationState;
+    evidence: string[];
+    failedChecks: string[];
+  };
   outcome?: WorkTaskOutcome;
   simulated?: boolean;
   cancelRequested?: boolean;
@@ -136,6 +148,9 @@ export type WorkStepResult = {
   skipped?: boolean;
   pendingConfirmation?: PendingStepConfirmation;
   confirmToken?: string;
+  preflight?: ActionPreflight;
+  verification?: VerificationRecord;
+  rollback?: RollbackContract;
 };
 
 export type SynthesizedOutcome =

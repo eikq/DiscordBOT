@@ -42,6 +42,7 @@ import type { JarvisVisualState } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
 import type { JarvisOperationEvent } from '../security/types';
+import { sharedTrustedOperatorRuntime, type TrustedOperatorRuntime } from '../security/trustedOperatorRuntime';
 import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
 
@@ -74,6 +75,7 @@ export type CommandCenterSnapshot = {
     stepId?: string;
     capability?: string;
     proposalId?: string;
+    preflight?: import('../safety/types').ActionPreflight;
   };
   memoryActivity: { experiences: number; reflections: number; skills: number };
   devices: DeviceRecord[];
@@ -92,6 +94,7 @@ export type CommandCenterOptions = {
   workDbPath?: string;
   evolutionDbPath?: string;
   memoryStore?: JarvisMemoryStore;
+  operator?: TrustedOperatorRuntime;
 };
 
 export class CommandCenterRuntime {
@@ -115,6 +118,7 @@ export class CommandCenterRuntime {
   public readonly visionAnalyzer = new SimulatedVisionAnalyzer();
   public readonly night: NightCycle;
   public readonly reflectionLedger: ReflectionLedger;
+  public readonly operator: TrustedOperatorRuntime;
   public readonly persistence?: EvolutionPersistence;
   private host?: CapabilityHost;
   private vision: VisualContext | null = null;
@@ -125,6 +129,7 @@ export class CommandCenterRuntime {
   constructor(options: CommandCenterOptions = {}) {
     const simulated = Boolean(options.simulated);
     this.events = options.events ?? sharedJarvisEventBus();
+    this.operator = options.operator ?? sharedTrustedOperatorRuntime();
     this.host = options.host;
     this.control = new OwnerControl({
       maxAutonomy: 2,
@@ -159,6 +164,7 @@ export class CommandCenterRuntime {
         researchDepth: () => this.control.snapshot().researchDepth,
       }),
       simulated,
+      emergency: this.operator.emergency,
       onTerminal: task => this.recordTaskExperience(task),
     });
     this.night = new NightCycle({
@@ -290,6 +296,7 @@ export class CommandCenterRuntime {
   }
 
   public runNight(): NightCycleReport {
+    this.assertOperatorRunning();
     return this.night.run();
   }
 
@@ -321,6 +328,7 @@ export class CommandCenterRuntime {
   }
 
   public runPractice(goalId: string) {
+    this.assertOperatorRunning();
     const goal = this.growth.list().find(item => item.id === goalId);
     const exercise = this.practice.exercises(1)[0];
     const result = this.practice.run(exercise?.id || 'practice_planning_dag');
@@ -328,6 +336,14 @@ export class CommandCenterRuntime {
       this.selfModel.observe('practice', 'success');
     }
     return { goalId, isolated: result.isolated, destructive: result.destructive, passed: result.passed };
+  }
+
+  private assertOperatorRunning(): void {
+    if (!this.operator.emergency.allows('system', 'write')) {
+      throw Object.assign(new Error('Emergency Stop is active. Autonomous work remains suspended.'), {
+        reasonCode: 'EMERGENCY_STOP_ACTIVE',
+      });
+    }
   }
 
   public notify(signal: MonitorSignal): ReturnType<ProactiveMonitor['ingest']> {
@@ -438,6 +454,7 @@ let sharedCenter: CommandCenterRuntime | undefined;
 export function sharedCommandCenter(): CommandCenterRuntime {
   sharedCenter ??= new CommandCenterRuntime({
     events: sharedJarvisEventBus(),
+    operator: sharedTrustedOperatorRuntime(),
     simulated: false,
     persistRoot: process.env.JARVIS_RUNTIME_DIR || defaultRuntimeRoot(),
   });
@@ -456,5 +473,6 @@ function permissionOf(task: WorkTask | null): CommandCenterSnapshot['permission'
     stepId: waiting?.id,
     capability: waiting?.pendingConfirmation?.capability || waiting?.capability,
     proposalId: waiting?.pendingConfirmation?.proposalId,
+    preflight: waiting?.pendingConfirmation?.preflight || waiting?.preflight,
   };
 }

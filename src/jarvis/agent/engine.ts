@@ -17,6 +17,7 @@ import type {
 } from './types';
 import { defaultPlanFor } from './plans';
 import { denyPermissionStep, markLeaseUsed, PermissionDeniedError, validatePermissionGrant, waitingPermissionStep } from './permission';
+import type { EmergencyStopController } from '../security/emergencyStop';
 
 export { defaultPlanFor, planForObjective } from './plans';
 
@@ -28,6 +29,7 @@ export type WorkAgentOptions = {
   budgets?: Partial<JarvisBudgets>;
   simulated?: boolean;
   onTerminal?: (task: WorkTask) => void;
+  emergency?: EmergencyStopController;
 };
 
 const KIND_VISUAL: Record<PlanStepKind, string> = {
@@ -59,6 +61,7 @@ export class WorkAgent {
     expiresAt?: number;
   }>();
   private readonly usedTokenHashes = new Set<string>();
+  private readonly emergency?: EmergencyStopController;
 
   constructor(options: WorkAgentOptions = {}) {
     this.store = options.store ?? new WorkTaskStore(options.now);
@@ -67,9 +70,15 @@ export class WorkAgent {
     this.budgets = mergeBudgets(options.budgets);
     this.simulated = Boolean(options.simulated);
     this.onTerminal = options.onTerminal;
+    this.emergency = options.emergency;
+    this.emergency?.register({
+      id: 'work-agent',
+      cancelForEmergency: () => this.cancelForEmergency(),
+    });
   }
 
   public receive(objective: string, plan?: PlanStep[], extra: { simulated?: boolean } = {}): WorkTask {
+    this.assertEmergencyAllowsExecution();
     const steps = plan && plan.length > 0 ? plan : defaultPlanFor(objective);
     assertAcyclic(steps);
     if (steps.length > this.budgets.taskSteps) {
@@ -87,6 +96,9 @@ export class WorkAgent {
 
   public async run(taskId: string): Promise<WorkTask> {
     let task = this.require(taskId);
+    if (this.emergency && !this.emergency.allows('system', 'write')) {
+      return this.finish(task, 'CANCELLED', 'cancelled', 'Emergency Stop is active.');
+    }
     if (task.status === 'RECEIVED') task = this.store.setStatus(taskId, 'UNDERSTANDING');
     if (task.status === 'UNDERSTANDING') {
       this.emit(task, 'UNDERSTANDING', 'Understanding the objective', { visualState: 'UNDERSTANDING' });
@@ -167,6 +179,7 @@ export class WorkAgent {
   }
 
   public resume(taskId: string): Promise<WorkTask> {
+    this.assertEmergencyAllowsExecution();
     const task = this.require(taskId);
     if (task.status === 'PAUSED' || task.status === 'WAITING_PERMISSION') {
       this.store.setStatus(taskId, 'READY');
@@ -175,6 +188,7 @@ export class WorkAgent {
   }
 
   public grantPermission(taskId: string, stepIdOrGrant?: string | PermissionGrantInput): WorkTask {
+    this.assertEmergencyAllowsExecution();
     const grant: PermissionGrantInput = typeof stepIdOrGrant === 'string'
       ? { actor: 'owner', stepId: stepIdOrGrant }
       : { actor: 'owner', ...stepIdOrGrant };
@@ -228,6 +242,30 @@ export class WorkAgent {
     return this.finish(this.store.save(task), 'BLOCKED', 'blocked', 'Owner denied permission.');
   }
 
+  private cancelForEmergency() {
+    this.ownerTokens.clear();
+    return this.store.active().map(task => {
+      const wasRunning = this.controllers.has(task.id);
+      this.cancel(task.id);
+      return {
+        ownerId: 'work-agent',
+        workId: task.id,
+        state: wasRunning ? 'CANCELLATION_REQUESTED' as const : 'CANCELLED' as const,
+        detail: wasRunning
+          ? 'Task cancellation was requested; an already-running capability may not expose cancellation.'
+          : 'Queued or waiting task was cancelled before further execution.',
+      };
+    });
+  }
+
+  private assertEmergencyAllowsExecution(): void {
+    if (this.emergency && !this.emergency.allows('system', 'write')) {
+      throw Object.assign(new Error('Emergency Stop is active. Only the owner can resume operation.'), {
+        reasonCode: 'EMERGENCY_STOP_ACTIVE',
+      });
+    }
+  }
+
   private async executeStep(task: WorkTask, step: PlanStep, signal: AbortSignal): Promise<void> {
     step.status = 'running';
     step.retryPolicy.attempted += 1;
@@ -267,6 +305,13 @@ export class WorkAgent {
     task.retriesUsed = latest.retriesUsed;
     task.errors = latest.errors;
     task.plan = latest.plan.map(item => item.id === step.id ? step : item);
+    step.preflight = result.preflight;
+    step.verification = result.verification;
+    step.rollback = result.rollback;
+    if (result.rollback) {
+      task.rollback = result.rollback;
+      task.rollbackInfo = `${result.rollback.state}: ${result.rollback.strategy}`;
+    }
 
     if (result.permissionRequired) {
       step.status = 'waiting_permission';
@@ -326,19 +371,69 @@ export class WorkAgent {
   }
 
   private verify(task: WorkTask): WorkTask {
+    this.emit(task, 'VERIFICATION_STARTED', 'Task outcome verification started', { visualState: 'VERIFYING' });
     const failed = task.plan.some(step => step.status === 'failed');
     const blocked = task.plan.some(step => step.status === 'blocked' || step.status === 'waiting_permission');
     if (failed) {
+      this.emit(task, 'VERIFICATION_COMPLETED', 'Verification failed because a step failed', { visualState: 'ERROR', errorCode: 'VERIFICATION_FAILED' });
       return this.finish(task, 'FAILED', 'failure', 'Verification failed because a step failed.');
     }
     if (blocked) {
+      this.emit(task, 'VERIFICATION_COMPLETED', 'Verification blocked on incomplete steps', { visualState: 'WAITING_PERMISSION' });
       return this.finish(task, 'BLOCKED', 'blocked', 'Verification blocked on incomplete steps.');
+    }
+    const verificationRecords = task.plan.flatMap(step => step.verification ? [step.verification] : []);
+    const failedVerification = verificationRecords.filter(item => item.state === 'FAILED_VERIFICATION');
+    const mutationSteps = task.plan.filter(step => step.preflight?.effects.some(effect => effect.kind !== 'READ'));
+    const incompleteVerification = mutationSteps.filter(step => !step.verification
+      || step.verification.state === 'UNVERIFIED'
+      || step.verification.state === 'PARTIALLY_VERIFIED');
+    if (failedVerification.length > 0) {
+      const failedTask: WorkTask = {
+        ...task,
+        verification: {
+          passed: false,
+          state: 'FAILED_VERIFICATION',
+          summary: 'One or more registered postconditions failed.',
+          evidence: verificationRecords.flatMap(item => item.evidence),
+          failedChecks: failedVerification.flatMap(item => item.failedChecks),
+        },
+      };
+      this.store.save(failedTask);
+      this.emit(failedTask, 'VERIFICATION_COMPLETED', failedTask.verification!.summary, { visualState: 'ERROR', errorCode: 'VERIFICATION_FAILED' });
+      return this.finish(failedTask, 'FAILED', 'failure', 'Task postcondition verification failed.', 'VERIFICATION_FAILED');
+    }
+    if (incompleteVerification.length > 0) {
+      const partialTask: WorkTask = {
+        ...task,
+        verification: {
+          passed: false,
+          state: verificationRecords.some(item => item.state === 'PARTIALLY_VERIFIED')
+            ? 'PARTIALLY_VERIFIED'
+            : 'UNVERIFIED',
+          summary: 'Execution completed, but independent postconditions did not fully verify every mutation.',
+          evidence: verificationRecords.flatMap(item => item.evidence),
+          failedChecks: [],
+        },
+      };
+      this.store.save(partialTask);
+      this.emit(partialTask, 'VERIFICATION_COMPLETED', partialTask.verification!.summary, { visualState: 'DEGRADED' });
+      return this.finish(partialTask, 'DEGRADED', 'degraded', partialTask.verification!.summary);
     }
     const verified: WorkTask = {
       ...task,
-      verification: { passed: true, summary: 'All planned steps completed.' },
+      verification: {
+        passed: true,
+        state: verificationRecords.some(item => item.state === 'VERIFIED') ? 'VERIFIED' : 'NOT_APPLICABLE',
+        summary: verificationRecords.some(item => item.state === 'VERIFIED')
+          ? 'All registered mutation postconditions passed.'
+          : 'No mutation postcondition was applicable.',
+        evidence: verificationRecords.flatMap(item => item.evidence),
+        failedChecks: [],
+      },
     };
     this.store.save(verified);
+    this.emit(verified, 'VERIFICATION_COMPLETED', verified.verification!.summary, { visualState: 'RESPONDING' });
     return this.finish(verified, 'COMPLETED', 'success', 'Task completed.');
   }
 
@@ -353,6 +448,8 @@ export class WorkAgent {
       this.emit(task, 'TASK_CANCELLED', summary, { visualState: 'IDLE' });
     } else if (status === 'BLOCKED') {
       this.emit(task, 'TASK_BLOCKED', summary, { visualState: 'WAITING_PERMISSION' });
+    } else if (status === 'DEGRADED') {
+      this.emit(task, 'TASK_COMPLETED', summary, { visualState: 'DEGRADED' });
     } else {
       this.emit(task, 'TASK_COMPLETED', summary, { visualState: 'RESPONDING' });
     }
