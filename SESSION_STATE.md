@@ -3,7 +3,59 @@
 Updated: 2026-08-21
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Cinematic Presence v5 + Voice Command Intelligence
+## This turn — Semantic Intent & Conversational Memory v1
+
+Branch: `local/jarvis-semantic-intent-memory-v1-2026-08-21` from exact V5 HEAD
+`947d2b9a15e3c193509d16202938dd4aa2c23cbb`. Did not modify `main`.
+Checkpointed on this branch:
+
+- `f2cb004` feat(intent): semantic owner-intent + generic resource resolution
+- `d132ed5` feat(memory): bounded conversational + owner semantic memory
+- `14f57bf` feat(desktop): display aliases + scoped web resources
+- `39e08f1` test(jarvis): semantic intent / context / memory invariants
+- this docs commit records maturity and live evidence
+
+Primary URL: `http://127.0.0.1:3000/jarvis`  
+Ambient: `http://127.0.0.1:3000/jarvis?mode=ambient`  
+Control Center: `http://127.0.0.1:3000/jarvis-lab`
+
+Verification: `npx tsc --noEmit` PASS; focused semantic+V5+speech+intent **70 / 70**
+then semantic **26 / 26**; `npm run test:cloud` **641 / 641** PASS; `npm run build`
+PASS (same Vite/`import.meta` warnings as V5).
+
+- SemanticIntent is language interpretation only. No brand `if (roblox)`.
+- ResourceResolver uses `config/jarvis/web-resources.json` + apps/projects.
+  Unknown official sites do not fabricate URLs.
+- Non-allowlisted official HTTPS becomes `SCOPED_WEB_OPEN` confirm, not a
+  dead-end deny. Session grant after a successful confirm is
+  `ALLOW_THIS_DOMAIN_FOR_SESSION`. Permanent trust is still a separate
+  owner decision.
+- Notebook / laptop / จอโน้ตบุ๊ก resolve to `display.internal` when topology
+  marks an internal display. This host did not expose `Internal`; Jarvis
+  asked. Owner aliases persist in canonical SQLite facts
+  (`owner.alias.display.*`) and survived a live server restart.
+- `it` / `back` use InteractionContext. Place is not invoked until the
+  referent is actually opened (`openState: intended | opened`).
+- Web/tool text cannot write owner memory. Secrets are rejected.
+- Existing V5 voice suite is preserved.
+
+Live `/api/jarvis/ask` on this branch (server restarted from this tree):
+
+- A `open roblox website in notebook monitor` → scoped confirm, official
+  catalog URL, not “I don’t understand.” After owner-token confirm: open
+  **completed**; placement asked because no built-in display evidence
+  (`DISPLAY_AMBIGUOUS`).
+- B/C `Move it` / `Bring it back` after that confirm resolved to
+  `desktop.placeWindow` but were **denied**
+  `FAILURE_CONTAINMENT_ACTIVE` (host containment already active / prior
+  failed place). Not claimed as place LIVE_VERIFIED.
+- D/E monitor alias teach + restart: “notebook monitor” still means
+  `display.internal`.
+- F mixed Thai/EN Roblox open → same scoped confirm.
+- G click-first-game → Gap language, not “I don’t understand.”
+- H research “that source” was **not** live-tested.
+
+## Previous — Cinematic Presence v5 + Voice Command Intelligence
 
 Branch: `local/jarvis-cinematic-presence-v5-2026-08-21` from exact
 `bdd27eb1f7ee29c3c336788a85402e5c30a774f7` (v4 HEAD). Did not modify `main`.
