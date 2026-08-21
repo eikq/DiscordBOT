@@ -72,6 +72,8 @@ test('owner can talk to Presence without opening a dashboard page first', () => 
   assert.equal(interpretPresenceShellCommand('Open Control Center').kind, 'control-center');
   assert.equal(interpretPresenceShellCommand('return to Jarvis').kind, 'presence');
   assert.equal(interpretPresenceShellCommand('ambient mode').kind, 'ambient-on');
+  assert.equal(interpretPresenceShellCommand('Go ambient.').kind, 'ambient-on');
+  assert.equal(interpretPresenceShellCommand('เข้า ambient mode').kind, 'ambient-on');
   assert.equal(interpretPresenceShellCommand('exit ambient mode').kind, 'ambient-off');
   assert.equal(interpretPresenceShellCommand('Emergency Stop').kind, 'emergency-stop');
   assert.equal(interpretPresenceShellCommand("what's happening?").kind, 'attention');
@@ -112,7 +114,7 @@ test('Yes and No bind to one exact pending permission, never a global grant', ()
   });
   assert.equal(grant.kind, 'grant');
   if (grant.kind !== 'grant') throw new Error('expected grant');
-  const granted = interpretPresenceOwnerReply('Proceed', grant);
+  const granted = interpretPresenceOwnerReply('Do it.', grant);
   assert.equal(granted.kind, 'allow');
   if (granted.kind !== 'allow') throw new Error('expected allow');
   assert.equal(granted.target.kind, 'grant');

@@ -3,7 +3,40 @@
 Updated: 2026-08-21
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Cinematic Presence v4
+## This turn — Cinematic Presence v5 + Voice Command Intelligence
+
+Branch: `local/jarvis-cinematic-presence-v5-2026-08-21` from exact
+`bdd27eb1f7ee29c3c336788a85402e5c30a774f7` (v4 HEAD). Did not modify `main`.
+Checkpointed on this branch.
+
+Primary URL: `http://127.0.0.1:3000/jarvis`  
+Ambient: `http://127.0.0.1:3000/jarvis?mode=ambient`  
+Control Center: `http://127.0.0.1:3000/jarvis-lab`
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **OWNER_VISUAL_VERIFIED** and
+**LIVE_VERIFIED** are not claimed. No live dashboard/TTS/desktop launch was run
+this pass.
+
+- Voice is an input method, not authority. Families are cue clusters, not a
+  phrase switch. EN/TH equivalents map to the same structured goals.
+- Scoped allowlisted OPEN + real monitor topology. Ambiguous geometry asks.
+  YouTube allowlist is structured; other domains stay confirm/deny with reason.
+- Speech policy is deterministic ALWAYS/OPTIONAL/SILENT. Speech controls never
+  change capability authority. Cancel ≠ Emergency Stop.
+- Visual: neural cognition + lightning tubes, richer cyan/indigo/violet,
+  Thinking camera closer than Researching. Red remains emergency-only.
+- Follow-up after explore: conversation `/ask-stream` now synthesizes before
+  `final` and attaches `speech` to that payload; Presence/Lab/Operating also
+  merge a later `speech` event. Thai `จอ` no longer steals Display Settings
+  from “เปิด YouTube ที่จอ 2”.
+- Verification: `npx tsc --noEmit` PASS; `npm run test:cloud` **614 / 614**
+  before this follow-up; after stream/`จอ` fixes, focused suite
+  `jarvis_cinematic_v5` + `jarvis_speech` + `jarvis_intent` + `jarvis_presence`
+  **52 / 52**. `npm run build` PASS earlier (same Vite/`import.meta` warnings).
+
+See `docs/JARVIS_CINEMATIC_PRESENCE.md`.
+
+## Previous — Cinematic Presence v4
 
 Branch: `local/jarvis-cinematic-presence-v4-2026-08-21` from exact
 `8c938ae40fe3beeb87e6ba4d0bcba9bea9323f59`. Did not modify `main`.
