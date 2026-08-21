@@ -57,8 +57,9 @@ export type VerificationState =
 export type RollbackState = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE' | 'NOT_REQUIRED' | 'FAILED';
 
 export type CapabilityVerificationSpec = {
-  mode: 'not_applicable' | 'handler_result' | 'structured_postcondition';
+  mode: 'not_applicable' | 'handler_result' | 'structured_postcondition' | 'registered_postcondition';
   description: string;
+  verifierId?: string;
   structuredField?: string;
   expectedValue?: unknown;
 };

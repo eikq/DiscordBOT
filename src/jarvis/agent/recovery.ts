@@ -5,6 +5,7 @@ import type { PlanStep, WorkTask } from './types';
 export function canRetry(step: PlanStep, task: WorkTask, code: JarvisErrorCode): boolean {
   if (task.retryBudget - task.retriesUsed <= 0) return false;
   if (step.retryPolicy.attempted >= step.retryPolicy.maxAttempts) return false;
+  if (code === 'RESEARCH_TIMEOUT' && step.preflight?.effects.some(effect => effect.kind !== 'READ')) return false;
   return isRetryableError(code);
 }
 

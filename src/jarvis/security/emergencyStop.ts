@@ -10,6 +10,8 @@ export type EmergencyCancellationState =
   | 'CANCELLED'
   | 'CANCELLATION_REQUESTED'
   | 'NOT_CANCELLABLE'
+  | 'COMPLETED_BEFORE_CANCEL'
+  | 'FAILED_TO_CANCEL'
   | 'UNKNOWN';
 
 export type EmergencyCancellationResult = {
@@ -126,6 +128,15 @@ export class EmergencyStopController {
     return this.snapshot();
   }
 
+  /** Participants may refine a requested cancellation; this cannot clear the latch. */
+  public recordCancellationResult(result: EmergencyCancellationResult): void {
+    if (!this.state.active) return;
+    const index = this.state.cancellations.findIndex(item => item.ownerId === result.ownerId && item.workId === result.workId);
+    if (index >= 0) this.state.cancellations[index] = { ...result, detail: bounded(redactSecrets(result.detail), 240) };
+    else this.state.cancellations.push({ ...result, detail: bounded(redactSecrets(result.detail), 240) });
+    this.persist();
+  }
+
   public allows(source: ActionSource, sideEffect: CapabilitySideEffect): boolean {
     if (!this.state.active) return true;
     return source === 'ui' && sideEffect === 'read';
@@ -180,6 +191,8 @@ function summarizeCancellations(items: EmergencyCancellationResult[]): Record<Em
     CANCELLED: 0,
     CANCELLATION_REQUESTED: 0,
     NOT_CANCELLABLE: 0,
+    COMPLETED_BEFORE_CANCEL: 0,
+    FAILED_TO_CANCEL: 0,
     UNKNOWN: 0,
   };
   for (const item of items) result[item.state] += 1;

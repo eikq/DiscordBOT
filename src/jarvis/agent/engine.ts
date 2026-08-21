@@ -18,6 +18,8 @@ import type {
 import { defaultPlanFor } from './plans';
 import { denyPermissionStep, markLeaseUsed, PermissionDeniedError, validatePermissionGrant, waitingPermissionStep } from './permission';
 import type { EmergencyStopController } from '../security/emergencyStop';
+import { createAbortReason, readAbortReason } from '../capabilities/cancellation';
+import type { CapabilityCancellationReason, CapabilityCancellationRecord } from '../capabilities/types';
 
 export { defaultPlanFor, planForObjective } from './plans';
 
@@ -162,19 +164,39 @@ export class WorkAgent {
     }
   }
 
-  public cancel(taskId: string): WorkTask {
+  public cancel(taskId: string, reason: CapabilityCancellationReason = 'OWNER_CANCEL'): WorkTask {
     const task = this.require(taskId);
+    if (isTerminalStatus(task.status)) return task;
     task.cancelRequested = true;
-    this.controllers.get(taskId)?.abort();
-    if (isTerminalStatus(task.status)) return this.store.save(task);
-    this.emit(task, 'TASK_CANCELLED', 'Cancellation requested', { visualState: 'IDLE' });
-    return this.finish(this.store.save(task), 'CANCELLED', 'cancelled', 'Task cancelled.');
+    const controller = this.controllers.get(taskId);
+    task.cancellation = {
+      support: controller ? 'cooperative' : 'not_supported',
+      state: controller ? 'CANCELLATION_REQUESTED' : 'CANCELLED',
+      reason,
+      requestedAt: new Date().toISOString(),
+      ...(controller ? {} : { completedAt: new Date().toISOString() }),
+      observedByHandler: false,
+      detail: controller
+        ? 'Cancellation reached the running capability path; handler acknowledgement is pending.'
+        : 'Task was cancelled before a typed capability was running.',
+    };
+    const saved = this.store.save(task);
+    this.events?.emit('ACTION_CANCEL_REQUESTED', task.cancellation.detail, {
+      taskId,
+      reason,
+      state: task.cancellation.state,
+    }, 'warn', { taskId });
+    if (controller) {
+      controller.abort(createAbortReason(reason));
+      return saved;
+    }
+    return this.finish(saved, 'CANCELLED', 'cancelled', 'Task cancelled before execution.');
   }
 
   public pause(taskId: string): WorkTask {
     const task = this.require(taskId);
     if (isTerminalStatus(task.status)) return task;
-    this.controllers.get(taskId)?.abort();
+    this.controllers.get(taskId)?.abort(createAbortReason('OWNER_CANCEL'));
     return this.store.setStatus(taskId, 'PAUSED');
   }
 
@@ -246,7 +268,7 @@ export class WorkAgent {
     this.ownerTokens.clear();
     return this.store.active().map(task => {
       const wasRunning = this.controllers.has(task.id);
-      this.cancel(task.id);
+      this.cancel(task.id, 'EMERGENCY_STOP');
       return {
         ownerId: 'work-agent',
         workId: task.id,
@@ -286,20 +308,59 @@ export class WorkAgent {
       result = await this.invoke(task, step, signal);
     } catch (error) {
       if (signal.aborted || this.require(task.id).cancelRequested || isTerminalStatus(this.require(task.id).status)) {
-        return;
+        result = {
+          ok: false,
+          summary: 'The running step ended after cancellation, without a typed handler acknowledgement.',
+          errorCode: 'CANCELLED',
+          cancellation: cancellationAfterInvocation(undefined, signal, false),
+        };
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        result = {
+          ok: false,
+          summary: message,
+          errorCode: classifyFailure({ message, reasonCode: (error as { reasonCode?: string }).reasonCode }),
+        };
       }
-      const message = error instanceof Error ? error.message : String(error);
-      result = {
-        ok: false,
-        summary: message,
-        errorCode: classifyFailure({ message, reasonCode: (error as { reasonCode?: string }).reasonCode }),
-      };
     }
 
     const latest = this.require(task.id);
-    if (latest.cancelRequested || isTerminalStatus(latest.status) || signal.aborted) {
+    if (isTerminalStatus(latest.status)) return;
+    if ((latest.cancelRequested || signal.aborted) && latest.status !== 'PAUSED') {
+      const cancellation = cancellationAfterInvocation(result.cancellation, signal, result.ok);
+      step.preflight = result.preflight;
+      step.verification = result.verification;
+      step.rollback = result.rollback;
+      step.cancellation = cancellation;
+      step.status = cancellation.state === 'COMPLETED_BEFORE_CANCEL' ? 'done' : 'cancelled';
+      step.resultSummary = cancellation.detail;
+      const cancelledTask: WorkTask = {
+        ...latest,
+        plan: latest.plan.map(item => item.id === step.id ? step : item),
+        cancellation,
+        ...(result.rollback ? {
+          rollback: result.rollback,
+          rollbackInfo: `${result.rollback.state}: ${result.rollback.strategy}`,
+        } : {}),
+      };
+      this.store.save(cancelledTask);
+      this.events?.emit(
+        cancellation.state === 'CANCELLED' ? 'ACTION_CANCELLED' : 'ACTION_CANCEL_FAILED',
+        cancellation.detail,
+        { taskId: task.id, stepId: step.id, state: cancellation.state, reason: cancellation.reason },
+        cancellation.state === 'CANCELLED' ? 'warn' : 'error',
+        { taskId: task.id },
+      );
+      this.emergency?.recordCancellationResult({
+        ownerId: 'work-agent',
+        workId: task.id,
+        state: emergencyStateForCancellation(cancellation.state),
+        detail: cancellation.detail,
+      });
+      this.finish(cancelledTask, 'CANCELLED', 'cancelled', cancellation.detail);
       return;
     }
+    if (signal.aborted) return;
     task.status = latest.status;
     task.cancelRequested = latest.cancelRequested;
     task.retriesUsed = latest.retriesUsed;
@@ -308,6 +369,7 @@ export class WorkAgent {
     step.preflight = result.preflight;
     step.verification = result.verification;
     step.rollback = result.rollback;
+    step.cancellation = result.cancellation;
     if (result.rollback) {
       task.rollback = result.rollback;
       task.rollbackInfo = `${result.rollback.state}: ${result.rollback.strategy}`;
@@ -509,4 +571,34 @@ async function defaultInvoker(task: WorkTask, step: PlanStep, signal: AbortSigna
 
 function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
+}
+
+function cancellationAfterInvocation(
+  record: CapabilityCancellationRecord | undefined,
+  signal: AbortSignal,
+  completedSuccessfully: boolean,
+): CapabilityCancellationRecord {
+  if (record) return record;
+  const reason = readAbortReason(signal) ?? createAbortReason('OWNER_CANCEL');
+  return {
+    support: 'not_supported',
+    state: completedSuccessfully ? 'COMPLETED_BEFORE_CANCEL' : 'FAILED_TO_CANCEL',
+    reason: reason.reason,
+    requestedAt: reason.requestedAt,
+    completedAt: new Date().toISOString(),
+    observedByHandler: false,
+    detail: completedSuccessfully
+      ? 'The step completed after cancellation was requested; no further task step will run.'
+      : 'The running step ended without a handler cancellation acknowledgement.',
+  };
+}
+
+function emergencyStateForCancellation(
+  state: CapabilityCancellationRecord['state'],
+): import('../security/emergencyStop').EmergencyCancellationState {
+  if (state === 'CANCELLED') return 'CANCELLED';
+  if (state === 'COMPLETED_BEFORE_CANCEL') return 'COMPLETED_BEFORE_CANCEL';
+  if (state === 'FAILED_TO_CANCEL') return 'FAILED_TO_CANCEL';
+  if (state === 'NOT_CANCELLABLE') return 'NOT_CANCELLABLE';
+  return 'CANCELLATION_REQUESTED';
 }

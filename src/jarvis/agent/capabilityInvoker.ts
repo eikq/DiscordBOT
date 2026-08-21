@@ -108,6 +108,7 @@ async function invokeThroughHost(
     source: 'system',
     sessionId: options.sessionId || task.id,
     requestId: `${task.id}:${step.id}`,
+    signal,
     ...(confirmation ? { confirmation } : {}),
   });
   return mapCapabilityResult(result);
@@ -156,6 +157,7 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
   const preflight = actionPreflight(result.structured?.preflight);
   const verification = verificationRecord(result.structured?.verification);
   const rollback = rollbackContract(result.structured?.rollback);
+  const cancellation = cancellationRecord(result.structured?.cancellation);
 
   if (result.status === 'confirmation_required') {
     const structured = result.structured ?? {};
@@ -182,6 +184,7 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
           },
       confirmToken: typeof structured.confirmToken === 'string' ? structured.confirmToken : undefined,
       ...(preflight ? { preflight } : {}),
+      ...(cancellation ? { cancellation } : {}),
     };
   }
   if (result.status === 'rejected') {
@@ -193,6 +196,7 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
       ...(preflight ? { preflight } : {}),
       ...(verification ? { verification } : {}),
       ...(rollback ? { rollback } : {}),
+      ...(cancellation ? { cancellation } : {}),
     };
   }
   if (result.status === 'unavailable' || result.status === 'timeout') {
@@ -204,6 +208,7 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
       ...(preflight ? { preflight } : {}),
       ...(verification ? { verification } : {}),
       ...(rollback ? { rollback } : {}),
+      ...(cancellation ? { cancellation } : {}),
     };
   }
   if (result.status !== 'ok') {
@@ -215,6 +220,7 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
       ...(preflight ? { preflight } : {}),
       ...(verification ? { verification } : {}),
       ...(rollback ? { rollback } : {}),
+      ...(cancellation ? { cancellation } : {}),
     };
   }
   return {
@@ -225,6 +231,7 @@ function mapCapabilityResult(result: CapabilityResult): WorkStepResult {
     ...(preflight ? { preflight } : {}),
     ...(verification ? { verification } : {}),
     ...(rollback ? { rollback } : {}),
+    ...(cancellation ? { cancellation } : {}),
   };
 }
 
@@ -241,6 +248,15 @@ function verificationRecord(value: unknown): WorkStepResult['verification'] {
 function rollbackContract(value: unknown): WorkStepResult['rollback'] {
   if (!isRecord(value) || typeof value.state !== 'string' || typeof value.strategy !== 'string') return undefined;
   return value as WorkStepResult['rollback'];
+}
+
+function cancellationRecord(value: unknown): WorkStepResult['cancellation'] {
+  if (!isRecord(value)
+    || typeof value.state !== 'string'
+    || typeof value.support !== 'string'
+    || typeof value.observedByHandler !== 'boolean'
+    || typeof value.detail !== 'string') return undefined;
+  return value as WorkStepResult['cancellation'];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

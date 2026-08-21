@@ -1,4 +1,5 @@
 import type {
+  CapabilityCancellationRecord,
   CapabilityAvailabilityState,
   CapabilityDescriptor,
   CapabilityHandler,
@@ -6,6 +7,7 @@ import type {
   CapabilityInvokeRequest,
   CapabilityResult,
 } from '../types';
+import { createAbortReason, readAbortReason } from '../cancellation';
 import { ActionAuditLog } from './ActionAuditLog';
 import { applicationById, projectById } from './allowlists';
 import { CONFIRMATION_TTL_MS, isGatedCapabilityId, isReadOnlyGatedCapability } from './constants';
@@ -27,9 +29,10 @@ import { isPrivilegeDenied, type PrivilegeLeaseStore } from '../../security/priv
 import type { JarvisEventBus } from '../../security/eventBus';
 import { DestructiveActionCircuitBreaker } from '../../safety/circuitBreaker';
 import { rollbackForResult, verificationForResult } from '../../safety/lifecycle';
-import type { OperationalRiskLevel } from '../../safety/types';
+import type { OperationalRiskLevel, VerificationRecord } from '../../safety/types';
 import type { FailureContainment } from '../../safety/failureContainment';
 import type { EmergencyStopController } from '../../security/emergencyStop';
+import type { VerificationRegistry } from '../../safety/verificationRegistry';
 
 export type ActionGateOptions = {
   policy?: PermissionPolicy | null;
@@ -43,6 +46,7 @@ export type ActionGateOptions = {
   circuitBreaker?: DestructiveActionCircuitBreaker;
   emergency?: EmergencyStopController;
   containment?: FailureContainment;
+  verification?: VerificationRegistry;
 };
 
 export interface ActionHost extends CapabilityHost {
@@ -73,7 +77,12 @@ class ActionGate implements ActionHost {
   private readonly confirmations: ConfirmationStore;
   private readonly circuitBreaker: DestructiveActionCircuitBreaker;
   private readonly completed = new Map<string, CapabilityResult>();
-  private readonly inflight = new Map<string, Promise<CapabilityResult>>();
+  private readonly inflight = new Map<string, {
+    work: Promise<CapabilityResult>;
+    controller: AbortController;
+    capabilityId: string;
+    cancellable: boolean;
+  }>();
 
   constructor(
     private readonly inner: CapabilityHost,
@@ -92,12 +101,19 @@ class ActionGate implements ActionHost {
           state: 'CANCELLED' as const,
           detail: 'Pending single-use confirmation was invalidated.',
         })),
-        ...[...this.inflight.keys()].map(key => ({
-          ownerId: 'capability-host',
-          workId: key.slice(0, 180),
-          state: 'NOT_CANCELLABLE' as const,
-          detail: 'The typed handler API has no cancellation signal; completion will be recorded, but no new action may start.',
-        })),
+        ...[...this.inflight.entries()].map(([key, active]) => {
+          if (active.cancellable && !active.controller.signal.aborted) {
+            active.controller.abort(createAbortReason('EMERGENCY_STOP', this.now()));
+          }
+          return {
+            ownerId: 'capability-host',
+            workId: key.slice(0, 180),
+            state: active.cancellable ? 'CANCELLATION_REQUESTED' as const : 'NOT_CANCELLABLE' as const,
+            detail: active.cancellable
+              ? 'Emergency Stop reached the cooperative typed handler; acknowledgement will be recorded on completion.'
+              : 'The running handler does not support cooperative cancellation; no new action may start.',
+          };
+        }),
       ],
     });
   }
@@ -364,7 +380,11 @@ class ActionGate implements ActionHost {
     const cached = this.completed.get(key);
     if (cached) return cached;
     const existing = this.inflight.get(key);
-    if (existing) return existing;
+    if (existing) return existing.work;
+
+    const descriptor = this.inner.lookup(proposal.capabilityId);
+    const controller = new AbortController();
+    const removeForwarder = forwardAbort(request.signal, controller);
 
     const startedAt = new Date(this.now()).toISOString();
     const work = (async () => {
@@ -403,11 +423,35 @@ class ActionGate implements ActionHost {
         id: proposal.capabilityId,
         input,
         timeoutMs: request.timeoutMs,
+        signal: controller.signal,
+        requestId: request.requestId,
+        sessionId: request.sessionId,
+        source: request.source,
       });
       const completedAt = new Date(this.now()).toISOString();
-      const descriptor = this.inner.lookup(proposal.capabilityId);
+      let registeredVerification: VerificationRecord | undefined;
+      if (descriptor?.verification?.mode === 'registered_postcondition' && descriptor.verification.verifierId) {
+        try {
+          registeredVerification = await this.options.verification?.verify(
+            descriptor.verification.verifierId,
+            descriptor,
+            result,
+            this.now(),
+          );
+        } catch (error) {
+          registeredVerification = {
+            state: 'FAILED_VERIFICATION',
+            strategy: descriptor.verification.description,
+            requested: descriptor.description,
+            executed: 'The deterministic verifier failed to complete.',
+            evidence: [],
+            failedChecks: [error instanceof Error ? error.message.slice(0, 240) : 'Verifier failed.'],
+            verifiedAt: new Date(this.now()).toISOString(),
+          };
+        }
+      }
       const verification = descriptor
-        ? verificationForResult(descriptor, result, this.now())
+        ? registeredVerification ?? verificationForResult(descriptor, result, this.now())
         : undefined;
       const rollback = descriptor
         ? rollbackForResult(descriptor, result)
@@ -434,6 +478,27 @@ class ActionGate implements ActionHost {
         proposalId: proposal.proposalId,
         status: decorated.status,
       }, decorated.status === 'ok' ? 'info' : 'warn');
+      const cancellation = cancellationFrom(decorated.structured.cancellation);
+      if (cancellation) {
+        this.options.events?.emit(
+          cancellation.state === 'CANCELLED' ? 'ACTION_CANCELLED' : 'ACTION_CANCEL_FAILED',
+          cancellation.detail,
+          {
+            capabilityId: proposal.capabilityId,
+            proposalId: proposal.proposalId,
+            state: cancellation.state,
+            reason: cancellation.reason,
+            observedByHandler: cancellation.observedByHandler,
+          },
+          cancellation.state === 'CANCELLED' ? 'warn' : 'error',
+        );
+        this.options.emergency?.recordCancellationResult({
+          ownerId: 'capability-host',
+          workId: key.slice(0, 180),
+          state: emergencyStateFor(cancellation.state),
+          detail: cancellation.detail,
+        });
+      }
       this.options.events?.emit('VERIFICATION_COMPLETED', 'Post-action verification lifecycle completed.', {
         capabilityId: proposal.capabilityId,
         proposalId: proposal.proposalId,
@@ -475,13 +540,19 @@ class ActionGate implements ActionHost {
       return decorated;
     })();
 
-    this.inflight.set(key, work);
+    this.inflight.set(key, {
+      work,
+      controller,
+      capabilityId: proposal.capabilityId,
+      cancellable: descriptor?.cancellation?.support === 'cooperative',
+    });
     try {
       const result = await work;
       this.completed.set(key, result);
       return result;
     } finally {
       this.inflight.delete(key);
+      removeForwarder();
     }
   }
 
@@ -661,6 +732,29 @@ class ActionGate implements ActionHost {
   }
 }
 
+function forwardAbort(source: AbortSignal | undefined, target: AbortController): () => void {
+  if (!source) return () => undefined;
+  const forward = () => {
+    if (!target.signal.aborted) target.abort(readAbortReason(source) ?? createAbortReason('OWNER_CANCEL'));
+  };
+  if (source.aborted) forward();
+  else source.addEventListener('abort', forward, { once: true });
+  return () => source.removeEventListener('abort', forward);
+}
+
+function cancellationFrom(value: unknown): CapabilityCancellationRecord | undefined {
+  if (!isRecord(value) || typeof value.state !== 'string' || typeof value.detail !== 'string') return undefined;
+  return value as CapabilityCancellationRecord;
+}
+
+function emergencyStateFor(state: CapabilityCancellationRecord['state']): import('../../security/emergencyStop').EmergencyCancellationState {
+  if (state === 'CANCELLED') return 'CANCELLED';
+  if (state === 'COMPLETED_BEFORE_CANCEL') return 'COMPLETED_BEFORE_CANCEL';
+  if (state === 'FAILED_TO_CANCEL') return 'FAILED_TO_CANCEL';
+  if (state === 'NOT_CANCELLABLE') return 'NOT_CANCELLABLE';
+  return 'CANCELLATION_REQUESTED';
+}
+
 function sourceOf(request: CapabilityInvokeRequest): ActionSource {
   return request.source ?? 'text';
 }
@@ -765,6 +859,22 @@ function describeProposal(
       risk: 'READ_ONLY',
     };
   }
+  if (capabilityId === 'operator.sandbox.writeConfig') {
+    return {
+      displayName: 'Recovery sandbox change',
+      summary: 'Write one disposable Jarvis-owned sandbox value',
+      target: 'Jarvis recovery sandbox',
+      risk: 'CONFIRM_REQUIRED',
+    };
+  }
+  if (capabilityId === 'operator.sandbox.rollbackConfig') {
+    return {
+      displayName: 'Recovery sandbox rollback',
+      summary: 'Restore one recorded sandbox checkpoint',
+      target: 'Jarvis recovery sandbox',
+      risk: 'CONFIRM_REQUIRED',
+    };
+  }
   return { displayName: 'System status', summary: 'Read system status', target: 'system', risk: 'READ_ONLY' };
 }
 
@@ -794,6 +904,7 @@ function targetClassOf(proposal: ActionProposal, lists: DesktopAllowlists): stri
   if (proposal.capabilityId.startsWith('workspace.')) {
     return `workspace:${String(proposal.normalizedArguments.documentId || proposal.normalizedArguments.workspaceId || 'registry')}`;
   }
+  if (proposal.capabilityId.startsWith('operator.sandbox.')) return 'jarvis:recovery-sandbox';
   return 'system:status';
 }
 

@@ -1,5 +1,6 @@
 import type { JarvisErrorCode } from '../ops/types';
 import type { ActionPreflight, RollbackContract, VerificationRecord, VerificationState } from '../safety/types';
+import type { CapabilityCancellationRecord } from '../capabilities/types';
 
 export const WORK_TASK_STATUSES = [
   'RECEIVED',
@@ -106,6 +107,7 @@ export type PlanStep = {
   preflight?: ActionPreflight;
   verification?: VerificationRecord;
   rollback?: RollbackContract;
+  cancellation?: CapabilityCancellationRecord;
 };
 
 export type WorkTaskOutcome = 'success' | 'failure' | 'cancelled' | 'blocked' | 'degraded';
@@ -135,6 +137,7 @@ export type WorkTask = {
   outcome?: WorkTaskOutcome;
   simulated?: boolean;
   cancelRequested?: boolean;
+  cancellation?: CapabilityCancellationRecord;
 };
 
 export type WorkStepResult = {
@@ -151,6 +154,7 @@ export type WorkStepResult = {
   preflight?: ActionPreflight;
   verification?: VerificationRecord;
   rollback?: RollbackContract;
+  cancellation?: CapabilityCancellationRecord;
 };
 
 export type SynthesizedOutcome =

@@ -27,11 +27,32 @@ export type CapabilityAvailability =
 
 export type CapabilityInvokeStatus =
   | 'ok'
+  | 'cancelled'
   | 'unavailable'
   | 'timeout'
   | 'error'
   | 'rejected'
   | 'confirmation_required';
+
+export type CapabilityCancellationSupport = 'cooperative' | 'not_supported';
+export type CapabilityCancellationReason = 'OWNER_CANCEL' | 'EMERGENCY_STOP' | 'TIMEOUT';
+export type CapabilityCancellationState =
+  | 'CANCELLABLE'
+  | 'CANCELLATION_REQUESTED'
+  | 'CANCELLED'
+  | 'COMPLETED_BEFORE_CANCEL'
+  | 'NOT_CANCELLABLE'
+  | 'FAILED_TO_CANCEL';
+
+export type CapabilityCancellationRecord = {
+  support: CapabilityCancellationSupport;
+  state: CapabilityCancellationState;
+  reason?: CapabilityCancellationReason;
+  requestedAt?: string;
+  completedAt?: string;
+  observedByHandler: boolean;
+  detail: string;
+};
 
 export interface CapabilityDescriptor {
   id: string;
@@ -47,6 +68,8 @@ export interface CapabilityDescriptor {
   effects?: ActionEffectTemplate[];
   verification?: CapabilityVerificationSpec;
   rollback?: CapabilityRollbackSpec;
+  /** Cooperative handlers must observe the invocation AbortSignal and acknowledge cancellation. */
+  cancellation?: { support: CapabilityCancellationSupport };
 }
 
 export interface CapabilityAvailabilityState {
@@ -67,6 +90,8 @@ export interface CapabilityInvokeRequest {
   source?: 'text' | 'voice' | 'ui' | 'system';
   sessionId?: string;
   requestId?: string;
+  /** Runtime-owned cancellation channel. This is never derived from model output. */
+  signal?: AbortSignal;
 }
 
 export interface CapabilityResult {
@@ -83,8 +108,15 @@ export interface CapabilityResult {
 export interface CapabilityHandler {
   descriptor(): CapabilityDescriptor;
   availability(): Promise<CapabilityAvailabilityState>;
-  invoke(input: Record<string, unknown>): Promise<CapabilityResult>;
+  invoke(input: Record<string, unknown>, context?: CapabilityInvocationContext): Promise<CapabilityResult>;
 }
+
+export type CapabilityInvocationContext = {
+  signal: AbortSignal;
+  requestId?: string;
+  sessionId?: string;
+  source?: CapabilityInvokeRequest['source'];
+};
 
 export interface CapabilityHost {
   register(handler: CapabilityHandler): void;
