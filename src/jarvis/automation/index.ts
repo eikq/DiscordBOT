@@ -21,7 +21,7 @@ export {
   isReminderReadCapability,
 } from './constants';
 export { extractReminderTitle, parseScheduleText, reminderTextAsData } from './parseSchedule';
-export { registerReminderCapabilities } from './reminderCapabilities';
+export { REMINDER_CREATE_VERIFIER_ID, createReminderRecordVerifier, registerReminderCapabilities } from './reminderCapabilities';
 export { defaultReminderAuditPath, ReminderAuditLog, sanitizeReminderAudit } from './reminderAudit';
 export { inferReminderIntent } from './reminderIntent';
 export {

@@ -93,6 +93,8 @@ import { routeJarvisRequest, shouldUseWorkAgent, type RouteDecision } from '../i
 import { synthesizeTaskResponse } from '../agent/synthesize';
 import type { SynthesizedTaskResponse } from '../agent/types';
 import type { AffectStyle } from '../evolution/affect';
+import type { PendingGoalContinuation, PendingGoalRecord } from '../goals';
+import type { WorkTask } from '../agent/types';
 
 export type JarvisLabAskInput = {
   text: string;
@@ -108,6 +110,11 @@ export type JarvisLabAskInput = {
   }>;
   speak?: boolean;
   actionSource?: 'text' | 'voice' | 'ui' | 'system';
+  continuation?: {
+    pendingGoalId?: string;
+    idempotencyKey?: string;
+    explicitSelection?: boolean;
+  };
 };
 
 export type JarvisLabPresentationStatus = {
@@ -632,10 +639,19 @@ export class JarvisLabRuntime {
     taskId?: string;
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
+    pendingGoal?: PendingGoalRecord;
   }> {
     const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
-    if (knowledgeKind) return this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
+    const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    if (knowledgeKind && !this.workCenter()?.pendingGoals.store.waiting(sessionId).length) {
+      return this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
+    }
     const prepared = await this.prepareAsk(input);
+    if (prepared.continuedTask) {
+      return this.finishWorkTask(input, prepared.sessionId, {
+        route: 'CAPABILITY', socialAction: 'SPEAK', agentic: true, reason: 'pending_goal_continuation', confidence: 1,
+      }, prepared.continuedTask, prepared.pendingContinuation?.pendingGoal);
+    }
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
       return this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
@@ -656,6 +672,7 @@ export class JarvisLabRuntime {
       intent: prepared.intent,
       route,
       affectStyle: this.workCenter()?.affect.style(),
+      ...(prepared.pendingGoal ? { pendingGoal: prepared.pendingGoal } : {}),
       ...(speech ? { speech } : {}),
     };
   }
@@ -671,15 +688,25 @@ export class JarvisLabRuntime {
     taskId?: string;
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
+    pendingGoal?: PendingGoalRecord;
   }> {
     const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
-    if (knowledgeKind) {
+    const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    if (knowledgeKind && !this.workCenter()?.pendingGoals.store.waiting(sessionId).length) {
       const output = await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
       emit({ type: 'final', payload: output });
       if (output.speech) emit({ type: 'speech', payload: output.speech });
       return output;
     }
     const prepared = await this.prepareAsk(input);
+    if (prepared.continuedTask) {
+      const output = await this.finishWorkTask(input, prepared.sessionId, {
+        route: 'CAPABILITY', socialAction: 'SPEAK', agentic: true, reason: 'pending_goal_continuation', confidence: 1,
+      }, prepared.continuedTask, prepared.pendingContinuation?.pendingGoal);
+      emit({ type: 'final', payload: output });
+      if (output.speech) emit({ type: 'speech', payload: output.speech });
+      return output;
+    }
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
       const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
@@ -703,6 +730,7 @@ export class JarvisLabRuntime {
       intent: prepared.intent,
       route,
       affectStyle: this.workCenter()?.affect.style(),
+      ...(prepared.pendingGoal ? { pendingGoal: prepared.pendingGoal } : {}),
     };
     emit({ type: 'final', payload: finalPayload });
     const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
@@ -897,6 +925,7 @@ export class JarvisLabRuntime {
     sessionId: string,
     route: RouteDecision,
     task: Awaited<ReturnType<CommandCenterRuntime['runObjective']>>,
+    pendingGoal?: PendingGoalRecord,
   ) {
     const synthesis = synthesizeTaskResponse(task);
     const request = createJarvisRequest({ text: task.objective, sessionId });
@@ -964,6 +993,7 @@ export class JarvisLabRuntime {
           preflight: waiting.pendingConfirmation.preflight || waiting.preflight,
         },
       } : {}),
+      ...(pendingGoal ? { pendingGoal } : {}),
     };
   }
 
@@ -985,6 +1015,9 @@ export class JarvisLabRuntime {
     turn: Parameters<typeof runStandaloneTextTurn>[0];
     resolution: IntentResolution;
     intent: { stage: string; detail: string; kind: string; capabilityId?: string };
+    continuedTask?: WorkTask;
+    pendingContinuation?: PendingGoalContinuation;
+    pendingGoal?: PendingGoalRecord;
   }> {
     const text = String(input.text || '').trim()
       || (input.capabilityCalls?.[0]?.id ?? '');
@@ -999,6 +1032,55 @@ export class JarvisLabRuntime {
     const explicitCapabilities = Array.isArray(input.capabilities)
       ? input.capabilities.filter(id => typeof id === 'string')
       : [];
+    const center = this.workCenter();
+    const shouldAttemptContinuation = Boolean(input.continuation?.pendingGoalId)
+      || Boolean(center?.pendingGoals.store.waiting(sessionId).length);
+    if (center && shouldAttemptContinuation && !input.capabilityCalls?.length && explicitCapabilities.length === 0) {
+      const continued = await center.continuePendingGoal({
+        sessionId,
+        ownerReply: text,
+        pendingGoalId: input.continuation?.pendingGoalId,
+        idempotencyKey: input.continuation?.idempotencyKey,
+        explicitSelection: input.continuation?.explicitSelection,
+      });
+      if (continued.continuation.status !== 'NO_PENDING_GOAL') {
+        if (continued.task && ['READY_TO_RESUME', 'ALREADY_RESUMING', 'ALREADY_RESOLVED'].includes(continued.continuation.status)) {
+          return {
+            sessionId,
+            continuedTask: continued.task,
+            pendingContinuation: continued.continuation,
+            resolution: continued.continuation.resolution
+              ? intentResolutionFromContinuedGoal(continued.continuation.resolution, continued.continuation.pendingGoal)
+              : pendingIntentResolution(continued.continuation),
+            intent: { stage: 'work_agent', detail: continued.continuation.reason, kind: 'CAPABILITY' },
+            turn: {
+              text,
+              sessionId,
+              presentation,
+              capabilities: [],
+              actionOnly: true,
+            },
+          };
+        }
+        const resolution = pendingIntentResolution(continued.continuation);
+        return {
+          sessionId,
+          pendingContinuation: continued.continuation,
+          resolution,
+          intent: { stage: 'clarification', detail: continued.continuation.reason, kind: resolution.kind },
+          turn: {
+            text,
+            sessionId,
+            presentation,
+            capabilities: [],
+            actionOnly: true,
+            presetActionResults: [resolution.kind === 'UNSUPPORTED'
+              ? unsupportedActionResult(resolution)
+              : clarificationActionResult(resolution)],
+          },
+        };
+      }
+    }
     const prepared = await resolveLabActionTurn(text, {
       catalogIds: this.capabilityIds,
       applicationIds: this.applicationIds,
@@ -1017,6 +1099,20 @@ export class JarvisLabRuntime {
         : undefined,
       capabilityHost: this.capabilityHost,
     });
+    let pendingGoal: PendingGoalRecord | undefined;
+    if (center && prepared.resolution.goal?.status === 'NEEDS_INPUT') {
+      const current = center.pendingGoals.store.waiting(sessionId).find(item => (
+        item.goalId === prepared.resolution.goal?.goalId && item.originalOwnerIntent === text
+      ));
+      const pending = current ?? center.beginPendingGoal({
+        objective: text,
+        sessionId,
+        resolution: prepared.resolution.goal,
+      }).pendingGoal;
+      prepared.resolution.pendingGoalId = pending.pendingGoalId;
+      prepared.resolution.pendingGoalExpiresAt = pending.expiresAt;
+      pendingGoal = pending;
+    }
     const stage = intentStageOf(prepared.resolution);
     return {
       sessionId,
@@ -1027,6 +1123,7 @@ export class JarvisLabRuntime {
         kind: prepared.resolution.kind,
         capabilityId: prepared.resolution.capabilityId,
       },
+      ...(pendingGoal ? { pendingGoal } : {}),
       turn: {
         text,
         sessionId,
@@ -1166,6 +1263,40 @@ function turnOverride(input: JarvisLabAskInput): PresentationOverride | undefine
   }
   if (input.voiceProfileId) override.voiceProfileId = input.voiceProfileId;
   return Object.keys(override).length ? override : undefined;
+}
+
+function pendingIntentResolution(continuation: PendingGoalContinuation): IntentResolution {
+  const unsupported = continuation.status === 'BLOCKED' || continuation.status === 'EXPIRED';
+  return {
+    kind: unsupported ? 'UNSUPPORTED' : 'CLARIFICATION',
+    confidence: 'HIGH',
+    reasonCode: `PENDING_GOAL_${continuation.status}`,
+    userMessage: continuation.question || continuation.reason,
+    consumed: true,
+    source: 'context',
+    actionClass: unsupported ? 'INFORMATION' : 'AMBIGUOUS',
+    goal: continuation.resolution,
+    pendingGoalId: continuation.pendingGoal?.pendingGoalId,
+    pendingGoalExpiresAt: continuation.pendingGoal?.expiresAt,
+  };
+}
+
+function intentResolutionFromContinuedGoal(goal: NonNullable<PendingGoalContinuation['resolution']>, pending?: PendingGoalRecord): IntentResolution {
+  const selected = goal.routes.find(route => route.id === goal.selectedRouteId);
+  const first = selected?.steps[0];
+  return {
+    kind: first ? 'CAPABILITY' : 'UNSUPPORTED',
+    capabilityId: first?.capabilityId,
+    arguments: first?.input,
+    confidence: 'HIGH',
+    reasonCode: 'PENDING_GOAL_RESUMED',
+    consumed: true,
+    source: 'context',
+    actionClass: selected?.risk === 'READ_ONLY' ? 'INFORMATION' : 'ACTIONABLE',
+    goal,
+    pendingGoalId: pending?.pendingGoalId,
+    pendingGoalExpiresAt: pending?.expiresAt,
+  };
 }
 
 async function resolveLabActionTurn(text: string, input: {

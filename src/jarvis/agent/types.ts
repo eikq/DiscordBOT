@@ -14,12 +14,14 @@ export const WORK_TASK_STATUSES = [
   'ADAPTING',
   'VERIFYING',
   'COMPLETED',
+  'WAITING_INPUT',
   'WAITING_PERMISSION',
   'BLOCKED',
   'FAILED',
   'CANCELLED',
   'PAUSED',
   'DEGRADED',
+  'EXPIRED',
 ] as const;
 
 export type WorkTaskStatus = (typeof WORK_TASK_STATUSES)[number];
@@ -157,6 +159,13 @@ export type WorkTask = {
   };
   goalResolution?: GoalResolution;
   goalOutcome?: GoalOutcomeEvidence;
+  waitingInput?: {
+    pendingGoalId: string;
+    question: string;
+    missingFields: string[];
+    expiresAt: string;
+    state: 'WAITING_OWNER_INPUT' | 'READY_TO_RESUME' | 'EXPIRED' | 'CANCELLED';
+  };
 };
 
 export type WorkStepResult = {

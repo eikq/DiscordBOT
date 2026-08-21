@@ -49,8 +49,17 @@ import type { JarvisVisualState } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
 import type { JarvisOperationEvent } from '../security/types';
-import { resolveOwnerGoal, type GoalResolution } from '../goals';
+import {
+  PendingGoalCoordinator,
+  PendingGoalStore,
+  resolveOwnerGoal,
+  type ContinuePendingGoalInput,
+  type GoalResolution,
+  type PendingGoalContinuation,
+  type PendingGoalRecord,
+} from '../goals';
 import { sharedTrustedOperatorRuntime, type TrustedOperatorRuntime } from '../security/trustedOperatorRuntime';
+import { redactSecrets } from '../security/redaction';
 import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
 
@@ -101,6 +110,8 @@ export type CommandCenterOptions = {
   persistRoot?: string;
   workDbPath?: string;
   evolutionDbPath?: string;
+  pendingGoalDbPath?: string;
+  pendingGoalTtlMs?: number;
   memoryStore?: JarvisMemoryStore;
   operator?: TrustedOperatorRuntime;
 };
@@ -127,8 +138,10 @@ export class CommandCenterRuntime {
   public readonly night: NightCycle;
   public readonly reflectionLedger: ReflectionLedger;
   public readonly operator: TrustedOperatorRuntime;
+  public readonly pendingGoals: PendingGoalCoordinator;
   public readonly persistence?: EvolutionPersistence;
   private host?: CapabilityHost;
+  private readonly pendingResumeClaims = new Set<string>();
   private vision: VisualContext | null = null;
   private notifications: MonitorSignal[] = [];
   private memoryStore?: JarvisMemoryStore;
@@ -152,6 +165,7 @@ export class CommandCenterRuntime {
     const persistRoot = options.persistRoot;
     const evolutionDb = options.evolutionDbPath ?? (persistRoot ? path.join(persistRoot, 'evolution.db') : undefined);
     const workDb = options.workDbPath ?? (persistRoot ? path.join(persistRoot, 'work.db') : undefined);
+    const pendingGoalDb = options.pendingGoalDbPath ?? (persistRoot ? path.join(persistRoot, 'pending-goals.db') : undefined);
     this.persistence = evolutionDb ? new EvolutionPersistence(evolutionDb) : undefined;
     const now = options.now ?? (() => Date.now());
     this.experiences = new ExperienceStore(now, this.persistence?.experiences);
@@ -176,6 +190,12 @@ export class CommandCenterRuntime {
       emergency: this.operator.emergency,
       resolveGap: (task, step, result, attempted, maximum) => this.resolveWorkGap(task, step, result, attempted, maximum),
       onTerminal: task => this.recordTaskExperience(task),
+    });
+    this.pendingGoals = new PendingGoalCoordinator({
+      store: new PendingGoalStore({ now: options.now, ttlMs: options.pendingGoalTtlMs, dbPath: pendingGoalDb }),
+      host: () => this.host,
+      events: this.events,
+      now: options.now,
     });
     this.night = new NightCycle({
       experiences: this.experiences,
@@ -209,6 +229,7 @@ export class CommandCenterRuntime {
   }
 
   public snapshot(): CommandCenterSnapshot {
+    this.refreshPendingGoalExpirations();
     const tasks = this.agent.store.list();
     const active = this.agent.store.active()[0] ?? null;
     const experiences = this.experiences.list();
@@ -316,6 +337,127 @@ export class CommandCenterRuntime {
     const task = this.agent.receive(objective, plan, { simulated, goalResolution: executableGoal });
     this.lastRequest = { route, objective, taskId: task.id };
     return this.agent.run(task.id);
+  }
+
+  public beginPendingGoal(input: {
+    objective: string;
+    sessionId: string;
+    resolution: GoalResolution;
+    simulated?: boolean;
+  }): { pendingGoal: PendingGoalRecord; task: WorkTask } {
+    const safeObjective = redactSecrets(input.objective).slice(0, 1_000);
+    let pendingGoal = this.pendingGoals.create({
+      sessionId: input.sessionId,
+      ownerIntent: safeObjective,
+      resolution: input.resolution,
+    });
+    const task = this.agent.receiveWaitingInput({
+      objective: safeObjective,
+      pendingGoalId: pendingGoal.pendingGoalId,
+      question: input.resolution.smallestOwnerQuestion || 'What information should I use?',
+      missingFields: input.resolution.missingInputs,
+      expiresAt: pendingGoal.expiresAt,
+      goalResolution: input.resolution,
+      simulated: input.simulated,
+    });
+    pendingGoal = this.pendingGoals.attachWorkTask(pendingGoal.pendingGoalId, task.id);
+    this.lastRequest = { route: routeJarvisRequest({ text: safeObjective }), objective: safeObjective, taskId: task.id };
+    return { pendingGoal, task };
+  }
+
+  public async continuePendingGoal(input: ContinuePendingGoalInput): Promise<{
+    continuation: PendingGoalContinuation;
+    task?: WorkTask;
+  }> {
+    this.refreshPendingGoalExpirations(input.sessionId);
+    const continuation = await this.pendingGoals.continue(input);
+    const record = continuation.pendingGoal;
+    const task = record?.workTaskId ? this.agent.store.get(record.workTaskId) : undefined;
+    if (!record || !task) return { continuation };
+    if (continuation.status === 'CANCELLED') {
+      return { continuation, task: this.agent.cancel(task.id) };
+    }
+    if (continuation.status === 'EXPIRED') {
+      return { continuation, task: this.agent.expireWaitingInput(task.id) };
+    }
+    if (continuation.status === 'REJECTED' && record.state === 'INVALIDATED') {
+      task.waitingInput = undefined;
+      task.status = 'BLOCKED';
+      task.errors = [...task.errors, {
+        at: new Date().toISOString(),
+        code: 'PLAN_INVALID',
+        message: 'Pending goal definition changed; current GoalCatalog resolution is required.',
+      }];
+      return { continuation, task: this.agent.store.save(task) };
+    }
+    if (continuation.status === 'STILL_WAITING' && continuation.resolution) {
+      return {
+        continuation,
+        task: this.agent.updateWaitingInput(task.id, {
+          question: continuation.question || 'One more declared input is required.',
+          missingFields: continuation.resolution.missingInputs,
+          expiresAt: record.expiresAt,
+          goalResolution: continuation.resolution,
+        }),
+      };
+    }
+    if (continuation.status === 'ALREADY_RESOLVED') {
+      return { continuation, task };
+    }
+    if (continuation.status === 'BLOCKED' && continuation.resolution) {
+      const snapshot = await this.selfKnowledgeSnapshot();
+      const capabilityIds = [...new Set(continuation.resolution.routes.flatMap(route => route.steps.map(step => step.capabilityId)))];
+      const graph = resolveCapabilityGoal({
+        id: `pending:${record.pendingGoalId}`,
+        title: record.originalOwnerIntent,
+        dependencies: capabilityIds.map(capabilityId => ({ capabilityId, relation: 'REQUIRED' as const })),
+      }, snapshot);
+      const gapResolution = await this.gapResolver.resolve({ objective: record.originalOwnerIntent, graph, snapshot });
+      task.gapResolution = gapResolution;
+      task.blockers = gapResolution.missing.map(item => ({ capabilityId: item.capabilityId, blocker: item.blocker, reason: item.reason }));
+      task.waitingInput = undefined;
+      task.status = 'BLOCKED';
+      const blocked = this.agent.store.save(task);
+      return { continuation: { ...continuation, gapResolution }, task: blocked };
+    }
+    const restartResume = continuation.status === 'ALREADY_RESUMING' && task.status === 'WAITING_INPUT';
+    if ((continuation.status !== 'READY_TO_RESUME' && !restartResume) || !continuation.resolution) return { continuation, task };
+    if (!this.operator.emergency.allows('system', 'write')) {
+      return {
+        continuation: {
+          ...continuation,
+          status: 'BLOCKED',
+          reason: 'Emergency Stop is active. The validated context remains non-authoritative and was not executed.',
+        },
+        task,
+      };
+    }
+    if (this.pendingResumeClaims.has(record.pendingGoalId)) return { continuation, task: this.agent.store.get(task.id) ?? task };
+    this.pendingResumeClaims.add(record.pendingGoalId);
+    try {
+      const plan = adaptPlanForFailures(
+        planForGoalResolution(record.originalOwnerIntent, continuation.resolution),
+        this.failures,
+        this.skills.retrieveTrusted(record.originalOwnerIntent),
+      );
+      this.pendingGoals.markResuming(record.pendingGoalId, task.id);
+      const resumed = await this.agent.resumeWaitingInput(task.id, plan, continuation.resolution);
+      this.pendingGoals.markResolved(record.pendingGoalId, resumed.id);
+      return { continuation: { ...continuation, pendingGoal: this.pendingGoals.store.get(record.pendingGoalId) }, task: resumed };
+    } finally {
+      this.pendingResumeClaims.delete(record.pendingGoalId);
+    }
+  }
+
+  public refreshPendingGoalExpirations(sessionId?: string): PendingGoalRecord[] {
+    const expired = sessionId
+      ? this.pendingGoals.expireForSession(sessionId)
+      : this.pendingGoals.expireAll();
+    for (const record of expired) {
+      if (!record.workTaskId) continue;
+      this.agent.expireWaitingInput(record.workTaskId);
+    }
+    return expired;
   }
 
   public async cctvGapPlan(): Promise<GapResolutionPlan> {

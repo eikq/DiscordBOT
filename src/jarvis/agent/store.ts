@@ -45,6 +45,7 @@ export class WorkTaskStore {
     permissionRequirements?: string[];
     maxGapReplans?: number;
     goalResolution?: GoalResolution;
+    waitingInput?: WorkTask['waitingInput'];
   }): WorkTask {
     const at = new Date(this.now()).toISOString();
     const task: WorkTask = {
@@ -63,6 +64,7 @@ export class WorkTaskStore {
       goalPursuit: { attempted: 0, maximum: Math.max(1, Math.min(input.maxGapReplans ?? 2, 4)) },
       simulated: input.simulated || undefined,
       ...(input.goalResolution ? { goalResolution: structuredClone(input.goalResolution) } : {}),
+      ...(input.waitingInput ? { waitingInput: structuredClone(input.waitingInput) } : {}),
     };
     this.tasks.set(task.id, task);
     this.write(task);
@@ -79,7 +81,7 @@ export class WorkTaskStore {
   }
 
   public active(): WorkTask[] {
-    return this.list().filter(task => !['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED'].includes(task.status));
+    return this.list().filter(task => !['COMPLETED', 'FAILED', 'CANCELLED', 'BLOCKED', 'EXPIRED'].includes(task.status));
   }
 
   public save(task: WorkTask): WorkTask {

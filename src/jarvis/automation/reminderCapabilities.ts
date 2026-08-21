@@ -22,6 +22,9 @@ import type { ReminderStore } from './reminderStore';
 import { computeNextRunAt, isRecurring, scheduleLabel, validateSchedule } from './schedule';
 import type { ReminderScheduler } from './scheduler';
 import type { JarvisClock, ReminderSchedule, ReminderStatus } from './types';
+import type { DeterministicVerifier } from '../safety/verificationRegistry';
+
+export const REMINDER_CREATE_VERIFIER_ID = 'reminders.create.record.v1';
 
 export type ReminderCapabilityDeps = {
   store?: ReminderStore;
@@ -72,6 +75,8 @@ function createHandler(id: string, deps: ReminderCapabilityDeps): CapabilityHand
       }],
       verification: read
         ? { mode: 'not_applicable', description: 'Read-only reminder lookup.' }
+        : id === REMINDERS_CREATE
+          ? { mode: 'registered_postcondition', verifierId: REMINDER_CREATE_VERIFIER_ID, description: 'Re-read the created reminder record and compare its typed identity and schedule.' }
         : { mode: 'handler_result', description: 'Confirm the reminder store accepted the typed mutation.' },
       rollback: read
         ? { mode: 'not_required', strategy: 'Read-only operation.' }
@@ -84,6 +89,35 @@ function createHandler(id: string, deps: ReminderCapabilityDeps): CapabilityHand
       reason: deps.store ? undefined : 'Reminder store is unavailable.',
     }),
     invoke: async (input) => invokeReminder(id, input, deps),
+  };
+}
+
+export function createReminderRecordVerifier(deps: ReminderCapabilityDeps): DeterministicVerifier {
+  return ({ descriptor, result, now }) => {
+    const publicRecord = result.structured?.reminder;
+    const reminderId = publicRecord && typeof publicRecord === 'object' && !Array.isArray(publicRecord)
+      ? String((publicRecord as Record<string, unknown>).id || '')
+      : '';
+    const stored = reminderId && deps.store ? deps.store.get(reminderId) : undefined;
+    const expectedNextRunAt = publicRecord && typeof publicRecord === 'object' && !Array.isArray(publicRecord)
+      ? (publicRecord as Record<string, unknown>).nextRunAt
+      : undefined;
+    const verified = Boolean(
+      result.status === 'ok'
+      && stored
+      && stored.id === reminderId
+      && stored.status === 'ACTIVE'
+      && stored.nextRunAt === expectedNextRunAt,
+    );
+    return {
+      state: verified ? 'VERIFIED' : 'FAILED_VERIFICATION',
+      strategy: descriptor.verification?.description || 'Re-read the typed reminder record.',
+      requested: descriptor.description,
+      executed: 'Read the reminder back from the isolated reminder store and compared its ID, ACTIVE state, and next run time.',
+      evidence: verified ? [`Reminder ${reminderId} exists with the expected next run time.`] : [],
+      failedChecks: verified ? [] : ['The created reminder record could not be independently matched in the reminder store.'],
+      verifiedAt: new Date(now).toISOString(),
+    };
   };
 }
 

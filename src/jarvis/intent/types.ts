@@ -59,6 +59,8 @@ export type IntentResolution = {
   actionClass: ActionabilityClass;
   clarification?: ClarificationState;
   goal?: GoalResolution;
+  pendingGoalId?: string;
+  pendingGoalExpiresAt?: string;
 };
 
 export type InteractionContext = {

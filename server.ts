@@ -147,6 +147,29 @@ async function startServer() {
     return { ok: true, calls: calls.length ? calls : undefined };
   };
 
+  const parseLabContinuation = (raw: unknown): {
+    ok: true;
+    continuation?: { pendingGoalId?: string; idempotencyKey?: string; explicitSelection?: boolean };
+  } | { ok: false } => {
+    if (raw === undefined) return { ok: true };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false };
+    const record = raw as Record<string, unknown>;
+    if (Object.keys(record).some(key => !['pendingGoalId', 'idempotencyKey', 'explicitSelection'].includes(key))) return { ok: false };
+    const pendingGoalId = typeof record.pendingGoalId === 'string' ? record.pendingGoalId.trim() : undefined;
+    const idempotencyKey = typeof record.idempotencyKey === 'string' ? record.idempotencyKey.trim() : undefined;
+    if (record.pendingGoalId !== undefined && (!pendingGoalId || !/^pending_[a-f0-9]{32}$/u.test(pendingGoalId))) return { ok: false };
+    if (record.idempotencyKey !== undefined && (!idempotencyKey || idempotencyKey.length > 160)) return { ok: false };
+    if (record.explicitSelection !== undefined && typeof record.explicitSelection !== 'boolean') return { ok: false };
+    return {
+      ok: true,
+      continuation: {
+        ...(pendingGoalId ? { pendingGoalId } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+        ...(record.explicitSelection === true ? { explicitSelection: true } : {}),
+      },
+    };
+  };
+
   // Initialize Discord Bot
   const researchAssistant = new ResearchAssistant();
   const botService = new BotService({ researchAssistant });
@@ -811,6 +834,8 @@ async function startServer() {
     try {
       const parsedCalls = parseLabCapabilityCalls(req.body?.capabilityCalls);
       if (!parsedCalls.ok) return res.status(400).json({ error: 'Malformed action payload.', reasonCode: 'MALFORMED_BODY' });
+      const parsedContinuation = parseLabContinuation(req.body?.continuation);
+      if (!parsedContinuation.ok) return res.status(400).json({ error: 'Malformed continuation payload.', reasonCode: 'MALFORMED_BODY' });
       const text = typeof req.body?.text === 'string' ? req.body.text : '';
       const personaProfileId = typeof req.body?.personaProfileId === 'string' ? req.body.personaProfileId : undefined;
       const voiceProfileId = typeof req.body?.voiceProfileId === 'string' ? req.body.voiceProfileId : undefined;
@@ -833,6 +858,7 @@ async function startServer() {
         capabilityCalls: parsedCalls.calls,
         speak,
         actionSource,
+        continuation: parsedContinuation.continuation,
       }));
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
@@ -846,6 +872,8 @@ async function startServer() {
     try {
       const parsedCalls = parseLabCapabilityCalls(req.body?.capabilityCalls);
       if (!parsedCalls.ok) return res.status(400).json({ error: 'Malformed action payload.', reasonCode: 'MALFORMED_BODY' });
+      const parsedContinuation = parseLabContinuation(req.body?.continuation);
+      if (!parsedContinuation.ok) return res.status(400).json({ error: 'Malformed continuation payload.', reasonCode: 'MALFORMED_BODY' });
       const text = typeof req.body?.text === 'string' ? req.body.text : '';
       const personaProfileId = typeof req.body?.personaProfileId === 'string' ? req.body.personaProfileId : undefined;
       const voiceProfileId = typeof req.body?.voiceProfileId === 'string' ? req.body.voiceProfileId : undefined;
@@ -871,6 +899,7 @@ async function startServer() {
         capabilityCalls: parsedCalls.calls,
         speak,
         actionSource,
+        continuation: parsedContinuation.continuation,
       }, event => {
         res.write(`${JSON.stringify(event)}\n`);
       });

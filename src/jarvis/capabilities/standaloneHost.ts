@@ -15,7 +15,7 @@ import {
   type SystemStatusPort,
 } from './actions';
 import type { ReminderCapabilityDeps } from '../automation/reminderCapabilities';
-import { registerReminderCapabilities } from '../automation/reminderCapabilities';
+import { REMINDER_CREATE_VERIFIER_ID, createReminderRecordVerifier, registerReminderCapabilities } from '../automation/reminderCapabilities';
 import type { ResearchCapabilityDeps } from '../research/researchCapabilities';
 import { registerResearchCapabilities } from '../research/researchCapabilities';
 import { PrivateResearchGateway } from '../research/private/privateGateway';
@@ -141,6 +141,9 @@ export function createStandaloneCapabilityHost(
       events: options.actions?.events ?? operator.events,
       now: options.actions?.now,
     });
+  }
+  if (options.reminders !== false && options.reminders?.store && !operator.verification.has(REMINDER_CREATE_VERIFIER_ID)) {
+    operator.verification.register(REMINDER_CREATE_VERIFIER_ID, createReminderRecordVerifier(options.reminders));
   }
 
   const gateOptions: ActionGateOptions = {

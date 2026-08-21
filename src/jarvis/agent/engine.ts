@@ -4,7 +4,7 @@ import { mergeBudgets } from '../ops/budgets';
 import type { JarvisBudgets } from '../ops/types';
 import { assertAcyclic, blockedByFailedDep, readySteps } from './dag';
 import { canRetry, classifyStepFailure } from './recovery';
-import { WorkTaskStore } from './store';
+import { newStepId, WorkTaskStore } from './store';
 import { isTerminalStatus } from './transitions';
 import type {
   PermissionGrantInput,
@@ -105,11 +105,99 @@ export class WorkAgent {
     return this.store.setStatus(task.id, 'UNDERSTANDING');
   }
 
+  public receiveWaitingInput(input: {
+    objective: string;
+    pendingGoalId: string;
+    question: string;
+    missingFields: string[];
+    expiresAt: string;
+    goalResolution: import('../goals/types').GoalResolution;
+    simulated?: boolean;
+  }): WorkTask {
+    const task = this.store.create({
+      objective: input.objective,
+      plan: [{
+        id: newStepId('understand'),
+        title: 'Understand the declared owner goal',
+        kind: 'understand',
+        dependencies: [],
+        status: 'done',
+        riskLevel: 'LOW',
+        verificationMethod: 'GoalCatalog identity and required-input evidence',
+        retryPolicy: { maxAttempts: 0, attempted: 0 },
+        resultSummary: 'The declared goal is valid and is waiting only for owner input.',
+      }],
+      retryBudget: this.budgets.retries,
+      maxGapReplans: this.maxGapReplans,
+      simulated: input.simulated ?? this.simulated,
+      goalResolution: input.goalResolution,
+      waitingInput: {
+        pendingGoalId: input.pendingGoalId,
+        question: input.question,
+        missingFields: [...input.missingFields],
+        expiresAt: input.expiresAt,
+        state: 'WAITING_OWNER_INPUT',
+      },
+    });
+    this.emit(task, 'TASK_RECEIVED', `Task received: ${task.objective}`, { visualState: 'UNDERSTANDING' });
+    const understanding = this.store.setStatus(task.id, 'UNDERSTANDING');
+    return this.store.setStatus(understanding.id, 'WAITING_INPUT');
+  }
+
+  public updateWaitingInput(taskId: string, input: {
+    question: string;
+    missingFields: string[];
+    expiresAt: string;
+    goalResolution: import('../goals/types').GoalResolution;
+  }): WorkTask {
+    const task = this.require(taskId);
+    if (task.status !== 'WAITING_INPUT') return task;
+    task.goalResolution = structuredClone(input.goalResolution);
+    task.waitingInput = {
+      pendingGoalId: task.waitingInput?.pendingGoalId || '',
+      question: input.question,
+      missingFields: [...input.missingFields],
+      expiresAt: input.expiresAt,
+      state: 'WAITING_OWNER_INPUT',
+    };
+    return this.store.save(task);
+  }
+
+  public resumeWaitingInput(taskId: string, plan: PlanStep[], goalResolution: import('../goals/types').GoalResolution): Promise<WorkTask> {
+    this.assertEmergencyAllowsExecution();
+    const task = this.require(taskId);
+    if (task.status !== 'WAITING_INPUT') return Promise.resolve(task);
+    assertAcyclic(plan);
+    if (plan.length > this.budgets.taskSteps) {
+      throw Object.assign(new Error('Resumed goal exceeds the step budget.'), { reasonCode: 'BUDGET_EXCEEDED' });
+    }
+    task.plan = plan.map((step, index) => ({
+      ...step,
+      status: index === 0 && step.kind === 'understand' ? 'done' as const : step.status,
+      ...(index === 0 && step.kind === 'understand' ? { resultSummary: 'Goal identity and continuation input were revalidated.' } : {}),
+    }));
+    task.goalResolution = structuredClone(goalResolution);
+    task.waitingInput = undefined;
+    task.evidence = [...task.evidence, 'pending-goal:resumed-with-current-runtime-evidence'];
+    task.status = 'PLANNING';
+    this.store.save(task);
+    return this.run(taskId);
+  }
+
+  public expireWaitingInput(taskId: string): WorkTask {
+    const task = this.require(taskId);
+    if (task.status !== 'WAITING_INPUT') return task;
+    if (task.waitingInput) task.waitingInput.state = 'EXPIRED';
+    task.status = 'EXPIRED';
+    return this.store.save(task);
+  }
+
   public async run(taskId: string): Promise<WorkTask> {
     let task = this.require(taskId);
     if (this.emergency && !this.emergency.allows('system', 'write')) {
       return this.finish(task, 'CANCELLED', 'cancelled', 'Emergency Stop is active.');
     }
+    if (task.status === 'WAITING_INPUT') return task;
     if (task.status === 'RECEIVED') task = this.store.setStatus(taskId, 'UNDERSTANDING');
     if (task.status === 'UNDERSTANDING') {
       this.emit(task, 'UNDERSTANDING', 'Understanding the objective', { visualState: 'UNDERSTANDING' });

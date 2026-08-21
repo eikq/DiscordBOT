@@ -23,7 +23,7 @@ export function synthesizeTaskResponse(task: WorkTask): SynthesizedTaskResponse 
 }
 
 function outcomeOf(task: WorkTask): SynthesizedTaskResponse['outcome'] {
-  if (task.status === 'WAITING_PERMISSION' || task.outcome === 'blocked' || task.status === 'BLOCKED') {
+  if (task.status === 'WAITING_INPUT' || task.status === 'WAITING_PERMISSION' || task.outcome === 'blocked' || task.status === 'BLOCKED') {
     return 'BLOCKED';
   }
   if (task.outcome === 'cancelled' || task.status === 'CANCELLED') return 'CANCELLED';
@@ -50,6 +50,9 @@ function render(
   if (evidence[0] && evidence[0] !== observations[0]) lines.push(`Evidence: ${evidence[0]}`);
   if (outcome === 'BLOCKED' && task.permissionRequirements[0]) {
     lines.push(`Waiting on owner permission for ${task.permissionRequirements[0]}.`);
+  }
+  if (task.status === 'WAITING_INPUT' && task.waitingInput) {
+    lines.push(`Waiting for owner input: ${task.waitingInput.question}`);
   }
   if (outcome === 'BLOCKED' && task.blockers?.[0]) {
     const blocker = task.blockers[0];
