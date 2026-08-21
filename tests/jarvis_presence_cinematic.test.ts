@@ -117,8 +117,10 @@ test('permission and Emergency Stop supersede research presentation', () => {
     waitingPermission: true,
     research: snapshot(),
     researchLive: true,
+    search: '?visualScene=waiting-owner',
   });
   assert.equal(visual.hud?.kind, 'permission');
+  assert.equal(visual.fixture, 'waiting-owner');
   assert.equal(visual.research, null);
   const halt = composePresenceVisual({
     phase: 'EMERGENCY_STOP',

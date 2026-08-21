@@ -727,7 +727,27 @@ export default function JarvisPresencePage() {
         </div>
       ) : null}
       <div className="jp-core">{coreVisual}</div>
-      {showPermission && pendingRisk ? (
+      {visual.fixture === 'waiting-owner' && !pendingRisk ? (
+        <aside className="jp-approve" aria-label="Owner approval fixture">
+          <header>
+            <span>Owner authority required</span>
+            <em className="jp-sim">DEVELOPMENT FIXTURE</em>
+          </header>
+          <dl>
+            <div><dt>Action</dt><dd>Modify three project files</dd></div>
+            <div><dt>Risk</dt><dd>LOW</dd></div>
+            <div><dt>Target</dt><dd>Local recovery sandbox</dd></div>
+            <div><dt>Changes</dt><dd>Three declared text files</dd></div>
+            <div><dt>Rollback</dt><dd>Available</dd></div>
+          </dl>
+          <p className="jp-approve__ask">I need to modify three project files. Risk is low and a rollback checkpoint is available. Proceed?</p>
+          <div className="jp-approve__row">
+            <button type="button" className="jp-btn jp-btn--deny" disabled>Deny</button>
+            <button type="button" className="jp-btn jp-btn--allow" disabled>Allow once</button>
+          </div>
+          <p className="jp-approve__note">Fixture only. This overlay cannot grant authority.</p>
+        </aside>
+      ) : showPermission && pendingRisk ? (
         <PresenceApproval
           model={pendingRisk}
           busy={busy || opsBusy}
