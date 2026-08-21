@@ -139,10 +139,10 @@ export function validateGoalSuggestion(value: unknown, catalog: GoalCatalog = DE
 
 function deterministicMatch(text: string, catalog: GoalCatalog, context?: InteractionContext | null): Match {
   const fromCatalog = (id: string) => catalog.get(id);
-  if (/what can you do|what goals can you|what are your capabilities|ทำอะไรได้บ้าง|ความสามารถ.*อะไร/iu.test(text)) {
+  if (/after setup|once (?:set ?up|configured)|need(?:s)? setup|need(?:s)? configuration|require(?:s)? setup|currently unavailable|not currently available|require(?:s)? (?:my )?permission|need(?:s)? (?:my )?permission|what requires my permission|what can you do|what goals can you|what are your capabilities|ทำอะไรได้บ้าง|ความสามารถ.*อะไร|ต้องตั้งค่า|ต้องขออนุญาต/iu.test(text)) {
     return matched(fromCatalog('self.capabilities'), 1, {}, ['matcher:self.capabilities']);
   }
-  if (/why can.?t|what do you need|ทำไม.*ไม่ได้|ต้องการอะไร.*จาก.*ผม/iu.test(text)) {
+  if (/why can(?:'|’)?t|why can you not|what do you need|ทำไม.*ไม่ได้|ต้องการอะไร.*จาก.*ผม/iu.test(text)) {
     return matched(fromCatalog('self.explain-gap'), 0.98, {}, ['matcher:self.explain-gap']);
   }
   if (/\b(cctv|nvr|rtsp|onvif)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(text) && /connect|open|view|เชื่อม|เปิด|ดู/iu.test(text)) {

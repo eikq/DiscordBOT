@@ -17,8 +17,13 @@ export type {
   CapabilityCandidateActor,
   CapabilityCandidateState,
 } from './acquisition';
-export { answerFromSelfKnowledge, selfKnowledgeQuestionKind } from './answer';
-export type { SelfKnowledgeAnswer } from './answer';
+export {
+  answerFromSelfKnowledge,
+  interpretRequestedCapability,
+  resolveSelfKnowledgeGap,
+  selfKnowledgeQuestionKind,
+} from './answer';
+export type { RequestedCapabilityInterpretation, SelfKnowledgeAnswer, SelfKnowledgeAnswerKind } from './answer';
 export type {
   CapabilityDependency,
   CapabilityDependencyRelation,

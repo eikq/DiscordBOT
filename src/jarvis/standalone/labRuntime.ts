@@ -31,6 +31,7 @@ import {
   answerFromSelfKnowledge,
   buildSelfKnowledgeSnapshot,
   resolveCapabilityGoal,
+  resolveSelfKnowledgeGap,
   selfKnowledgeQuestionKind,
   type SelfKnowledgeAnswer,
   type SelfKnowledgeSnapshot,
@@ -640,6 +641,7 @@ export class JarvisLabRuntime {
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
     pendingGoal?: PendingGoalRecord;
+    selfKnowledge?: SelfKnowledgeAnswer;
   }> {
     const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
@@ -689,6 +691,7 @@ export class JarvisLabRuntime {
     workOutcome?: SynthesizedTaskResponse;
     affectStyle?: AffectStyle;
     pendingGoal?: PendingGoalRecord;
+    selfKnowledge?: SelfKnowledgeAnswer;
   }> {
     const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
@@ -822,15 +825,17 @@ export class JarvisLabRuntime {
     kind: SelfKnowledgeAnswer['kind'],
   ) {
     const snapshot = await this.selfKnowledgeSnapshot();
-    const latestGap = this.commandCenter?.agent.store.list().at(-1)?.gapResolution;
+    const question = String(input.text || '');
     const gap = kind === 'CCTV_STATUS'
       ? await new CapabilityGapResolver().resolve({
           objective: CCTV_CONNECT_GOAL.title,
           graph: resolveCapabilityGoal(CCTV_CONNECT_GOAL, snapshot),
           snapshot,
         })
-      : latestGap;
-    const answer = answerFromSelfKnowledge(kind, snapshot, gap);
+      : kind === 'GAP_EXPLANATION'
+        ? await resolveSelfKnowledgeGap(question, snapshot)
+        : undefined;
+    const answer = answerFromSelfKnowledge(kind, snapshot, gap, question);
     const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
     const result: JarvisCoreResult = {
       requestId: request.requestId,
