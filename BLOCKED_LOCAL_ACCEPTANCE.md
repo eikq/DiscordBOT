@@ -240,3 +240,29 @@ LA-014 → LA-013.
 - Not claimed by cloud: Windows process cancellation, browser visual behavior,
   filesystem/antivirus interactions on the owner PC, or any arbitrary external
   process termination.
+
+## LA-018 Capability Intelligence and owner CCTV provider
+
+- Purpose: confirm Self Knowledge reflects actual owner runtime/provider state
+  and accept one real read-only CCTV provider without widening device authority.
+- Preconditions: owner identifies camera/NVR vendor and model; provides one
+  known LAN hostname/address and supported RTSP/ONVIF/vendor protocol; local
+  secret storage returns an opaque `local-secret://` reference; provider code
+  has separate review/tests. No broad LAN scan or public exposure.
+- Exact verification: compare Capability Explorer with live provider health;
+  unavailable or unconfigured services remain non-AVAILABLE; ask Assistant what
+  it can do, whether it can control the PC, CCTV status, and verified
+  improvements; confirm answers match structured evidence. Connect only to the
+  known CCTV target, run STATUS and one SNAPSHOT/VIEW check, independently
+  verify typed stream/frame evidence, and confirm only approved VIEW classes
+  become AVAILABLE. Deny CONTROL/CONFIGURE/ADMIN without separate capability,
+  policy, and owner approval.
+- Expected: CCTV contracts move from PREPARE_CONTRACT only after real provider
+  evidence; simulator cards remain SIMULATION; credential values never appear
+  in prompts, memory, Activity, logs, profile files, or Git; local acceptance is
+  independently visible from provider availability.
+- Failure evidence: redacted Self Knowledge snapshot, capability graph/gap plan,
+  provider health record, permission proposal, verification evidence reference,
+  and owner notes. Never attach footage or credential values.
+- Not claimed by cloud: Windows, actual CCTV, RTSP/ONVIF connectivity, owner
+  LAN/NVR, screen/phone control, Ollama/GPU, voice, browser visuals, or Whonix.

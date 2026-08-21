@@ -972,3 +972,55 @@ request or unsupported state.
 
 See `docs/JARVIS_EXECUTION_RECOVERY_HARDENING.md`.
 
+---
+
+## ADR-025 — Runtime evidence owns capability truth; gaps produce bounded safe paths
+
+Date: 2026-08-21
+Status: Accepted for Core cloud implementation; provider/local acceptance pending
+
+### Context
+
+CapabilityRegistry described registered handlers, while availability, maturity,
+permission, local acceptance, simulation, competence, and distribution were not
+available as one coherent owner-facing view. Unbound WorkAgent steps could stop
+without a structured explanation, and self-model success did not require
+independent verification. CCTV existed only as simulation cards.
+
+### Decision
+
+- Reuse CapabilityHost, CapabilitySelfModel, ModelProfileRegistry,
+  ModelCertificationRegistry, WorkAgent, and existing UI. Do not add a parallel
+  registry, router, permission system, or canonical memory.
+- Build Self Knowledge from runtime-authored descriptors, availability and
+  provider evidence. Keep implementation, runtime, permission, local acceptance,
+  distribution, and competence as separate dimensions; preserve UNKNOWN.
+- Resolve higher-level goals through explicit REQUIRED, OPTIONAL, and
+  ALTERNATIVE capability dependencies. Registry evidence, never model assertion,
+  determines whether a dependency is usable.
+- Produce ordered structured gap plans. WorkAgent may replan only to a bounded,
+  registered, input-compatible existing/composed path. CapabilityHost and
+  ActionGate remain the execution authority.
+- Separate discovery, review, install, trust/registration, and enable/execution
+  in the candidate lifecycle. Owner approval is required before install and
+  enable; candidate metadata is redacted.
+- Count proven competence only from deduplicated VERIFIED outcome evidence.
+  Repeated structured blockers may signal growth work but cannot self-promote a
+  capability.
+- Prepare CCTV as owner-only, local-first provider/profile contracts. Store only
+  opaque local secret references, reject credential-bearing URLs, and keep VIEW,
+  CONTROL, CONFIGURE, and ADMIN separate. No real provider or LAN scan is added.
+
+### Consequences
+
+- Assistant and Capability Explorer can answer capability, CCTV, computer
+  control, blocker, unavailable, and improvement questions without model
+  imagination.
+- WorkAgent now explains more gaps and has bounded safe-replan hooks, but it
+  cannot synthesize arbitrary adapters or reconcile incompatible input schemas.
+- Community distribution filtering is still not implemented; neutral owner-only
+  and community/demo-excluded metadata only prepares that future boundary.
+- Real CCTV, owner hardware/services, Windows, local models, and browser visuals
+  remain `BLOCKED_LOCAL_ACCEPTANCE`.
+
+See `docs/JARVIS_CAPABILITY_INTELLIGENCE.md`.

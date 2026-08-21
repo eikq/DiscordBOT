@@ -1,7 +1,36 @@
 ﻿# Cursor Session State
 
 Updated: 2026-08-20
-Agent/model: Cursor Grok 4.6
+Agent/model: ChatGPT Work / Codex (cloud)
+
+## This turn — Capability Intelligence and Self Knowledge
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED** for cloud-safe Core paths.
+**OWNER_VERIFIED** and live provider/hardware verification are not claimed.
+
+Branch: `work/jarvis-capability-intelligence` from exact remote source
+`work/jarvis-execution-recovery-hardening` at
+`2d72ef59c95ac3b64a6fd30d7594ac66a783aac5`.
+
+- Added evidence-backed Self Knowledge over the existing CapabilityHost,
+  CapabilitySelfModel, model profiles/certifications, and provider/service state.
+- Added Capability Graph, structured GapResolutionPlan, bounded WorkAgent
+  blocker/replan integration, and human-readable Assistant/Task/System views.
+- Competence now distinguishes verified and unverified success; repeated
+  blockers produce weakness signals and Night Cycle requires VERIFIED success
+  for skill distillation.
+- Capability candidate lifecycle separates discover/review/test/security review/
+  verify/owner approve/install/register/enable. It cannot self-promote.
+- Prepared owner-only CCTV RTSP/ONVIF/vendor contracts with opaque local secret
+  references, strict credential-bearing URL/path rejection, and no LAN scanning.
+- Community Edition, setup/model installer, distribution filtering, real CCTV,
+  and broad device control remain out of scope.
+
+Verification: focused capability/evolution/WorkAgent/runtime suite **71/71**;
+`npx tsc --noEmit` PASS; `npm run test:cloud` **506/506**; production build
+PASS with the pre-existing large CoreScene chunk and CJS `import.meta` warnings.
+Windows, CCTV/RTSP/ONVIF/NVR, owner LAN, Ollama/GPU, screen/phone, voice,
+browser visuals, and Whonix remain `BLOCKED_LOCAL_ACCEPTANCE`.
 
 ## This turn — cloud finalization wiring (memory, stream, depth, night resume, grant)
 

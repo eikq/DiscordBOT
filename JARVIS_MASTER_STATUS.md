@@ -92,6 +92,38 @@ See `docs/JARVIS_EXECUTION_RECOVERY_HARDENING.md`. Community Edition, Setup
 Wizard, Hugging Face selection/download, hardware profiling, runtime installers,
 and distribution filtering remain explicitly out of scope.
 
+## Capability Intelligence and Self Knowledge
+
+Branch: `work/jarvis-capability-intelligence` from exact remote source
+`work/jarvis-execution-recovery-hardening` at
+`2d72ef59c95ac3b64a6fd30d7594ac66a783aac5`.
+
+- Self Knowledge reuses CapabilityHost, CapabilitySelfModel, model profile and
+  certification registries. It separates runtime readiness, maturity,
+  permission, local acceptance, simulation, and distribution.
+- Capability Graph resolves only registered runtime evidence across REQUIRED,
+  OPTIONAL, and ALTERNATIVE dependencies. Missing IDs cannot become available
+  through model output.
+- CapabilityGapResolver produces structured blockers and ordered safe paths.
+  WorkAgent may insert only bounded, input-compatible existing/composed routes;
+  every execution still passes CapabilityHost and ActionGate.
+- Capability acquisition now separates discovery, review, testing, security
+  review, verification, owner approval, installation, registration/trust, and
+  enable/execution. It performs none of those effects itself.
+- Verified competence requires deterministic VERIFIED outcome evidence and is
+  deduplicated by observation ID. Repeated structured blockers create weakness
+  signals; reflection or handler OK cannot claim improvement.
+- Assistant and Capability Explorer answer capability, CCTV, computer-control,
+  blocker, unavailable, and verified-improvement questions from structured
+  evidence rather than model imagination.
+- CCTV remains SIMULATION plus an owner-only PREPARE_CONTRACT provider/profile
+  architecture. Credential values, credential-bearing URLs, uncontrolled LAN
+  scanning, cloud footage upload, and VIEW-to-CONTROL promotion are rejected.
+
+See `docs/JARVIS_CAPABILITY_INTELLIGENCE.md`. Real CCTV/RTSP/ONVIF/NVR,
+owner LAN, device control, Windows services, local model state, and browser
+visual acceptance remain `BLOCKED_LOCAL_ACCEPTANCE`.
+
 Future providers remain honest contracts: MinerU, Tokei, social/video,
 Content Studio, and local computer use are `PREPARE_CONTRACT`; OpenHarness,
 Awesome LLM Apps and Security Academy sources are `REFERENCE_ONLY`;
