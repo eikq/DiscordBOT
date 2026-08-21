@@ -27,20 +27,23 @@ export type PresenceCoreMotion = {
 };
 
 const PALETTE = {
-  cyan: '#5ee7ff',
-  ice: '#d7f7ff',
-  teal: '#6ef0c8',
+  cyan: '#3de8ff',
+  ice: '#f2fbff',
+  electric: '#1a7cff',
+  teal: '#4ef0c4',
+  indigo: '#7b6cff',
+  violet: '#9d7dff',
   amber: '#f0c36a',
   red: '#ff6b7a',
   mute: '#7d97a8',
-  navy: '#16324c',
+  navy: '#0d2140',
 };
 
 export function presenceCoreMotion(phase: PresencePhase, reducedMotion = false): PresenceCoreMotion {
   const base: PresenceCoreMotion = {
     phase,
     primary: PALETTE.cyan,
-    accent: PALETTE.ice,
+    accent: PALETTE.electric,
     fill: PALETTE.navy,
     breath: 0.28,
     ringSpeed: 0.11,
@@ -67,13 +70,13 @@ export function presenceCoreMotion(phase: PresencePhase, reducedMotion = false):
       next = { ...base, breath: 0.82, waveform: true, nucleus: 1.18, ringSpeed: 0.22, ringOpen: 0.18, gyroX: 0.28, energyAmount: 0.4 };
       break;
     case 'UNDERSTANDING':
-      next = { ...base, ringSpeed: 0.32, counterSpeed: -0.28, energy: 'in', energyAmount: 0.55, nucleus: 1.08, density: 0.7 };
+      next = { ...base, ringSpeed: 0.32, counterSpeed: -0.28, energy: 'in', energyAmount: 0.55, nucleus: 1.12, density: 0.7, cameraZ: 7.6, fov: 34, accent: PALETTE.indigo };
       break;
     case 'THINKING':
-      next = { ...base, ringSpeed: 0.28, orbitSpeed: 0.07, nucleus: 1.2, density: 0.88, gyroY: 0.22, energyAmount: 0.38 };
+      next = { ...base, ringSpeed: 0.34, orbitSpeed: 0.08, nucleus: 1.28, density: 0.92, gyroY: 0.26, energyAmount: 0.48, cameraZ: 6.9, fov: 32, accent: PALETTE.violet };
       break;
     case 'RESEARCHING':
-      next = { ...base, energy: 'in', energyAmount: 0.7, ringSpeed: 0.2, orbitSpeed: 0.065, nucleus: 1.16, density: 0.8, cameraZ: 9.6, fov: 40 };
+      next = { ...base, energy: 'in', energyAmount: 0.78, ringSpeed: 0.22, orbitSpeed: 0.07, nucleus: 1.2, density: 0.84, cameraZ: 9.8, fov: 41, accent: PALETTE.indigo };
       break;
     case 'PLANNING':
       next = { ...base, ringSpeed: 0.16, orbitSpeed: 0.05, nucleus: 1.04, density: 0.72 };

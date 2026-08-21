@@ -1,4 +1,4 @@
-# Jarvis Cinematic Presence v4
+# Jarvis Cinematic Presence v5
 
 Updated: 2026-08-21
 
@@ -19,7 +19,7 @@ The Core is a true WebGL machine (Three.js / R3F). HTML is for crisp captions an
 
 ## Core
 
-Presence uses a structured R3F Core: energy nucleus (custom shaders on HIGH/BALANCED), gyroscopic rings on independent axes, mechanical ticks, structured particle classes, research constellation, and thresholded UnrealBloom. It does not reuse the lab particle-field CoreScene.
+Presence uses a structured R3F Core: energy nucleus (custom shaders on HIGH/BALANCED), gyroscopic rings on independent axes, mechanical ticks, structured particle classes, neural cognition, lightning arcs, research constellation, and thresholded UnrealBloom. It does not reuse the lab particle-field CoreScene. Thinking pulls the camera in; Researching widens it. Palette is cyan / electric blue / indigo / violet. Red remains Emergency Stop only.
 
 Quality tiers HIGH / BALANCED / LOW change bloom, shaders, gyro count, and particle budgets. Hidden-tab sets `frameloop="never"`. Reduced-motion freezes decorative travel. Emergency Stop zeros gyro/orbit speeds and closes red containment rings.
 
@@ -35,6 +35,12 @@ Existing SSE types (`SEARCH`, `SOURCE`, `NAVIGATE`, `EVIDENCE`, `COMPARE`, `VERI
 
 `?visualScene=` is opt-in only. `/jarvis` without that query never applies fixture data.
 
+## Voice input
+
+Voice → STT → family/slot resolver → Goal Catalog / typed adapters → CapabilityHost / ActionGate → verification → spoken response.
+
+Wake enters LISTENING and does not create a task. Generic “yes” binds exactly one pending owner decision. Low-confidence STT does not execute mutating or delete-like interpretations. OPEN YouTube is not media control. CCTV and CLICK/TYPE/SUBMIT stay honest PREPARE_CONTRACT / unavailable.
+
 ## Evidence
 
-`IMPLEMENTED` + `UNIT_VERIFIED`. `OWNER_VISUAL_VERIFIED` is for the owner only.
+`IMPLEMENTED` + `UNIT_VERIFIED`. `OWNER_VISUAL_VERIFIED` is for the owner only. `LIVE_VERIFIED` is not claimed.

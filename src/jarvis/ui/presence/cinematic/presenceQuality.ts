@@ -32,6 +32,8 @@ export type PresenceQualityBudget = {
   glow: 'full' | 'simple' | 'none';
   parallax: number;
   volumetric: boolean;
+  neuralNodes: number;
+  lightning: boolean;
 };
 
 const BUDGETS: Record<PresenceQualityTier, PresenceQualityBudget> = {
@@ -40,8 +42,8 @@ const BUDGETS: Record<PresenceQualityTier, PresenceQualityBudget> = {
     dprCap: 1.75,
     antialias: true,
     bloom: true,
-    bloomStrength: 0.62,
-    bloomThreshold: 0.78,
+    bloomStrength: 0.74,
+    bloomThreshold: 0.72,
     bloomRadius: 0.28,
     dof: false,
     shaders: true,
@@ -53,8 +55,10 @@ const BUDGETS: Record<PresenceQualityTier, PresenceQualityBudget> = {
     connectionCap: 12,
     streamCap: 28,
     glow: 'full',
-    parallax: 0.032,
+    parallax: 0.038,
     volumetric: true,
+    neuralNodes: 14,
+    lightning: true,
   },
   BALANCED: {
     tier: 'BALANCED',
@@ -74,8 +78,10 @@ const BUDGETS: Record<PresenceQualityTier, PresenceQualityBudget> = {
     connectionCap: 8,
     streamCap: 16,
     glow: 'simple',
-    parallax: 0.018,
+    parallax: 0.022,
     volumetric: true,
+    neuralNodes: 9,
+    lightning: true,
   },
   LOW: {
     tier: 'LOW',
@@ -97,6 +103,8 @@ const BUDGETS: Record<PresenceQualityTier, PresenceQualityBudget> = {
     glow: 'none',
     parallax: 0,
     volumetric: false,
+    neuralNodes: 0,
+    lightning: false,
   },
 };
 

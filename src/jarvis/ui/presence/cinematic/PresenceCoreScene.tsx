@@ -6,6 +6,7 @@ import { clampDpr } from '../../three/quality';
 import type { LiveOpsStep } from '../../operationsView';
 import type { PresencePhase } from '../presenceRuntime';
 import { energySign, motionLocked, presenceCoreMotion } from './coreMotion';
+import { lightningAllowed, lightningPairs, neuralCognitionActive, neuralNodeSpecs } from './neuralCognition';
 import { PresenceBloom } from './PresenceBloom';
 import { presenceParticleCount, presenceQualityBudget, type PresenceQualityTier } from './presenceQuality';
 import type { PresenceCapabilityNode } from './presenceVisualModel';
@@ -20,7 +21,7 @@ import {
 } from './shaders';
 import { applicationNodePose, layoutPlanSteps, sourceSpatial } from './spatialLayout';
 
-const VOID = '#03060e';
+const VOID = '#020714';
 
 export type PresenceCoreStats = {
   fps: number;
@@ -197,12 +198,14 @@ function LightingRig({ color, accent, nucleus, lock }: { color: string; accent: 
     <>
       <color attach="background" args={[VOID]} />
       <fog attach="fog" args={[VOID, 10, 28]} />
-      <ambientLight intensity={0.1} color="#0b1b2c" />
-      <pointLight ref={core} position={[0, 0, 0]} color={color} distance={16} decay={2} />
-      <pointLight position={[0, 0.2, 0.1]} color="#1d6cff" intensity={1.15} distance={9} />
-      <directionalLight position={[5.5, 4.2, 7]} intensity={0.32} color="#8ad8ff" />
-      <directionalLight position={[-6, -2.4, -5]} intensity={0.22} color={color} />
-      <pointLight ref={rim} position={[0, -0.2, 2.4]} color={accent} distance={8} />
+      <ambientLight intensity={0.12} color="#0b1630" />
+      <pointLight ref={core} position={[0, 0, 0]} color={color} distance={18} decay={2} />
+      <pointLight position={[0, 0.2, 0.1]} color="#1a7cff" intensity={1.35} distance={10} />
+      <pointLight position={[0.4, 0.5, -0.3]} color="#7b6cff" intensity={0.55} distance={7} />
+      <pointLight position={[-0.35, 0.15, 0.45]} color="#9d7dff" intensity={0.42} distance={6} />
+      <directionalLight position={[5.5, 4.2, 7]} intensity={0.4} color="#b8e7ff" />
+      <directionalLight position={[-6, -2.4, -5]} intensity={0.28} color={color} />
+      <pointLight ref={rim} position={[0, -0.2, 2.4]} color={accent} distance={9} />
     </>
   );
 }
@@ -297,10 +300,18 @@ function EnergyNucleus(props: {
       </mesh>
       <mesh ref={inner}>
         <sphereGeometry args={[0.36, 24, 24]} />
-        <meshBasicMaterial color="#f4feff" transparent opacity={0.92} />
+        <meshBasicMaterial color="#f4feff" transparent opacity={0.94} />
+      </mesh>
+      <mesh>
+        <icosahedronGeometry args={[0.58, 1]} />
+        <meshBasicMaterial color="#7b6cff" wireframe transparent opacity={0.28} />
       </mesh>
       <mesh ref={shell} material={fresnel}>
-        <sphereGeometry args={[1.05, 32, 32]} />
+        <sphereGeometry args={[1.08, 32, 32]} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[1.28, 32, 32]} />
+        <meshBasicMaterial color="#1a7cff" transparent opacity={0.07} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -646,6 +657,87 @@ function EmergencyContainment({ active }: { active: boolean }) {
   );
 }
 
+function NeuralCognition(props: { active: boolean; count: number; reducedMotion: boolean; color: string }) {
+  const nodes = useMemo(() => neuralNodeSpecs(props.count), [props.count]);
+  const mats = useRef<THREE.MeshBasicMaterial[]>([]);
+  useFrame(({ clock }) => {
+    const pulse = props.reducedMotion ? 0.35 : 0.45 + 0.55 * Math.abs(Math.sin(clock.elapsedTime * 2.2));
+    for (const material of mats.current) {
+      if (material) material.opacity = 0.35 + pulse * 0.45;
+    }
+  });
+  if (!props.active || nodes.length === 0) return null;
+  return (
+    <group>
+      {nodes.map((node, index) => (
+        <mesh key={node.id} position={[node.x, node.y, node.z]}>
+          <sphereGeometry args={[0.035 + (index % 3) * 0.01, 10, 10]} />
+          <meshBasicMaterial
+            ref={node => { if (node) mats.current[index] = node; }}
+            color={index % 2 ? props.color : '#9d7dff'}
+            transparent
+            opacity={0.7}
+          />
+        </mesh>
+      ))}
+      {nodes.slice(0, Math.max(0, nodes.length - 1)).map((node, index) => {
+        const next = nodes[(index + 3) % nodes.length];
+        if (!next) return null;
+        const start = new THREE.Vector3(node.x, node.y, node.z);
+        const end = new THREE.Vector3(next.x, next.y, next.z);
+        const mid = start.clone().add(end).multiplyScalar(0.5).add(new THREE.Vector3(0, 0.12, 0));
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        return (
+          <mesh key={`e-${node.id}`}>
+            <tubeGeometry args={[curve, 12, 0.006, 5, false]} />
+            <meshBasicMaterial color="#7b6cff" transparent opacity={0.28} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function LightningArcs(props: {
+  active: boolean;
+  emergency: boolean;
+  nodes: number;
+  reducedMotion: boolean;
+}) {
+  const specs = useMemo(() => neuralNodeSpecs(Math.max(props.nodes, 6)), [props.nodes]);
+  const pairs = useMemo(() => lightningPairs(props.emergency ? 2 : 3, 4), [props.emergency]);
+  const mats = useRef<THREE.MeshBasicMaterial[]>([]);
+  useFrame(({ clock }) => {
+    const flicker = props.reducedMotion ? 0.15 : (Math.sin(clock.elapsedTime * 18) > 0.55 ? 0.9 : 0.08);
+    for (const material of mats.current) material.opacity = flicker;
+  });
+  if (!props.active || specs.length < 2) return null;
+  return (
+    <group>
+      {pairs.map((pair, index) => {
+        const a = specs[pair[0] % specs.length];
+        const b = specs[pair[1] % specs.length];
+        if (!a || !b) return null;
+        const start = new THREE.Vector3(a.x, a.y, a.z);
+        const end = new THREE.Vector3(b.x, b.y, b.z);
+        const mid = start.clone().add(end).multiplyScalar(0.5).add(new THREE.Vector3(0.1, 0.18, 0));
+        const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        return (
+          <mesh key={`arc-${index}`}>
+            <tubeGeometry args={[curve, 10, 0.012, 5, false]} />
+            <meshBasicMaterial
+              ref={node => { if (node) mats.current[index] = node; }}
+              color={props.emergency ? '#ff6b7a' : '#9be8ff'}
+              transparent
+              opacity={0.25}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 function BackgroundField({ volumetric }: { volumetric: boolean }) {
   return (
     <group>
@@ -757,6 +849,18 @@ function CoreAssembly(props: PresenceCoreSceneProps) {
       />
       {props.phase === 'PLANNING' || props.phase === 'EXECUTING' || props.phase === 'VERIFYING' ? <PlanDag steps={props.steps ?? []} /> : null}
       {app ? <ApplicationNode label={app.label} energyOut={motion.energy === 'out'} /> : null}
+      <NeuralCognition
+        active={neuralCognitionActive(props.phase) && !locked}
+        count={budget.neuralNodes}
+        reducedMotion={props.reducedMotion}
+        color={motion.accent}
+      />
+      <LightningArcs
+        active={budget.lightning && lightningAllowed(props.phase) && !props.reducedMotion}
+        emergency={locked}
+        nodes={budget.neuralNodes}
+        reducedMotion={props.reducedMotion}
+      />
       <EmergencyContainment active={locked} />
     </group>
   );
