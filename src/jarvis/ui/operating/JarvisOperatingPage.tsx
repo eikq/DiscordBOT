@@ -378,6 +378,8 @@ export default function JarvisOperatingPage() {
       setPendingConfirmation(payload.pendingConfirmation ?? null);
       playSpeech(payload.speech);
       void refreshStatus();
+      void refreshCommandCenter();
+      void refreshOperator();
     } catch (err) {
       setError(safeError(err));
     } finally {
@@ -685,6 +687,7 @@ export default function JarvisOperatingPage() {
           onNight={action => { void postCommandCenter('/api/jarvis/command-center/night', { action }); }}
           onSimulation={enabled => { void postCommandCenter('/api/jarvis/command-center/control', { simulationMode: enabled }); }}
           onRevokeLease={leaseId => { void postOperator('/api/jarvis/leases/revoke', { leaseId }); }}
+          onRollback={checkpointId => { void requestRecoveryRollback(checkpointId, personaProfileId, voiceProfileId, oneTurn).then(payload => { setResponse(payload); setPendingConfirmation(payload.pendingConfirmation ?? null); void refreshCommandCenter(); void refreshOperator(); }).catch(err => setError(safeError(err))); }}
           onReminder={(capabilityId, input) => { void requestReminderMutation(capabilityId, input, personaProfileId, voiceProfileId, oneTurn).then(() => refreshReminders()).catch(err => setError(safeError(err))); }}
           onAckReminder={(action, delivery, minutes) => { void ackReminder(action, delivery, minutes).then(setReminders).catch(err => setError(safeError(err))); }}
           onService={(capabilityId, serviceId) => { void requestServiceAction(capabilityId, serviceId, personaProfileId, voiceProfileId, oneTurn, speakEnabled).then(payload => { setResponse(payload); setPendingConfirmation(payload.pendingConfirmation ?? null); playSpeech(payload.speech); void refreshStatus(); }).catch(err => setError(safeError(err))); }}
@@ -744,5 +747,26 @@ async function requestServiceAction(capabilityId: 'jarvis.startService' | 'jarvi
   const reply = await fetch('/api/jarvis/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: `${capabilityId === 'jarvis.startService' ? 'Start' : 'Restart'} ${serviceId}`, personaProfileId, voiceProfileId, oneTurn, capabilityCalls: [{ id: capabilityId, input: { serviceId } }], speak, actionSource: 'ui' }) });
   const payload = await reply.json() as AskResponse & { error?: string };
   if (!reply.ok) throw new Error(payload.error || `Service action returned ${reply.status}`);
+  return payload;
+}
+
+async function requestRecoveryRollback(checkpointId: string, personaProfileId: string, voiceProfileId: string, oneTurn: boolean) {
+  const capabilityId = 'operator.sandbox.rollbackConfig';
+  const rollbackId = `rollback_${Date.now().toString(36)}`;
+  const reply = await fetch('/api/jarvis/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: 'Restore the selected Jarvis recovery checkpoint',
+      personaProfileId,
+      voiceProfileId,
+      oneTurn,
+      capabilityCalls: [{ id: capabilityId, input: { checkpointId, rollbackId } }],
+      speak: false,
+      actionSource: 'ui',
+    }),
+  });
+  const payload = await reply.json() as AskResponse & { error?: string };
+  if (!reply.ok) throw new Error(payload.error || `Recovery rollback returned ${reply.status}`);
   return payload;
 }

@@ -25,6 +25,7 @@ import {
   Pause,
   Play,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
@@ -149,6 +150,7 @@ type Props = {
   onNight: (action: 'run' | 'resume' | 'pause' | 'cancel') => void;
   onSimulation: (enabled: boolean) => void;
   onRevokeLease: (leaseId: string) => void;
+  onRollback: (checkpointId: string) => void;
   onReminder: (capabilityId: string, input: Record<string, unknown>) => void;
   onAckReminder: (action: 'dismiss' | 'complete' | 'snooze', delivery: ReminderSnapshotView['pendingDeliveries'][number], minutes?: number) => void;
   onService: (capabilityId: 'jarvis.startService' | 'jarvis.restartService', serviceId: string) => void;
@@ -305,18 +307,19 @@ function TasksPage(props: Props) {
             {!task ? <EmptyState title="Select or start a task" detail="The plan and evidence will appear here." /> : (
               <>
                 <div className="jai-task-objective"><span>Objective</span><h3>{task.objective}</h3></div>
-                <div className="jai-task-meta"><span><small>Capabilities</small><strong>{task.steps.filter(step => step.capability).length ? task.steps.filter(step => step.capability).map(step => humanCapability(step.capability!)).join(' · ') : 'No typed capability declared'}</strong></span><span><small>Risk / permission</small><strong>{task.waitingPermission ? 'Owner approval required' : 'Policy enforced at each step'}</strong></span><span><small>Rollback</small><strong>Not declared in task snapshot</strong></span></div>
+                <div className="jai-task-meta"><span><small>Capabilities</small><strong>{task.steps.filter(step => step.capability).length ? task.steps.filter(step => step.capability).map(step => humanCapability(step.capability!)).join(' · ') : 'No typed capability declared'}</strong></span><span><small>Risk / permission</small><strong>{task.waitingPermission ? 'Owner approval required' : 'Policy enforced at each step'}</strong></span><span><small>Recovery</small><strong>{task.rollback ? humanRecoveryState(task.rollback.state) : task.cancellation ? humanCancellationState(task.cancellation.state) : 'No recovery action recorded'}</strong></span></div>
                 <ol className="jai-plan">
                   {task.steps.map(step => <li key={step.id} className={`is-${step.state}`}><span>{step.index}</span><div><strong>{step.title}</strong>{step.summary ? <small>{step.summary}</small> : null}</div>{step.state === 'done' ? <Check size={16} /> : step.state === 'active' ? <RefreshCw className="is-spinning" size={16} /> : step.state === 'failed' ? <XCircle size={16} /> : <CircleDashed size={16} />}</li>)}
                 </ol>
                 <PermissionCard snapshot={snapshot} busy={props.busy} onDeny={props.onCancelTask} onAllow={props.onGrantTask} />
                 {task.active && !task.waitingPermission ? <div className="jai-action-row"><button type="button" className="jai-button jai-button--danger" disabled={props.busy} onClick={props.onCancelTask}><Square size={15} /> Cancel task</button><button type="button" className="jai-button" disabled title="Pause/resume contract not exposed by the current HTTP API"><Pause size={15} /> Pause · prepared</button></div> : null}
+                {task.rollback?.state === 'AVAILABLE' && task.rollback.checkpointId && task.steps.some(step => step.capability === 'operator.sandbox.writeConfig') ? <div className="jai-action-row"><button type="button" className="jai-button jai-button--danger" disabled={props.busy} onClick={() => props.onRollback(task.rollback!.checkpointId!)}><RotateCcw size={15} /> Request rollback</button><span className="jai-muted">Rollback is a new owner-authorized action.</span></div> : null}
               </>
             )}
           </SectionCard>
           <SectionCard title="Verification" description="A command exit code alone is not success" tone="green"><VerificationReport task={task ?? null} /></SectionCard>
           <ExpertDetails summary="Task IDs, capability IDs, and simulation demos">
-            {task ? <dl className="jai-data-list"><div><dt>Task ID</dt><dd><code>{task.id}</code></dd></div><div><dt>Status</dt><dd>{task.status}</dd></div><div><dt>Capability IDs</dt><dd>{task.steps.some(step => step.capability) ? task.steps.filter(step => step.capability).map(step => <code key={step.id}>{step.capability} </code>) : 'none'}</dd></div><div><dt>Errors</dt><dd>{task.errors.join(' · ') || 'none'}</dd></div><div><dt>Recovery</dt><dd>Retry/cancel state is recorded; no general rollback contract is exposed.</dd></div></dl> : null}
+            {task ? <dl className="jai-data-list"><div><dt>Task ID</dt><dd><code>{task.id}</code></dd></div><div><dt>Status</dt><dd>{task.status}</dd></div><div><dt>Capability IDs</dt><dd>{task.steps.some(step => step.capability) ? task.steps.filter(step => step.capability).map(step => <code key={step.id}>{step.capability} </code>) : 'none'}</dd></div><div><dt>Errors</dt><dd>{task.errors.join(' · ') || 'none'}</dd></div><div><dt>Checkpoint</dt><dd><code>{task.rollback?.checkpointId || 'none'}</code></dd></div><div><dt>Cancellation</dt><dd>{task.cancellation ? `${task.cancellation.state} · ${task.cancellation.reason || 'reason unavailable'} · observed=${String(task.cancellation.observedByHandler)}` : 'none'}</dd></div></dl> : null}
             <p className="jai-muted">Demos create tagged simulation data. They do not operate owner hardware.</p>
             <div className="jai-action-row">{(['research', 'coding', 'evolution', 'monitoring'] as const).map(id => <button type="button" className="jai-button" key={id} disabled={props.busy} onClick={() => props.onDemo(id)}>{id}</button>)}</div>
           </ExpertDetails>
@@ -458,6 +461,9 @@ function SecurityPage(props: Props) {
         <SectionCard title="Privilege leases" description="Scoped, expiring, action-counted authority" tone={activeLeases.length ? 'amber' : 'green'}>{activeLeases.length ? activeLeases.map(lease => <ActivePrivilegeLease key={lease.id} lease={lease} busy={props.busy} onRevoke={props.onRevokeLease} />) : <ActivePrivilegeLease />}<ExpertDetails summary="Lease inventory"><p>{props.operator ? `${props.operator.leases.length} recorded lease(s): ${props.operator.leases.map(lease => `${lease.id} ${lease.state}`).join(' · ') || 'none'}` : 'Operator inventory endpoint unavailable.'}</p><p>Approval tokens are not returned by this endpoint.</p></ExpertDetails></SectionCard>
         <SectionCard title="Recent owner decisions" description="Approved, denied, or waiting permission events" tone="neutral">{!decisions.length ? <EmptyState title="No recent decisions" detail="The redacted event window contains no permission event." /> : <ul className="jai-compact-list">{decisions.map(event => <li key={event.id}><span>{event.type.includes('DENIED') ? <Ban size={16} /> : event.type.includes('APPROVED') ? <CheckCircle2 size={16} /> : <Clock3 size={16} />}</span><div><strong>{humanEventType(event.type)}</strong><small>{event.summary} · {new Date(event.at).toLocaleTimeString()}</small></div></li>)}</ul>}</SectionCard>
       </div>
+      <SectionCard title="Recovery checkpoints" description="Integrity-checked Jarvis-owned recovery state" tone={props.operator?.checkpoints.some(item => item.state === 'AVAILABLE') ? 'amber' : 'green'}>
+        {!props.operator ? <EmptyState title="Operator endpoint unavailable" detail="No recovery inventory is being invented." /> : !props.operator.checkpoints.length ? <EmptyState title="No recovery checkpoints" detail="No bounded mutation has recorded recoverable prior state." /> : <ul className="jai-compact-list">{props.operator.checkpoints.slice(-6).reverse().map(item => <li key={item.checkpointId}><span>{item.state === 'AVAILABLE' ? <RotateCcw size={16} /> : <CheckCircle2 size={16} />}</span><div><strong>{humanRecoveryState(item.state)}</strong><small>{humanCapability(item.capabilityId)} · {item.affectedTargets.join(' · ')}</small><ExpertDetails summary="Checkpoint details"><code>{item.checkpointId}</code><p>Created {item.createdAt} · expires {item.expiresAt || 'not declared'} · integrity {item.integrity.algorithm}</p></ExpertDetails></div></li>)}</ul>}
+      </SectionCard>
       <SectionCard title="Trust boundaries" description="These are product invariants" tone="neutral"><ul className="jai-principles"><li>Discover ≠ Install ≠ Review ≠ Trust ≠ Execute</li><li>Data ≠ Authority</li><li>LLM output ≠ Execution</li><li>See ≠ Click ≠ Type ≠ Submit</li><li>View ≠ Control ≠ Configure ≠ Admin</li></ul></SectionCard>
       <SectionCard title="Emergency Stop" description="Owner-controlled execution interlock" tone={props.operator?.emergency.active ? 'red' : props.operator ? 'green' : 'amber'}>
         {!props.operator ? <EmptyState title="Operator endpoint unavailable" detail="The interface does not claim an Emergency Stop runtime connection." /> : <div className="jai-verification"><div className="jai-verification__state">{props.operator.emergency.active ? <TriangleAlert size={21} /> : <ShieldCheck size={21} />}<span><strong>{props.operator.emergency.active ? 'ACTIVE' : 'Ready'}</strong><small>{props.operator.emergency.active ? 'New autonomous execution and lease grants are blocked' : 'Owner-only activation and resume endpoint connected'}</small></span></div><dl><div><dt>Engaged</dt><dd>{props.operator.emergency.engagedAt || 'not active'}</dd></div><div><dt>Leases revoked</dt><dd>{props.operator.emergency.revokedLeaseIds.length}</dd></div><div><dt>Cancellations</dt><dd>{props.operator.emergency.cancellations.length ? props.operator.emergency.cancellations.map(item => `${item.workId}: ${item.state}`).join(' · ') : 'none'}</dd></div></dl></div>}
@@ -570,6 +576,32 @@ function humanCoreState(state: string) {
 
 function humanTaskState(state: string) {
   return state.toLowerCase().replaceAll('_', ' ').replace(/\b\w/gu, char => char.toUpperCase());
+}
+
+function humanRecoveryState(state: string) {
+  const labels: Record<string, string> = {
+    CREATED: 'Checkpoint being recorded',
+    AVAILABLE: 'Rollback available',
+    CONSUMED: 'Rollback verified',
+    INVALID: 'Checkpoint invalid',
+    EXPIRED: 'Checkpoint expired',
+    FAILED: 'Recovery failed',
+    PARTIAL: 'Recovery is limited',
+    UNAVAILABLE: 'Rollback unavailable',
+    NOT_REQUIRED: 'Rollback not required',
+  };
+  return labels[state] || humanTaskState(state);
+}
+
+function humanCancellationState(state: string) {
+  const labels: Record<string, string> = {
+    CANCELLATION_REQUESTED: 'Cancellation requested',
+    CANCELLED: 'Handler confirmed cancellation',
+    COMPLETED_BEFORE_CANCEL: 'Action completed before cancellation',
+    NOT_CANCELLABLE: 'Unable to cancel safely',
+    FAILED_TO_CANCEL: 'Cancellation was not acknowledged',
+  };
+  return labels[state] || humanTaskState(state);
 }
 
 function countTaskStates(snapshot: CommandCenterClientSnapshot | null) {

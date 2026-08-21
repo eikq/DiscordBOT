@@ -49,6 +49,7 @@ export type CommandCenterClientSnapshot = {
     verification?: NonNullable<CommandCenterSnapshot['task']>['verification'];
     rollback?: NonNullable<CommandCenterSnapshot['task']>['rollback'];
     preflight?: NonNullable<CommandCenterSnapshot['task']>['plan'][number]['preflight'];
+    cancellation?: NonNullable<CommandCenterSnapshot['task']>['cancellation'];
   } | null;
   recentTasks: Array<{ id: string; objective: string; status: string; simulated?: boolean }>;
   evolution: {
@@ -136,6 +137,7 @@ export function presentCommandCenter(
           errors: task.errors.map(item => item.message).slice(0, 4),
           ...(task.verification ? { verification: task.verification } : {}),
           ...(task.rollback ? { rollback: task.rollback } : {}),
+          ...(task.cancellation ? { cancellation: task.cancellation } : {}),
           ...([...task.plan].reverse().find(step => step.preflight)?.preflight
             ? { preflight: [...task.plan].reverse().find(step => step.preflight)!.preflight }
             : {}),

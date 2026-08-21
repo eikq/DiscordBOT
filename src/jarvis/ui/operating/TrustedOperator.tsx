@@ -80,6 +80,7 @@ export function VerificationReport({ task }: { task: CommandCenterClientSnapshot
         <div><dt>Verified evidence</dt><dd>{verification?.evidence.length ? verification.evidence.join(' · ') : task.evidence.length ? task.evidence.join(' · ') : 'No verification evidence recorded yet.'}</dd></div>
         <div><dt>Failed checks</dt><dd>{verification?.failedChecks.length ? verification.failedChecks.join(' · ') : task.errors.length ? task.errors.join(' · ') : 'None recorded.'}</dd></div>
         <div><dt>Rollback</dt><dd>{task.rollback ? `${task.rollback.state}: ${task.rollback.strategy}` : 'No rollback record.'}</dd></div>
+        <div><dt>Cancellation</dt><dd>{task.cancellation ? `${task.cancellation.state}: ${task.cancellation.detail}` : 'No cancellation requested.'}</dd></div>
       </dl>
     </div>
   );
