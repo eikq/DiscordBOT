@@ -167,11 +167,11 @@ test('retrieval ranking drops stale, duplicate, and wrong-person items', () => {
 
 test('self-model stays insufficient until enough evidence exists', () => {
   const model = new CapabilitySelfModel(() => 1);
-  const first = model.observe('research.search', 'success');
+  const first = model.observe('research.search', 'success', undefined, { verificationState: 'VERIFIED', evidenceRefs: ['test:1'] });
   assert.equal(first.recentTrend, 'insufficient_data');
   assert.equal(first.confidence, null);
-  model.observe('research.search', 'success');
-  const third = model.observe('research.search', 'success');
+  model.observe('research.search', 'success', undefined, { verificationState: 'VERIFIED', evidenceRefs: ['test:2'] });
+  const third = model.observe('research.search', 'success', undefined, { verificationState: 'VERIFIED', evidenceRefs: ['test:3'] });
   assert.equal(third.recentTrend, 'improving');
   assert.ok(third.confidence !== null);
 });

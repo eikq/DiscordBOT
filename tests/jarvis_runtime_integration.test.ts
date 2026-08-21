@@ -261,6 +261,8 @@ test('night cycle persists reflections and proposes only success skill candidate
     outcome: 'success',
     lessons: ['ok'],
     confidence: 0.9,
+    verificationState: 'VERIFIED',
+    evidenceRefs: ['verification:system.status'],
     privacyClass: 'private',
     significance: 0.8,
   });
