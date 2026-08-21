@@ -3,6 +3,7 @@ import { compactCapabilityCatalog } from './catalog';
 import { fastPathResolution, heuristicResolve } from './heuristic';
 import { parseSemanticJson } from './semanticLlm';
 import { validateIntentResolution } from './schema';
+import { resolveOwnerGoal } from '../goals';
 import type { CompactCapability, IntentResolution, IntentResolveOptions } from './types';
 
 export async function resolveUserIntent(text: string, options: IntentResolveOptions = {}): Promise<IntentResolution> {
@@ -14,7 +15,12 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
     applicationIds: options.applicationIds,
     projectIds: options.projectIds,
   });
-  if (fast) return applyConfidencePolicy(fast, catalog);
+  if (fast) {
+    const declared = shouldResolveDeclaredGoal(options)
+      ? await resolveDeclaredGoalIntent(text, options)
+      : undefined;
+    return applyConfidencePolicy(bindFastPathToGoal(fast, declared) ?? fast, catalog);
+  }
 
   if (shouldTreatAsForbiddenRequest(text)) {
     return applyConfidencePolicy({
@@ -26,6 +32,11 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
       source: 'heuristic',
       actionClass: 'FORBIDDEN',
     }, catalog);
+  }
+
+  if (shouldResolveDeclaredGoal(options)) {
+    const goalIntent = await resolveDeclaredGoalIntent(text, options);
+    if (goalIntent) return applyConfidencePolicy(goalIntent, catalog);
   }
 
   const heuristic = heuristicResolve(text, {
@@ -113,6 +124,83 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
     source: 'heuristic',
     actionClass: 'CONVERSATION',
   };
+}
+
+function bindFastPathToGoal(fast: IntentResolution, declared?: IntentResolution): IntentResolution | undefined {
+  if (!declared?.goal || fast.kind !== 'CAPABILITY' || !fast.capabilityId) return declared;
+  const route = declared.goal.routes.find(item => (
+    item.available && item.inputCompatible && item.steps[0]?.capabilityId === fast.capabilityId
+  ));
+  if (!route) return declared;
+  const goal = structuredClone(declared.goal);
+  goal.selectedRouteId = route.id;
+  goal.permissionRequired = route.ownerDecisionRequired ? route.steps.map(item => item.capabilityId) : [];
+  goal.evidence = [...goal.evidence, `fast-path-bound:${fast.capabilityId}`];
+  return {
+    ...fast,
+    arguments: structuredClone(route.steps[0]?.input ?? fast.arguments ?? {}),
+    reasonCode: 'DECLARED_GOAL',
+    goal,
+  };
+}
+
+function shouldResolveDeclaredGoal(options: IntentResolveOptions): boolean {
+  return Boolean(options.capabilityHost || options.goalCatalog || options.goalSuggestion);
+}
+
+async function resolveDeclaredGoalIntent(text: string, options: IntentResolveOptions): Promise<IntentResolution | undefined> {
+  const goal = await resolveOwnerGoal(text, {
+    host: options.capabilityHost,
+    catalog: options.goalCatalog,
+    adapters: options.inputAdapters,
+    context: options.context,
+    suggestion: options.goalSuggestion,
+  });
+  return intentFromGoal(goal);
+}
+
+function intentFromGoal(goal: Awaited<ReturnType<typeof resolveOwnerGoal>>): IntentResolution | undefined {
+  if (goal.status === 'NO_MATCH') return undefined;
+  if (goal.status === 'RESOLVED' && goal.handler === 'SELF_KNOWLEDGE') {
+    return {
+      kind: 'CONVERSATION', confidence: confidenceOf(goal.confidence), reasonCode: 'DECLARED_SELF_KNOWLEDGE_GOAL',
+      consumed: true, source: 'heuristic', actionClass: 'INFORMATION', goal,
+    };
+  }
+  if (goal.status === 'RESOLVED') {
+    const selected = goal.routes.find(route => route.id === goal.selectedRouteId);
+    const first = selected?.steps[0];
+    if (!first) {
+      return {
+        kind: 'UNSUPPORTED', confidence: confidenceOf(goal.confidence), reasonCode: 'GOAL_ROUTE_UNAVAILABLE',
+        userMessage: 'I do not currently have a verified executable route for that goal.', consumed: true,
+        source: 'heuristic', actionClass: 'INFORMATION', goal,
+      };
+    }
+    return {
+      kind: 'CAPABILITY', capabilityId: first.capabilityId, arguments: first.input,
+      confidence: confidenceOf(goal.confidence), reasonCode: 'DECLARED_GOAL', consumed: true,
+      source: 'heuristic', actionClass: selected.risk === 'READ_ONLY' ? 'INFORMATION' : 'ACTIONABLE', goal,
+    };
+  }
+  if (goal.status === 'NEEDS_INPUT' || goal.status === 'CLARIFICATION' || goal.status === 'NEEDS_OWNER_DECISION') {
+    return {
+      kind: 'CLARIFICATION', confidence: 'LOW', reasonCode: goal.status,
+      userMessage: goal.smallestOwnerQuestion || 'I need one more detail before I can continue safely.',
+      consumed: true, source: 'heuristic', actionClass: 'AMBIGUOUS', goal,
+    };
+  }
+  return {
+    kind: 'UNSUPPORTED', confidence: confidenceOf(goal.confidence), reasonCode: 'GOAL_BLOCKED',
+    userMessage: goal.smallestOwnerQuestion || 'I do not currently have a verified route for that goal.',
+    consumed: true, source: 'heuristic', actionClass: 'INFORMATION', goal,
+  };
+}
+
+function confidenceOf(value: number | null): IntentResolution['confidence'] {
+  if (value !== null && value >= 0.9) return 'HIGH';
+  if (value !== null && value >= 0.78) return 'MEDIUM';
+  return 'LOW';
 }
 
 export function applyConfidencePolicy(resolution: IntentResolution, catalog: CompactCapability[]): IntentResolution {

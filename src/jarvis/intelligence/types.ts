@@ -9,6 +9,7 @@ import type {
 } from '../capabilities/types';
 import type { CapabilityAssessment } from '../evolution/selfModel';
 import type { ModelCertification, ModelProfile } from '../models/types';
+import type { GoalKnowledge } from '../goals/types';
 
 export const CAPABILITY_INTELLIGENCE_STATUSES = [
   'AVAILABLE',
@@ -144,6 +145,7 @@ export type SelfKnowledgeSnapshot = {
     capabilities: string[];
   }>;
   competence: CapabilityAssessment[];
+  goals: GoalKnowledge[];
   unknowns: string[];
 };
 

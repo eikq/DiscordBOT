@@ -22,7 +22,7 @@ import type { EmergencyStopController } from '../security/emergencyStop';
 import { createAbortReason, readAbortReason } from '../capabilities/cancellation';
 import type { CapabilityCancellationReason, CapabilityCancellationRecord } from '../capabilities/types';
 
-export { defaultPlanFor, planForObjective } from './plans';
+export { defaultPlanFor, planForObjective, planForGoalResolution } from './plans';
 
 export type WorkAgentOptions = {
   store?: WorkTaskStore;
@@ -86,7 +86,7 @@ export class WorkAgent {
     });
   }
 
-  public receive(objective: string, plan?: PlanStep[], extra: { simulated?: boolean } = {}): WorkTask {
+  public receive(objective: string, plan?: PlanStep[], extra: { simulated?: boolean; goalResolution?: import('../goals/types').GoalResolution } = {}): WorkTask {
     this.assertEmergencyAllowsExecution();
     const steps = plan && plan.length > 0 ? plan : defaultPlanFor(objective);
     assertAcyclic(steps);
@@ -99,6 +99,7 @@ export class WorkAgent {
       retryBudget: this.budgets.retries,
       maxGapReplans: this.maxGapReplans,
       simulated: extra.simulated ?? this.simulated,
+      goalResolution: extra.goalResolution,
     });
     this.emit(task, 'TASK_RECEIVED', `Task received: ${task.objective}`, { visualState: 'UNDERSTANDING' });
     return this.store.setStatus(task.id, 'UNDERSTANDING');
@@ -434,6 +435,7 @@ export class WorkAgent {
         )
       : undefined);
     if (gapResolution) {
+      if (result.toolResult) task.toolResults.push(result.toolResult);
       task.gapResolution = gapResolution;
       task.blockers = gapResolution.missing.map(item => ({
         capabilityId: item.capabilityId,
@@ -582,14 +584,25 @@ export class WorkAgent {
     const originalId = step.id;
     const index = task.plan.findIndex(item => item.id === originalId);
     if (index < 0) return false;
+    const goalRoute = task.goalResolution?.routes.find(route => (
+      route.steps.map(item => item.capabilityId).join('\u0000') === ids.join('\u0000')
+    ));
     step.capability = ids[0];
+    const firstResolved = goalRoute?.steps[0];
+    step.input = firstResolved ? structuredClone(firstResolved.input) : step.input;
+    step.inputAdapter = firstResolved?.adapterId ? {
+      id: firstResolved.adapterId,
+      compatibility: 'ADAPTER_COMPATIBLE',
+      evidence: [...firstResolved.evidence],
+    } : undefined;
     step.status = 'pending';
     step.errorCode = undefined;
     step.resultSummary = `Replanned to ${ids[0]} from structured registry evidence.`;
     step.retryPolicy = { ...step.retryPolicy, attempted: 0 };
     let previousId = originalId;
     const inserted: PlanStep[] = [];
-    for (const capabilityId of ids.slice(1)) {
+    for (const [offset, capabilityId] of ids.slice(1).entries()) {
+      const resolved = goalRoute?.steps[offset + 1];
       const next: PlanStep = {
         ...step,
         id: newGapStepId(capabilityId, pursuit.attempted, inserted.length),
@@ -597,10 +610,21 @@ export class WorkAgent {
         dependencies: [previousId],
         status: 'pending',
         capability: capabilityId,
+        input: resolved ? structuredClone(resolved.input) : step.input,
+        inputAdapter: resolved?.adapterId ? {
+          id: resolved.adapterId,
+          compatibility: 'ADAPTER_COMPATIBLE',
+          evidence: [...resolved.evidence],
+        } : undefined,
         retryPolicy: { ...step.retryPolicy, attempted: 0 },
       };
       inserted.push(next);
       previousId = next.id;
+    }
+    if (goalRoute && task.goalResolution) {
+      task.goalResolution.selectedRouteId = goalRoute.id;
+      task.goalResolution.boundedAttempts.attempted = pursuit.attempted;
+      task.goalResolution.evidence.push(`replan:${goalRoute.id}:${pursuit.attempted}`);
     }
     task.plan.splice(index + 1, 0, ...inserted);
     if (inserted.length > 0) {
@@ -634,6 +658,19 @@ export class WorkAgent {
       ...this.require(task.id),
       status,
       outcome,
+      ...(task.goalResolution?.goalId ? {
+        goalOutcome: {
+          goalId: task.goalResolution.goalId,
+          outcome: outcome === 'success' ? 'success' : outcome === 'degraded' || outcome === 'cancelled' ? 'partial' : 'failure',
+          verificationState: task.verification?.state,
+          capabilityOutcomes: task.toolResults.map(item => ({ capabilityId: item.capability, status: item.status })),
+          evidenceRefs: unique([
+            `goal:${task.goalResolution.goalId}`,
+            ...task.goalResolution.evidence.slice(0, 6),
+            ...task.evidence.slice(0, 8),
+          ]),
+        },
+      } : {}),
     };
     const saved = this.store.save(next);
     try {

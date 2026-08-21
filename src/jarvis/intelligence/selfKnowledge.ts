@@ -2,6 +2,7 @@ import { redactSecrets } from '../security/redaction';
 import { CORE_IDENTITY } from '../evolution/identity';
 import type { CapabilityHost, CapabilityDescriptor } from '../capabilities/types';
 import { distributionForCapability } from '../capabilities/distribution';
+import { buildGoalKnowledge, createDefaultGoalCatalog, type GoalCatalog } from '../goals';
 import type { CapabilitySelfModel } from '../evolution/selfModel';
 import type { ModelCertificationRegistry } from '../models/ModelCertificationRegistry';
 import type { ModelProfileRegistry } from '../models/ModelProfileRegistry';
@@ -20,6 +21,7 @@ export type SelfKnowledgeOptions = {
   modelProviderState?: ReadonlyMap<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>;
   services?: SelfKnowledgeService[];
   declarations?: DeclaredCapabilityEvidence[];
+  goalCatalog?: GoalCatalog;
   now?: () => number;
 };
 
@@ -59,7 +61,7 @@ export async function buildSelfKnowledgeSnapshot(options: SelfKnowledgeOptions):
       limitations,
     };
   });
-  return {
+  const snapshot: SelfKnowledgeSnapshot = {
     generatedAt: checkedAt,
     identity: {
       name: CORE_IDENTITY.name,
@@ -84,11 +86,14 @@ export async function buildSelfKnowledgeSnapshot(options: SelfKnowledgeOptions):
     })),
     providers: providerInventory(capabilities),
     competence: options.selfModel?.matrix() ?? [],
+    goals: [],
     unknowns: [
       ...(models.length === 0 ? ['No configured model profile was observable.'] : []),
       ...(options.services === undefined ? ['Service inventory was not supplied to Self Knowledge.'] : []),
     ],
   };
+  snapshot.goals = buildGoalKnowledge(options.goalCatalog ?? createDefaultGoalCatalog(), snapshot);
+  return snapshot;
 }
 
 async function safeAvailability(host: CapabilityHost, id: string) {

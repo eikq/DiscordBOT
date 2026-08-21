@@ -1,6 +1,7 @@
 import { isGatedCapabilityId, isReadOnlyGatedCapability } from '../capabilities/actions/constants';
 import { newStepId } from './store';
 import type { PlanStep, PlanStepKind } from './types';
+import type { GoalResolution } from '../goals/types';
 
 export function defaultPlanFor(objective: string): PlanStep[] {
   const title = objective.trim() || 'Untitled task';
@@ -38,6 +39,36 @@ export function planForObjective(objective: string, capabilityId?: string): Plan
   const verify = makeStep('verify', [work.id], 'Verify the structured outcome');
   const reflect = makeStep('reflect', [verify.id], 'Record a structured reflection');
   return [...steps, work, verify, reflect];
+}
+
+export function planForGoalResolution(objective: string, goal: GoalResolution): PlanStep[] {
+  const selected = goal.routes.find(route => route.id === goal.selectedRouteId);
+  if (goal.status !== 'RESOLVED' || !selected || selected.steps.length === 0) return defaultPlanFor(objective);
+  const title = objective.trim() || goal.goalName || 'Untitled task';
+  const understand = makeStep('understand', [], `Resolve goal: ${(goal.goalName || title).slice(0, 80)}`);
+  const steps: PlanStep[] = [understand];
+  let dependency = understand.id;
+  for (const resolved of selected.steps) {
+    if (needsOwnerPermission(resolved.capabilityId)) {
+      const permission = makeStep('permission', [dependency], `Request permission for ${resolved.capabilityId}`, resolved.capabilityId);
+      steps.push(permission);
+      dependency = permission.id;
+    }
+    const work = makeStep(capabilityKind(resolved.capabilityId), [dependency], `Invoke ${resolved.capabilityId}`, resolved.capabilityId);
+    work.input = structuredClone(resolved.input);
+    if (resolved.adapterId) {
+      work.inputAdapter = {
+        id: resolved.adapterId,
+        compatibility: 'ADAPTER_COMPATIBLE',
+        evidence: [...resolved.evidence],
+      };
+    }
+    steps.push(work);
+    dependency = work.id;
+  }
+  const verify = makeStep('verify', [dependency], 'Verify the declared goal outcome');
+  const reflect = makeStep('reflect', [verify.id], 'Record capability-specific and goal outcome evidence');
+  return [...steps, verify, reflect];
 }
 
 function makeStep(kind: PlanStepKind, dependencies: string[], title: string, capability?: string): PlanStep {

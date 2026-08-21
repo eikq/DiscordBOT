@@ -256,7 +256,8 @@ export {
 export * from './models';
 export * from './safety';
 export * from './intelligence';
-export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
+export * from './goals';
+export { WorkAgent, WorkTaskStore, assertAcyclic, defaultPlanFor, planForGoalResolution, planForObjective, createCapabilityWorkInvoker, synthesizeTaskResponse } from './agent';
 export type { PlanStep, WorkGapResolver, WorkStepInvoker, WorkStepResult, WorkTask, WorkTaskStatus } from './agent';
 export { visualStateFromEvents, visualStateFromEvent, formatSseEvent, parseLastEventId, sseCursorFrom, writeSseReplay, mergeBudgets, classifyFailure } from './ops';
 export { OwnerControl } from './control';

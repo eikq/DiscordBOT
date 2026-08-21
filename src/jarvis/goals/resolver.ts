@@ -46,7 +46,6 @@ export async function resolveOwnerGoal(text: string, options: GoalResolverOption
   const match = options.suggestion
     ? matchValidatedSuggestion(raw, options.suggestion, catalog)
     : deterministicMatch(raw, catalog, options.context);
-  if (match.status === 'NO_MATCH' || !match.definition) return noMatch(raw, attempted, maximum, match.evidence);
   if (match.status === 'CLARIFICATION') {
     return {
       status: 'CLARIFICATION',
@@ -64,6 +63,7 @@ export async function resolveOwnerGoal(text: string, options: GoalResolverOption
       boundedAttempts: { attempted, maximum },
     };
   }
+  if (match.status === 'NO_MATCH' || !match.definition) return noMatch(raw, attempted, maximum, match.evidence);
   const definition = match.definition;
   const missing = missingInputs(definition, match.extracted);
   if (missing.length > 0) {

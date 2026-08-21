@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { PlanStep, WorkTask, WorkTaskStatus } from './types';
+import type { GoalResolution } from '../goals/types';
 import { assertTransition, isTerminalStatus } from './transitions';
 import { recoverInterruptedTask } from './recoveryState';
 import { SqliteWorkTaskPersistence } from './sqliteStore';
@@ -43,6 +44,7 @@ export class WorkTaskStore {
     simulated?: boolean;
     permissionRequirements?: string[];
     maxGapReplans?: number;
+    goalResolution?: GoalResolution;
   }): WorkTask {
     const at = new Date(this.now()).toISOString();
     const task: WorkTask = {
@@ -60,6 +62,7 @@ export class WorkTaskStore {
       errors: [],
       goalPursuit: { attempted: 0, maximum: Math.max(1, Math.min(input.maxGapReplans ?? 2, 4)) },
       simulated: input.simulated || undefined,
+      ...(input.goalResolution ? { goalResolution: structuredClone(input.goalResolution) } : {}),
     };
     this.tasks.set(task.id, task);
     this.write(task);

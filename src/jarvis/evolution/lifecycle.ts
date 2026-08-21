@@ -45,7 +45,9 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
   const experience = stores.experiences.createIfSignificant({
     id: experienceId,
     kind: 'episodic',
-    domain: 'task',
+    domain: task.goalResolution?.goalId ?? 'task',
+    ...(task.goalResolution?.goalId ? { goalId: task.goalResolution.goalId } : {}),
+    ...(task.goalOutcome ? { goalOutcome: task.goalOutcome } : {}),
     goal: task.objective,
     situation: task.objective,
     actions: task.plan.map(step => step.kind),
@@ -61,7 +63,11 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
     privacyClass: 'private',
     significance: 0.7,
     cause: task.errors[0]?.code,
-    evidenceRefs: task.evidence.slice(0, 8),
+    evidenceRefs: unique([
+      ...(task.goalResolution?.goalId ? [`goal:${task.goalResolution.goalId}`] : []),
+      ...(task.goalResolution?.evidence ?? []).slice(0, 4),
+      ...task.evidence.slice(0, 8),
+    ]),
     verificationState,
     ...(blocker ? {
       failureAnalysis: {
@@ -113,17 +119,24 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
     });
   }
 
-  const cap = task.toolResults[0]?.capability || 'task';
-  stores.selfModel.observe(
-    cap,
-    experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure',
-    blocker?.blocker || experience.cause,
-    {
-      verificationState,
-      evidenceRefs: unique([`task:${task.id}`, ...task.evidence.slice(0, 8)]),
-      observationId: experience.id,
-    },
-  );
+  const capabilityResults = task.toolResults.length
+    ? task.toolResults
+    : [{ capability: 'task', status: experience.outcome, summary: experience.result }];
+  for (const [index, result] of capabilityResults.entries()) {
+    const capabilityOutcome = result.status === 'ok'
+      ? (experience.outcome === 'success' ? 'success' : 'partial')
+      : 'failure';
+    stores.selfModel.observe(
+      result.capability,
+      capabilityOutcome,
+      capabilityOutcome === 'failure' ? blocker?.blocker || result.status || experience.cause : undefined,
+      {
+        verificationState: capabilityOutcome === 'success' ? verificationState : 'FAILED_VERIFICATION',
+        evidenceRefs: unique([`task:${task.id}`, ...task.evidence.slice(0, 8)]),
+        observationId: `${experience.id}:capability:${index}:${result.capability}`,
+      },
+    );
+  }
   stores.affect?.appraise({ kind: experience.outcome === 'success' ? 'success' : 'failure' });
   if (experience.outcome === 'failure' && stores.growth && stores.growth.active().length < 3) {
     const id = `goal_${(experience.cause || 'step').toLowerCase().replace(/[^a-z0-9]+/gu, '_').slice(0, 24)}`;

@@ -2,6 +2,7 @@ import type { JarvisErrorCode } from '../ops/types';
 import type { ActionPreflight, RollbackContract, VerificationRecord, VerificationState } from '../safety/types';
 import type { CapabilityCancellationRecord } from '../capabilities/types';
 import type { GapResolutionPlan, ObjectiveBlockerCode } from '../intelligence/types';
+import type { GoalOutcomeEvidence, GoalResolution } from '../goals/types';
 
 export const WORK_TASK_STATUSES = [
   'RECEIVED',
@@ -109,6 +110,11 @@ export type PlanStep = {
   verification?: VerificationRecord;
   rollback?: RollbackContract;
   cancellation?: CapabilityCancellationRecord;
+  inputAdapter?: {
+    id: string;
+    compatibility: 'ADAPTER_COMPATIBLE';
+    evidence: string[];
+  };
 };
 
 export type WorkTaskOutcome = 'success' | 'failure' | 'cancelled' | 'blocked' | 'degraded';
@@ -149,6 +155,8 @@ export type WorkTask = {
     attempted: number;
     maximum: number;
   };
+  goalResolution?: GoalResolution;
+  goalOutcome?: GoalOutcomeEvidence;
 };
 
 export type WorkStepResult = {

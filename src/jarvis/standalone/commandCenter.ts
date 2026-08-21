@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { WorkAgent, WorkTaskStore, newStepId, type PlanStep, type PermissionGrantInput, type WorkStepInvoker, type WorkStepResult, type WorkTask } from '../agent';
+import { WorkAgent, WorkTaskStore, newStepId, planForGoalResolution, type PlanStep, type PermissionGrantInput, type WorkStepInvoker, type WorkStepResult, type WorkTask } from '../agent';
 import { adaptPlanForFailures } from '../agent/adaptivePlan';
 import { createCapabilityWorkInvoker } from '../agent/capabilityInvoker';
 import { inferCapabilityFromObjective, planForObjective } from '../agent/capabilityResolve';
@@ -49,6 +49,7 @@ import type { JarvisVisualState } from '../ops/types';
 import { sharedJarvisEventBus, type JarvisEventBus } from '../security/eventBus';
 import { SimulatedScreenCapture, SimulatedVisionAnalyzer, type VisualContext } from '../vision';
 import type { JarvisOperationEvent } from '../security/types';
+import { resolveOwnerGoal, type GoalResolution } from '../goals';
 import { sharedTrustedOperatorRuntime, type TrustedOperatorRuntime } from '../security/trustedOperatorRuntime';
 import { presentCommandCenter } from './commandCenterView';
 import type { DemoScenarioId } from './commandCenterHttp';
@@ -293,21 +294,26 @@ export class CommandCenterRuntime {
     }
   }
 
-  public async runObjective(objective: string, options: { simulated?: boolean; sessionId?: string } = {}): Promise<WorkTask> {
+  public async runObjective(objective: string, options: { simulated?: boolean; sessionId?: string; goalResolution?: GoalResolution } = {}): Promise<WorkTask> {
     const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
     if (simulated) this.control.patch({ simulationMode: true }, 'owner');
-    const capabilityId = inferCapabilityFromObjective(objective, this.host);
+    const resolvedGoal = options.goalResolution ?? await resolveOwnerGoal(objective, { host: this.host });
+    const executableGoal = resolvedGoal.status === 'RESOLVED' && resolvedGoal.handler === 'CAPABILITY_PLAN'
+      ? resolvedGoal
+      : undefined;
+    const capabilityId = executableGoal?.routes.find(item => item.id === executableGoal.selectedRouteId)?.steps[0]?.capabilityId
+      ?? inferCapabilityFromObjective(objective, this.host);
     const routed = routeJarvisRequest({ text: objective });
     const route = capabilityId && routed.route === 'CONVERSATION'
       ? { ...routed, route: 'CAPABILITY' as const, agentic: true, reason: 'bound_capability' }
       : routed;
     const trustedSkills = this.skills.retrieveTrusted(objective);
     const plan = adaptPlanForFailures(
-      planForObjective(objective, capabilityId),
+      executableGoal ? planForGoalResolution(objective, executableGoal) : planForObjective(objective, capabilityId),
       this.failures,
       trustedSkills,
     );
-    const task = this.agent.receive(objective, plan, { simulated });
+    const task = this.agent.receive(objective, plan, { simulated, goalResolution: executableGoal });
     this.lastRequest = { route, objective, taskId: task.id };
     return this.agent.run(task.id);
   }
@@ -388,13 +394,49 @@ export class CommandCenterRuntime {
       dependencies: [{ capabilityId, relation: 'REQUIRED' }],
       allowSimulation: Boolean(task.simulated),
     }, snapshot);
-    return this.gapResolver.resolve({
+    const base = await this.gapResolver.resolve({
       objective: task.objective,
       graph,
       snapshot,
       attempted,
       maximumAttempts,
     });
+    const current = step.capability;
+    const attemptedRoutes = new Set((task.goalResolution?.evidence ?? [])
+      .filter(item => item.startsWith('replan:'))
+      .map(item => item.split(':')[1]));
+    const alternatives = (task.goalResolution?.routes ?? [])
+      .filter(route => route.id !== task.goalResolution?.selectedRouteId)
+      .filter(route => !attemptedRoutes.has(route.id))
+      .filter(route => !route.steps.some(item => item.capabilityId === current))
+      .map(route => ({
+        kind: route.steps.length > 1 ? 'COMPOSE_EXISTING_CAPABILITIES' as const : 'USE_EXISTING_CAPABILITY' as const,
+        priority: route.priority,
+        title: route.ownerDecisionRequired ? `${route.title} requires an owner decision.` : route.title,
+        capabilityIds: route.steps.map(item => item.capabilityId),
+        risk: route.risk === 'READ_ONLY' ? 'LOW' as const : route.risk,
+        ownerInputRequired: [] as string[],
+        permissionRequired: route.ownerDecisionRequired ? route.steps.map(item => item.capabilityId) : [],
+        externalDependencies: [] as string[],
+        researchRequired: false,
+        executableNow: route.available && route.inputCompatible && !route.ownerDecisionRequired,
+        inputCompatible: route.inputCompatible,
+        trustRequired: false,
+      }));
+    if (alternatives.length === 0) return base;
+    const possiblePaths = [...alternatives, ...base.possiblePaths];
+    const recommendedPath = attempted < maximumAttempts
+      ? possiblePaths.find(item => item.executableNow && item.inputCompatible)
+        ?? possiblePaths.find(item => item.permissionRequired.length > 0)
+        ?? base.recommendedPath
+      : base.recommendedPath;
+    return {
+      ...base,
+      possiblePaths,
+      recommendedPath,
+      permissionRequired: [...new Set([...base.permissionRequired, ...(recommendedPath?.permissionRequired ?? [])])],
+      evidence: [...base.evidence, ...alternatives.flatMap(item => item.capabilityIds.map(id => `declared-alternative:${id}`))],
+    };
   }
 
   public notify(signal: MonitorSignal): ReturnType<ProactiveMonitor['ingest']> {

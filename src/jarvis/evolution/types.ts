@@ -29,6 +29,8 @@ export type ExperienceRecord = {
   evidenceRefs?: string[];
   ownerFeedback?: string;
   verificationState?: import('../safety/types').VerificationState;
+  goalId?: string;
+  goalOutcome?: import('../goals/types').GoalOutcomeEvidence;
   failureAnalysis?: {
     capability?: string;
     blocker?: string;

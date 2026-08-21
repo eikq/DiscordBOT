@@ -11,7 +11,7 @@ export function selfKnowledgeQuestionKind(text: string): SelfKnowledgeAnswer['ki
   if (/\b(cctv|camera|nvr|rtsp|onvif)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(text)) return 'CCTV_STATUS';
   if (/can you.*(?:control|use).*(?:computer|pc|screen)|ควบคุม.*(?:คอม|พีซี|หน้าจอ)/iu.test(text)) return 'DEVICE_CONTROL';
   if (/what.*(?:become better|improved at)|what are you better at|เก่งขึ้น.*อะไร|พัฒนา.*ความสามารถ/iu.test(text)) return 'COMPETENCE';
-  if (/what can you do|what are your capabilities|ทำอะไรได้บ้าง|ความสามารถ.*อะไร/iu.test(text)) return 'CAPABILITY_SUMMARY';
+  if (/what can you do|what are your capabilities|what goals can you|handle end to end|ทำอะไรได้บ้าง|ความสามารถ.*อะไร/iu.test(text)) return 'CAPABILITY_SUMMARY';
   if (/what.*unavailable|currently unavailable|อะไร.*ใช้ไม่ได้|ความสามารถ.*ยัง.*ไม่ได้/iu.test(text)) return 'UNAVAILABLE';
   if (/why can.?t|what do you need|ทำไม.*ไม่ได้|ต้องการอะไร.*จาก.*ผม/iu.test(text)) return 'GAP_EXPLANATION';
   return undefined;
@@ -52,17 +52,23 @@ export function answerFromSelfKnowledge(
   const simulations = snapshot.capabilities.filter(item => item.status === 'SIMULATION');
   const setup = snapshot.capabilities.filter(item => ['NEEDS_CONFIGURATION', 'NEEDS_OWNER_INPUT', 'NEEDS_PROVIDER'].includes(item.status));
   const names = ready.slice(0, 10).map(item => item.displayName);
+  const goalNow = snapshot.goals.filter(item => item.status === 'CAN_DO_NOW');
+  const goalApproval = snapshot.goals.filter(item => item.status === 'NEEDS_APPROVAL');
+  const goalSetup = snapshot.goals.filter(item => item.status === 'AFTER_SETUP');
   return {
     kind: 'CAPABILITY_SUMMARY',
     text: [
       `I am Jarvis, the owner's local operational assistant. ${ready.length} registered capabilities currently report available.`,
       names.length ? `Available now: ${names.join(', ')}.` : 'No capability currently has enough runtime evidence to report AVAILABLE.',
+      goalNow.length ? `End-to-end goals ready now: ${goalNow.map(item => item.name).join(', ')}.` : 'No end-to-end goal currently has complete runtime evidence.',
+      goalApproval.length ? `${goalApproval.length} declared goal routes need owner approval.` : '',
+      goalSetup.length ? `${goalSetup.length} declared goal routes need setup or provider evidence.` : '',
       simulations.length ? `${simulations.length} capability contracts are simulation-only.` : '',
       setup.length ? `${setup.length} capabilities need setup, a provider, or precise owner input.` : '',
       'My model can propose plans, but CapabilityHost, policy, permission, Emergency Stop, verification, rollback, and containment determine what I can actually execute.',
     ].filter(Boolean).join(' '),
     capabilityIds: ready.map(item => item.id),
-    evidence: ready.flatMap(item => item.evidence).slice(0, 16),
+    evidence: [...goalNow.flatMap(item => item.evidence), ...ready.flatMap(item => item.evidence)].slice(0, 16),
   };
 }
 

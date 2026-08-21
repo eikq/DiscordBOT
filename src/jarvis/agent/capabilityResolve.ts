@@ -4,7 +4,7 @@ import { RESEARCH_SEARCH } from '../research/constants';
 import { WORKSPACE_SEARCH } from '../workspace/constants';
 import type { PlanStep, PlanStepKind, WorkTask } from './types';
 
-export { capabilityKind, defaultPlanFor, needsOwnerPermission, planForObjective } from './plans';
+export { capabilityKind, defaultPlanFor, needsOwnerPermission, planForGoalResolution, planForObjective } from './plans';
 
 const BLOCKED_CAPABILITY = /(?:^|[._:/\s-])(shell|exec|spawn|cmd|powershell|pwsh|bash|zsh|\/bin\/sh|osascript)(?:$|[._:/\s-])/iu;
 

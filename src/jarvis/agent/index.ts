@@ -1,4 +1,4 @@
-export { WorkAgent, defaultPlanFor, planForObjective } from './engine';
+export { WorkAgent, defaultPlanFor, planForObjective, planForGoalResolution } from './engine';
 export { WorkTaskStore, newStepId, newTaskId } from './store';
 export { defaultWorkDbPath } from './sqliteStore';
 export { createCapabilityWorkInvoker } from './capabilityInvoker';

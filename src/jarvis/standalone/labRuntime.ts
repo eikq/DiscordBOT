@@ -638,7 +638,7 @@ export class JarvisLabRuntime {
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
-      return this.askViaWorkAgent(input, prepared.sessionId, route);
+      return this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
@@ -682,7 +682,7 @@ export class JarvisLabRuntime {
     const prepared = await this.prepareAsk(input);
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
-      const output = await this.askViaWorkAgent(input, prepared.sessionId, route);
+      const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
       emit({ type: 'final', payload: output });
       if (output.speech) emit({ type: 'speech', payload: output.speech });
       return output;
@@ -779,7 +779,8 @@ export class JarvisLabRuntime {
     });
     return {
       route,
-      useWork: shouldUseWorkAgent(route, {
+      useWork: (prepared.resolution.goal?.status === 'RESOLVED'
+        && prepared.resolution.goal.handler === 'CAPABILITY_PLAN') || shouldUseWorkAgent(route, {
         explicitCalls: Boolean(input.capabilityCalls?.length || input.capabilities?.length),
         intentKind: prepared.resolution.kind,
         capabilityId: prepared.resolution.capabilityId,
@@ -866,6 +867,7 @@ export class JarvisLabRuntime {
     input: JarvisLabAskInput,
     sessionId: string,
     route: RouteDecision,
+    resolution?: IntentResolution,
   ): Promise<StandaloneTextTurnOutput & {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
@@ -883,7 +885,10 @@ export class JarvisLabRuntime {
     if (!center) {
       throw new Error('Work agent is unavailable for this request.');
     }
-    const task = await center.runObjective(String(input.text || '').trim(), { sessionId });
+    const task = await center.runObjective(String(input.text || '').trim(), {
+      sessionId,
+      goalResolution: resolution?.goal,
+    });
     return this.finishWorkTask(input, sessionId, route, task);
   }
 
@@ -1010,6 +1015,7 @@ export class JarvisLabRuntime {
           request.context,
         )
         : undefined,
+      capabilityHost: this.capabilityHost,
     });
     const stage = intentStageOf(prepared.resolution);
     return {
@@ -1173,6 +1179,7 @@ async function resolveLabActionTurn(text: string, input: {
   semanticResolve?: Parameters<typeof resolveUserIntent>[1] extends infer T
     ? T extends { semanticResolve?: infer S } ? S : undefined
     : undefined;
+  capabilityHost?: CapabilityHost;
 }): Promise<{
   capabilities: string[];
   capabilityCalls?: JarvisLabAskInput['capabilityCalls'];
@@ -1231,6 +1238,7 @@ async function resolveLabActionTurn(text: string, input: {
     catalog: input.catalog,
     context: input.context,
     semanticResolve: input.semanticResolve,
+    capabilityHost: input.capabilityHost,
   });
   if (resolution.kind === 'FORBIDDEN') {
     try {

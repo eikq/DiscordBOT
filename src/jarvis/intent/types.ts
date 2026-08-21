@@ -1,3 +1,6 @@
+import type { CapabilityHost } from '../capabilities/types';
+import type { GoalCatalog, GoalResolution, GoalSuggestion, TrustedInputAdapterRegistry } from '../goals';
+
 export type ActionabilityClass =
   | 'ACTIONABLE'
   | 'INFORMATION'
@@ -55,6 +58,7 @@ export type IntentResolution = {
   source: IntentSource;
   actionClass: ActionabilityClass;
   clarification?: ClarificationState;
+  goal?: GoalResolution;
 };
 
 export type InteractionContext = {
@@ -86,6 +90,10 @@ export type IntentResolveOptions = {
   catalog?: CompactCapability[];
   context?: InteractionContext | null;
   now?: number;
+  capabilityHost?: CapabilityHost;
+  goalCatalog?: GoalCatalog;
+  inputAdapters?: TrustedInputAdapterRegistry;
+  goalSuggestion?: GoalSuggestion;
   semanticResolve?: (input: {
     text: string;
     catalog: CompactCapability[];
