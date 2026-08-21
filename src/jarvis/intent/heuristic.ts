@@ -30,6 +30,7 @@ const APP_ALIASES: Array<{ cues: string[]; id: string }> = [
   { cues: ['spotify', 'สปอติฟาย'], id: 'spotify' },
   { cues: ['edge', 'msedge'], id: 'msedge' },
   { cues: ['calculator', 'เครื่องคิดเลข', 'calc'], id: 'calculator' },
+  { cues: ['cursor'], id: 'cursor' },
 ];
 
 export function heuristicResolve(

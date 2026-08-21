@@ -47,6 +47,7 @@ const APPLICATION_ALIASES: Record<string, string> = {
   'โน้ตแพด': 'notepad',
   'โน๊ตแพด': 'notepad',
   'สปอติฟาย': 'spotify',
+  cursor: 'cursor',
 };
 
 const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reasonCode: string }> = [

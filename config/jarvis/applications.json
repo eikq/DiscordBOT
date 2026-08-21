@@ -55,6 +55,15 @@
       "allowedArgs": []
     },
     {
+      "id": "cursor",
+      "displayName": "Cursor",
+      "candidates": [
+        "%LocalAppData%\\Programs\\cursor\\Cursor.exe",
+        "%LocalAppData%\\Programs\\Cursor\\Cursor.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
       "id": "browser",
       "displayName": "Browser",
       "candidates": [
