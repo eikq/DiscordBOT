@@ -317,13 +317,15 @@ function createPlaceWindowHandler(
   return {
     descriptor: () => ({
       id: DESKTOP_PLACE_WINDOW,
-      description: 'Move an allowlisted application window onto a verified display.',
+      description: 'Move an already-open allowlisted application or trusted-browser website window onto a verified display. Does not navigate or click.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
-        required: ['applicationId'],
         properties: {
+          kind: { type: 'string' },
           applicationId: { type: 'string' },
+          url: { type: 'string' },
+          label: { type: 'string' },
           display: { type: 'object' },
         },
       },
@@ -333,12 +335,28 @@ function createPlaceWindowHandler(
       providerKind: 'local',
       timeoutMs: 6_000,
       untrustedOutput: false,
+      effects: [{
+        kind: 'MOVE',
+        description: 'Move one already-open allowlisted application or trusted-browser window onto a verified display.',
+        destructive: false,
+        reversible: true,
+        privilege: 'standard_user',
+        targetInputFields: ['applicationId', 'url'],
+        estimatedAffectedObjects: 1,
+      }],
+      verification: { mode: 'handler_result', description: 'Report whether the existing window was found and placed.' },
+      rollback: { mode: 'not_required', strategy: 'The owner can ask to move the same window back.' },
     }),
     availability: async () => ({ id: DESKTOP_PLACE_WINDOW, availability: adapter.placeWindow ? 'up' : 'unavailable', degraded: !adapter.placeWindow }),
     invoke: async (input) => {
-      const applicationId = String(input.applicationId ?? '');
-      const app = applicationById(lists, applicationId);
-      if (!app) {
+      const applicationId = typeof input.applicationId === 'string' ? input.applicationId : '';
+      const url = typeof input.url === 'string' ? input.url : '';
+      const app = applicationId ? applicationById(lists, applicationId) : undefined;
+      const label = String(input.label || app?.displayName || applicationId || url || 'that window');
+      const processName = applicationId
+        ? processNameForApplication(applicationId)
+        : processNameForUrl(url);
+      if (applicationId && !app) {
         return {
           capabilityId: DESKTOP_PLACE_WINDOW,
           status: 'error',
@@ -348,6 +366,18 @@ function createPlaceWindowHandler(
           untrustedOutput: false,
           sideEffect: 'write',
           error: 'UNKNOWN_APPLICATION',
+        };
+      }
+      if (!processName) {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'unavailable',
+          structured: { status: 'unavailable', reasonCode: 'PROCESS_NOT_ALLOWLISTED', risk: 'LOW_RISK_ACTION' },
+          content: `I understand you mean ${label}, but I cannot identify a trusted window process to move.`,
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: 'PROCESS_NOT_ALLOWLISTED',
         };
       }
       if (!adapter.placeWindow || !adapter.listDisplays) {
@@ -362,25 +392,57 @@ function createPlaceWindowHandler(
           error: 'DISPLAY_TOPOLOGY_UNKNOWN',
         };
       }
-      const placed = await adapter.placeWindow({ processName: applicationId, displayId: JSON.stringify(input.display ?? {}) });
+      const displays = await adapter.listDisplays();
+      const selector = input.display && typeof input.display === 'object'
+        ? input.display as DisplaySelector
+        : null;
+      const resolved = resolveDisplaySelector(displays, selector);
+      if (resolved.ok === false) {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'unavailable',
+          structured: { status: 'unavailable', reasonCode: resolved.reasonCode, risk: 'LOW_RISK_ACTION' },
+          content: resolved.message,
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: resolved.reasonCode,
+        };
+      }
+      const placed = await adapter.placeWindow({
+        processName,
+        displayId: resolved.display.id,
+      });
       if (placed.status === 'started') {
         return {
           capabilityId: DESKTOP_PLACE_WINDOW,
           status: 'ok',
-          structured: { status: 'completed', risk: 'LOW_RISK_ACTION', placement: placed.placement },
+          structured: { status: 'completed', risk: 'LOW_RISK_ACTION', placement: placed.placement, displayId: resolved.display.id },
           content: placed.placement === 'placed'
-            ? `Moved ${app.displayName} to the requested display.`
-            : `I opened or found ${app.displayName}, but placement is ${placed.placement || 'unverified'}.`,
+            ? `Moved ${label} to the requested display.`
+            : `I found ${label}, but placement is ${placed.placement || 'unverified'}.`,
           sourceUrls: [],
           untrustedOutput: false,
           sideEffect: 'write',
+        };
+      }
+      if (placed.errorCode === 'WINDOW_NOT_FOUND') {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'unavailable',
+          structured: { status: 'unavailable', reasonCode: 'WINDOW_NOT_FOUND', risk: 'LOW_RISK_ACTION' },
+          content: `I understand you mean ${label}. I do not see that window open yet, so I cannot move it.`,
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: 'WINDOW_NOT_FOUND',
         };
       }
       return {
         capabilityId: DESKTOP_PLACE_WINDOW,
         status: placed.status === 'unavailable' ? 'unavailable' : 'error',
         structured: { status: 'failed', reasonCode: placed.errorCode, risk: 'LOW_RISK_ACTION' },
-        content: placed.message || `I could not move ${app.displayName}.`,
+        content: placed.message || `I could not move ${label}.`,
         sourceUrls: [],
         untrustedOutput: false,
         sideEffect: 'write',

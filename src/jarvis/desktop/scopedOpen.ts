@@ -24,7 +24,7 @@ export type ScopedOpenPlan =
       resource: ScopedResource;
       display?: DisplayInfo;
       placement: 'none' | 'requested';
-      reasonCode: 'ALLOWLISTED_APPLICATION' | 'ALLOWLISTED_WEB';
+      reasonCode: 'ALLOWLISTED_APPLICATION' | 'ALLOWLISTED_WEB' | 'SESSION_WEB_GRANT';
     }
   | {
       ok: false;
@@ -39,6 +39,7 @@ export type ScopedOpenPlan =
         | 'UNSUPPORTED_DESKTOP_SCOPE';
       message: string;
       openAllowed?: boolean;
+      canPropose?: boolean;
     };
 
 const CLICK_TYPE = /\b(click|type|submit|drag|fill this in|คลิก|พิมพ์|ส่งฟอร์ม)\b/iu;
@@ -48,6 +49,7 @@ export function planScopedOpen(
   options: {
     applicationIds: readonly string[];
     allowlistedHosts?: readonly string[];
+    sessionAllows?: (url: string) => boolean;
   },
 ): ScopedOpenPlan {
   if (CLICK_TYPE.test(input.resource.label)) {
@@ -85,10 +87,19 @@ export function planScopedOpen(
   }
   const host = urlHost(parsed.href);
   if (!host || !hostAllowed(host, options.allowlistedHosts)) {
+    if (options.sessionAllows?.(parsed.href)) {
+      return withDisplay({
+        ok: true,
+        resource: { ...input.resource, url: parsed.href },
+        placement: input.display ? 'requested' : 'none',
+        reasonCode: 'SESSION_WEB_GRANT',
+      }, input);
+    }
     return {
       ok: false,
       reasonCode: 'DOMAIN_NOT_ALLOWLISTED',
-      message: 'That domain is outside my current web-open allowlist. I can request a scoped addition if you want.',
+      message: scopedWebOpenMessage(input.resource.label),
+      canPropose: true,
     };
   }
   return withDisplay({
@@ -124,10 +135,19 @@ function withDisplay(
   return { ...plan, display: resolved.display };
 }
 
+export function scopedWebOpenMessage(label: string, displayRaw?: string): string {
+  const cleaned = (label || 'that site').replace(/\s+(official\s+)?website$/iu, '').trim() || 'that site';
+  const site = /^[a-z0-9._-]+$/u.test(cleaned)
+    ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+    : cleaned;
+  const where = displayRaw ? ' on the requested screen' : '';
+  return `I found ${site}'s official site. That domain is not on my current allowlist. I can open it${where} this once if you approve.`;
+}
+
 export function structuredBlockExplanation(reasonCode: string, fallback: string): string {
   switch (reasonCode) {
     case 'DOMAIN_NOT_ALLOWLISTED':
-      return 'That domain is outside my current web-open allowlist. I can request a scoped addition if you want.';
+      return fallback || scopedWebOpenMessage('that site');
     case 'UNKNOWN_APPLICATION':
       return 'That application is not on the open allowlist.';
     case 'DISPLAY_AMBIGUOUS':

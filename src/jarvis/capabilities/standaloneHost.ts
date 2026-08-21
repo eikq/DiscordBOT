@@ -14,6 +14,7 @@ import {
   type DesktopAllowlists,
   type SystemStatusPort,
 } from './actions';
+import { SessionWebGrantStore } from '../desktop/sessionWebGrants';
 import type { ReminderCapabilityDeps } from '../automation/reminderCapabilities';
 import { REMINDER_CREATE_VERIFIER_ID, createReminderRecordVerifier, registerReminderCapabilities } from '../automation/reminderCapabilities';
 import type { ResearchCapabilityDeps } from '../research/researchCapabilities';
@@ -147,9 +148,13 @@ export function createStandaloneCapabilityHost(
     operator.verification.register(REMINDER_CREATE_VERIFIER_ID, createReminderRecordVerifier(options.reminders));
   }
 
+  const sessionWebGrants = new SessionWebGrantStore();
   const gateOptions: ActionGateOptions = {
     allowlists,
-    policy: options.actions?.policy === undefined ? new PermissionPolicy() : options.actions.policy,
+    sessionWebGrants,
+    policy: options.actions?.policy === undefined
+      ? new PermissionPolicy({ sessionWebGrants })
+      : options.actions.policy,
     confirmations: options.actions?.confirmations,
     audit: options.actions?.audit === false
       ? undefined

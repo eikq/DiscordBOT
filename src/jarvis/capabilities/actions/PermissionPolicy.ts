@@ -25,11 +25,15 @@ import { serviceRecord } from './services/catalog';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { ActionProposal, DesktopAllowlists, PermissionDecision } from './types';
 import { DEFAULT_ALLOWLISTED_WEB_HOSTS } from '../../desktop/webAllowlist';
-import { planScopedOpen, structuredBlockExplanation } from '../../desktop/scopedOpen';
+import { planScopedOpen, scopedWebOpenMessage, structuredBlockExplanation } from '../../desktop/scopedOpen';
+import { SessionWebGrantStore } from '../../desktop/sessionWebGrants';
+import { processNameForUrl } from '../../desktop/windowsDisplayHost';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 
 export class PermissionPolicy {
+  constructor(private readonly deps: { sessionWebGrants?: SessionWebGrantStore } = {}) {}
+
   public evaluate(proposal: ActionProposal, lists: DesktopAllowlists): PermissionDecision {
     const base = {
       capabilityId: proposal.capabilityId,
@@ -189,23 +193,68 @@ export class PermissionPolicy {
       };
     }
 
-    if (proposal.capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE || proposal.capabilityId === DESKTOP_PLACE_WINDOW || proposal.capabilityId === DESKTOP_FOCUS_WINDOW) {
+    if (proposal.capabilityId === DESKTOP_PLACE_WINDOW || proposal.capabilityId === DESKTOP_FOCUS_WINDOW) {
+      const args = proposal.normalizedArguments;
+      const url = typeof args.url === 'string' ? args.url : '';
+      const applicationId = typeof args.applicationId === 'string' ? args.applicationId : '';
+      if (url && processNameForUrl(url)) {
+        return {
+          ...base,
+          decision: 'allow',
+          reasonCode: 'PLACE_EXISTING_WINDOW',
+          userMessage: `Move the existing ${String(args.label || url)} window.`,
+          risk: 'LOW_RISK_ACTION',
+        };
+      }
+      if (applicationId && applicationById(lists, applicationId)) {
+        return {
+          ...base,
+          decision: 'allow',
+          reasonCode: 'ALLOWLISTED_APPLICATION',
+          userMessage: `Move ${applicationById(lists, applicationId)?.displayName || applicationId}.`,
+          risk: 'LOW_RISK_ACTION',
+        };
+      }
+      return {
+        ...base,
+        decision: 'deny',
+        reasonCode: 'UNKNOWN_APPLICATION',
+        userMessage: 'I can only move or focus an allowlisted application window, or a website window I already opened.',
+        risk: 'BLOCKED',
+      };
+    }
+
+    if (proposal.capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE) {
       const args = proposal.normalizedArguments;
       const kind = args.kind === 'url' || args.url ? 'url' : 'application';
+      const label = String(args.label || args.applicationId || args.url || 'resource');
+      const displayRaw = args.display && typeof args.display === 'object' && 'raw' in args.display
+        ? String((args.display as { raw?: string }).raw || '')
+        : undefined;
       const plan = planScopedOpen({
         resource: {
           kind,
           applicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
           url: typeof args.url === 'string' ? args.url : undefined,
-          label: String(args.label || args.applicationId || args.url || 'resource'),
+          label,
         },
         display: args.display && typeof args.display === 'object' ? args.display as { raw: string; index?: number; role?: 'primary' } : null,
       }, {
         applicationIds: lists.applications.map(item => item.id),
         allowlistedHosts: lists.allowlistedWebHosts ?? DEFAULT_ALLOWLISTED_WEB_HOSTS,
+        sessionAllows: url => this.deps.sessionWebGrants?.allows(url) === true,
       });
       if (plan.ok === false) {
-        if (plan.openAllowed && proposal.capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE) {
+        if (plan.reasonCode === 'DOMAIN_NOT_ALLOWLISTED' && plan.canPropose) {
+          return {
+            ...base,
+            decision: 'confirm',
+            reasonCode: 'SCOPED_WEB_OPEN',
+            userMessage: scopedWebOpenMessage(label, displayRaw),
+            risk: 'CONFIRM_REQUIRED',
+          };
+        }
+        if (plan.openAllowed) {
           return {
             ...base,
             decision: 'allow',
@@ -222,22 +271,13 @@ export class PermissionPolicy {
           risk: 'BLOCKED',
         };
       }
-      if (proposal.capabilityId === DESKTOP_PLACE_WINDOW || proposal.capabilityId === DESKTOP_FOCUS_WINDOW) {
-        if (kind !== 'application' || !applicationById(lists, String(args.applicationId ?? ''))) {
-          return {
-            ...base,
-            decision: 'deny',
-            reasonCode: 'UNKNOWN_APPLICATION',
-            userMessage: 'I can only move or focus an allowlisted application window.',
-            risk: 'BLOCKED',
-          };
-        }
-      }
       return {
         ...base,
         decision: 'allow',
         reasonCode: plan.reasonCode,
-        userMessage: plan.reasonCode === 'ALLOWLISTED_WEB' ? 'Open an allowlisted website.' : `Open ${plan.resource.label}.`,
+        userMessage: plan.reasonCode === 'ALLOWLISTED_WEB' || plan.reasonCode === 'SESSION_WEB_GRANT'
+          ? `I found ${label}. Opening it.`
+          : `Open ${plan.resource.label}.`,
         risk: 'LOW_RISK_ACTION',
       };
     }

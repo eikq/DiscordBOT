@@ -23,6 +23,9 @@ import {
   DESKTOP_OPEN_PROJECT,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
+  DESKTOP_PLACE_WINDOW,
+  DESKTOP_FOCUS_WINDOW,
   JARVIS_HEALTH_CHECK,
   JARVIS_RESTART_SERVICE,
   JARVIS_RUNTIME_STATUS,
@@ -195,6 +198,71 @@ export function validateActionInput(
       };
     }
     return { ok: true, value: { url: classified.normalized } };
+  }
+
+  if (capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE) {
+    if (!onlyKeys(input, ['kind', 'applicationId', 'url', 'label', 'display'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only kind, applicationId, url, label, and display are allowed.' };
+    }
+    const value: Record<string, unknown> = {};
+    if (input.kind === 'url' || input.kind === 'application') value.kind = input.kind;
+    if (typeof input.applicationId === 'string' && SAFE_ID_PATTERN.test(input.applicationId)) value.applicationId = input.applicationId;
+    if (typeof input.label === 'string') value.label = input.label.slice(0, 80);
+    if (typeof input.url === 'string') {
+      const classified = classifyOpenUrl(input.url, lists);
+      if (!classified.ok && classified.reasonCode !== 'EXTERNAL_HTTPS') {
+        // confirmable https still has ok:true; blocked schemes fail
+      }
+      if (!classified.ok) {
+        return { ok: false, reasonCode: classified.reasonCode || 'INVALID_URL', userMessage: 'That URL is not allowed.' };
+      }
+      value.url = classified.normalized;
+    }
+    if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) {
+      value.display = input.display;
+    }
+    if (!value.url && !value.applicationId) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'A scoped open needs an application or URL.' };
+    }
+    return { ok: true, value };
+  }
+
+  if (capabilityId === DESKTOP_PLACE_WINDOW) {
+    if (!onlyKeys(input, ['kind', 'applicationId', 'url', 'label', 'display'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only kind, applicationId, url, label, and display are allowed.' };
+    }
+    const value: Record<string, unknown> = {};
+    if (input.kind === 'url' || input.kind === 'application') value.kind = input.kind;
+    if (typeof input.applicationId === 'string' && SAFE_ID_PATTERN.test(input.applicationId)) {
+      value.applicationId = input.applicationId;
+    }
+    if (typeof input.label === 'string') value.label = input.label.slice(0, 80);
+    if (typeof input.url === 'string') {
+      const classified = classifyOpenUrl(input.url, lists);
+      if (!classified.ok) {
+        return { ok: false, reasonCode: classified.reasonCode || 'INVALID_URL', userMessage: 'That URL is not allowed.' };
+      }
+      value.url = classified.normalized;
+    }
+    if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) {
+      value.display = input.display;
+    }
+    if (!value.url && !value.applicationId) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'I need an application or the website window to move.' };
+    }
+    return { ok: true, value };
+  }
+
+  if (capabilityId === DESKTOP_FOCUS_WINDOW) {
+    if (!onlyKeys(input, ['applicationId', 'display'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only applicationId and display are allowed.' };
+    }
+    if (typeof input.applicationId !== 'string' || !SAFE_ID_PATTERN.test(input.applicationId)) {
+      return { ok: false, reasonCode: 'INVALID_APPLICATION_ID', userMessage: 'Unknown or invalid application.' };
+    }
+    const value: Record<string, unknown> = { applicationId: input.applicationId };
+    if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) value.display = input.display;
+    return { ok: true, value };
   }
 
   if (capabilityId === JARVIS_HEALTH_CHECK) {

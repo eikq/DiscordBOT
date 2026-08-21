@@ -2,12 +2,13 @@
  * Honest monitor topology. Never invent a display that was not observed.
  */
 
-export type DisplayRole = 'primary' | 'secondary' | 'left' | 'right' | 'upper' | 'lower' | 'current';
+export type DisplayRole = 'primary' | 'secondary' | 'left' | 'right' | 'upper' | 'lower' | 'current' | 'internal' | 'other';
 
 export type DisplayInfo = {
   id: string;
   name: string;
   primary: boolean;
+  internal?: boolean;
   x: number;
   y: number;
   width: number;
@@ -41,6 +42,10 @@ export function parseDisplaySelector(text: string): DisplaySelector | null {
     const index = ordinalToIndex(numbered[1]);
     if (index) return { index, raw };
   }
+  if (/notebook|note\s*book|laptop|built-?in|internal|จอโน้ตบุ๊ก|จอโน้ต|จอเครื่อง/iu.test(raw)) {
+    return { role: 'internal', raw };
+  }
+  if (/\bother (?:monitor|display|screen)\b|จออื่น|อีกจอ/iu.test(raw)) return { role: 'other', raw };
   if (/main|primary|จอหลัก/iu.test(raw)) return { role: 'primary', raw };
   if (/second(?:ary)?|external|จอสอง|จอภายนอก|จอที่สอง/iu.test(raw)) return { role: 'secondary', raw };
   if (/\bleft\b|จอซ้าย/iu.test(raw)) return { role: 'left', raw };
@@ -87,6 +92,22 @@ export function resolveDisplaySelector(
   if (selector.role === 'current') {
     const hit = displays.find(item => item.id === currentDisplayId) || displays.find(item => item.primary) || displays[0];
     return { ok: true, display: hit, confidence: currentDisplayId ? 'HIGH' : 'MEDIUM' };
+  }
+  if (selector.role === 'internal') {
+    const internals = displays.filter(item => item.internal === true);
+    if (internals.length === 1) return { ok: true, display: internals[0]!, confidence: 'HIGH' };
+    return {
+      ok: false,
+      reasonCode: 'DISPLAY_AMBIGUOUS',
+      message: "I'm not sure which screen you mean by notebook monitor. Should I use the laptop's built-in display?",
+      candidates: displays,
+    };
+  }
+  if (selector.role === 'other') {
+    const current = displays.find(item => item.id === currentDisplayId) || displays.find(item => item.primary);
+    const others = displays.filter(item => item.id !== current?.id);
+    if (others.length === 1) return { ok: true, display: others[0]!, confidence: 'HIGH' };
+    return ambiguous(displays, `I see ${displays.length} displays. Which one do you mean by the other monitor?`);
   }
   if (selector.role === 'secondary') {
     const others = displays.filter(item => !item.primary);

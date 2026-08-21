@@ -26,6 +26,7 @@ export function parseDisplayJson(raw: string): DisplayInfo[] {
         id: name,
         name,
         primary: Boolean(item.Primary),
+        ...(item.Internal === true || item.Internal === 'True' ? { internal: true } : {}),
         x: Number(item.X) || 0,
         y: Number(item.Y) || 0,
         width,
@@ -107,12 +108,13 @@ export function processNameForApplication(applicationId: string): string | null 
 
 export function processNameForUrl(url: string): string | null {
   try {
-    const host = new URL(url).hostname;
-    if (host.endsWith('youtube.com') || host === 'youtu.be') return 'msedge';
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    if (!parsed.hostname) return null;
+    return 'msedge';
   } catch {
     return null;
   }
-  return null;
 }
 
 function runPowerShell(script: string): Promise<string> {

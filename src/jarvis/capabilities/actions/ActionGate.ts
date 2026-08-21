@@ -10,10 +10,11 @@ import type {
 import { createAbortReason, readAbortReason } from '../cancellation';
 import { ActionAuditLog } from './ActionAuditLog';
 import { applicationById, projectById } from './allowlists';
-import { CONFIRMATION_TTL_MS, isGatedCapabilityId, isReadOnlyGatedCapability } from './constants';
+import { CONFIRMATION_TTL_MS, DESKTOP_OPEN_SCOPED_RESOURCE, isGatedCapabilityId, isReadOnlyGatedCapability } from './constants';
 import { ConfirmationStore } from './ConfirmationStore';
 import { createProposalId, hashArguments } from './hash';
 import { PermissionPolicy } from './PermissionPolicy';
+import { SessionWebGrantStore } from '../../desktop/sessionWebGrants';
 import { validateActionInput } from './schema';
 import type {
   ActionProposal,
@@ -49,6 +50,7 @@ export type ActionGateOptions = {
   containment?: FailureContainment;
   verification?: VerificationRegistry;
   journal?: ExecutionJournalCoordinator;
+  sessionWebGrants?: SessionWebGrantStore;
 };
 
 export interface ActionHost extends CapabilityHost {
@@ -76,6 +78,7 @@ export function createActionGate(inner: CapabilityHost, options: ActionGateOptio
 class ActionGate implements ActionHost {
   public readonly services?: import('./services').JarvisServiceController;
   private readonly policy: PermissionPolicy | null;
+  private readonly sessionWebGrants: SessionWebGrantStore;
   private readonly confirmations: ConfirmationStore;
   private readonly circuitBreaker: DestructiveActionCircuitBreaker;
   private readonly completed = new Map<string, CapabilityResult>();
@@ -90,7 +93,10 @@ class ActionGate implements ActionHost {
     private readonly inner: CapabilityHost,
     private readonly options: ActionGateOptions,
   ) {
-    this.policy = options.policy === undefined ? new PermissionPolicy() : options.policy;
+    this.sessionWebGrants = options.sessionWebGrants ?? new SessionWebGrantStore();
+    this.policy = options.policy === undefined
+      ? new PermissionPolicy({ sessionWebGrants: this.sessionWebGrants })
+      : options.policy;
     this.confirmations = options.confirmations ?? new ConfirmationStore({ now: options.now });
     this.circuitBreaker = options.circuitBreaker ?? new DestructiveActionCircuitBreaker();
     this.services = options.services;
@@ -485,6 +491,13 @@ class ActionGate implements ActionHost {
         proposalId: proposal.proposalId,
         status: decorated.status,
       }, decorated.status === 'ok' ? 'info' : 'warn');
+      if (
+        decorated.status === 'ok'
+        && proposal.capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE
+        && typeof input.url === 'string'
+      ) {
+        this.sessionWebGrants.grant(input.url, 'ALLOW_THIS_DOMAIN_FOR_SESSION');
+      }
       const cancellation = cancellationFrom(decorated.structured.cancellation);
       if (cancellation) {
         this.options.events?.emit(
@@ -1023,7 +1036,7 @@ function describeProposal(
     return { displayName: label, summary: `Open ${label}`, target: label, risk: 'LOW_RISK_ACTION' };
   }
   if (capabilityId === 'desktop.placeWindow') {
-    const name = String(input.applicationId || 'window');
+    const name = String(input.label || input.applicationId || input.url || 'window');
     return { displayName: name, summary: `Move ${name}`, target: name, risk: 'LOW_RISK_ACTION' };
   }
   if (capabilityId === 'desktop.focusWindow') {
