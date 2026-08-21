@@ -179,7 +179,7 @@ export class NightCycle {
       let proposed = 0;
       const existing = new Set((this.options.skills?.list() ?? []).flatMap(item => item.evidence));
       for (const experience of experiences) {
-        if (experience.outcome !== 'success' || experience.confidence < 0.7) continue;
+        if (experience.outcome !== 'success' || experience.confidence < 0.7 || experience.verificationState !== 'VERIFIED') continue;
         if (existing.has(experience.id)) continue;
         this.options.skills?.propose({
           skillId: `night_${(experience.domain || 'task').replace(/[^a-z0-9]+/giu, '_').slice(0, 32)}`,
@@ -204,9 +204,16 @@ export class NightCycle {
       for (const experience of experiences) {
         const cap = experience.tools[0] || experience.domain || 'general';
         seen.set(cap, (seen.get(cap) ?? 0) + 1);
-        const current = this.options.selfModel.get(cap);
-        if (current && current.attempts >= (seen.get(cap) ?? 0)) continue;
-        this.options.selfModel.observe(cap, experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure', experience.cause);
+        this.options.selfModel.observe(
+          cap,
+          experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure',
+          experience.failureAnalysis?.blocker || experience.cause,
+          {
+            verificationState: experience.verificationState,
+            evidenceRefs: [experience.id, ...(experience.evidenceRefs ?? [])],
+            observationId: experience.id,
+          },
+        );
       }
     }
     if (stage === 'BENCHMARK') {

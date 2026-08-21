@@ -28,6 +28,13 @@ export type ExperienceRecord = {
   significance?: number;
   evidenceRefs?: string[];
   ownerFeedback?: string;
+  verificationState?: import('../safety/types').VerificationState;
+  failureAnalysis?: {
+    capability?: string;
+    blocker?: string;
+    stage?: string;
+    nextPossibleStep?: string;
+  };
 };
 
 export type StructuredReflection = {

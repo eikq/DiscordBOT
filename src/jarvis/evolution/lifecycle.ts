@@ -39,6 +39,9 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
     : task.outcome === 'cancelled' || task.outcome === 'degraded'
       ? 'partial'
       : 'failure';
+  const blocker = task.blockers?.[0];
+  const verificationState = task.verification?.state;
+  const verifiedSuccess = outcome === 'success' && verificationState === 'VERIFIED';
   const experience = stores.experiences.createIfSignificant({
     id: experienceId,
     kind: 'episodic',
@@ -49,12 +52,25 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
     tools: task.toolResults.map(item => item.capability),
     result: task.verification?.summary || task.outcome || task.status,
     outcome,
-    lessons: outcome === 'success' ? ['Reusable structured plan'] : ['Do not treat failure as success'],
-    confidence: outcome === 'success' ? 0.8 : 0.55,
+    lessons: verifiedSuccess
+      ? ['Reusable structured plan with independently verified outcome']
+      : outcome === 'success'
+        ? ['Execution completed, but competence remains unverified']
+        : ['Do not treat failure as success'],
+    confidence: verifiedSuccess ? 0.8 : outcome === 'success' ? 0.45 : 0.55,
     privacyClass: 'private',
     significance: 0.7,
     cause: task.errors[0]?.code,
     evidenceRefs: task.evidence.slice(0, 8),
+    verificationState,
+    ...(blocker ? {
+      failureAnalysis: {
+        capability: blocker.capabilityId,
+        blocker: blocker.blocker,
+        stage: task.plan.find(step => step.status === 'failed' || step.status === 'blocked')?.kind,
+        nextPossibleStep: task.gapResolution?.recommendedPath?.title,
+      },
+    } : {}),
   });
   if (!experience) return { experience: null, reflection: null };
 
@@ -65,7 +81,10 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
   });
 
   if (experience.outcome === 'failure') {
-    stores.failures.record(experience, experience.cause || 'STEP_FAILED');
+    stores.failures.record(experience, experience.cause || 'STEP_FAILED', {
+      blocker: blocker?.blocker,
+      nextPossibleStep: task.gapResolution?.recommendedPath?.title,
+    });
   }
 
   const reflection = reflectStructured(
@@ -79,7 +98,7 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
     visualState: 'REFLECTING',
   });
 
-  if (reflection.skillCandidateAllowed && experience.outcome === 'success') {
+  if (reflection.skillCandidateAllowed && experience.outcome === 'success' && verificationState === 'VERIFIED') {
     stores.skills.propose({
       skillId: slug(task.objective),
       purpose: task.objective,
@@ -95,7 +114,16 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
   }
 
   const cap = task.toolResults[0]?.capability || 'task';
-  stores.selfModel.observe(cap, experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure', experience.cause);
+  stores.selfModel.observe(
+    cap,
+    experience.outcome === 'success' ? 'success' : experience.outcome === 'partial' ? 'partial' : 'failure',
+    blocker?.blocker || experience.cause,
+    {
+      verificationState,
+      evidenceRefs: unique([`task:${task.id}`, ...task.evidence.slice(0, 8)]),
+      observationId: experience.id,
+    },
+  );
   stores.affect?.appraise({ kind: experience.outcome === 'success' ? 'success' : 'failure' });
   if (experience.outcome === 'failure' && stores.growth && stores.growth.active().length < 3) {
     const id = `goal_${(experience.cause || 'step').toLowerCase().replace(/[^a-z0-9]+/gu, '_').slice(0, 24)}`;
@@ -111,6 +139,10 @@ export function applyTaskOutcome(task: WorkTask, stores: EvolutionLifecycleStore
     }
   }
   return { experience, reflection };
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function slug(value: string): string {

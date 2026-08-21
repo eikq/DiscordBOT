@@ -78,8 +78,8 @@ const FIXTURES: Fixture[] = [
     detail: 'self-model stays INSUFFICIENT DATA until n>=3',
     run: () => {
       const model = new CapabilitySelfModel();
-      model.observe('system.status', 'success');
-      model.observe('system.status', 'success');
+      model.observe('system.status', 'success', undefined, { verificationState: 'VERIFIED', evidenceRefs: ['benchmark:self-model:1'] });
+      model.observe('system.status', 'success', undefined, { verificationState: 'VERIFIED', evidenceRefs: ['benchmark:self-model:2'] });
       return model.get('system.status')?.recentTrend === 'insufficient_data'
         && model.get('system.status')?.confidence === null;
     },
