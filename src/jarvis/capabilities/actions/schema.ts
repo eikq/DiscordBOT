@@ -69,6 +69,7 @@ import type { DesktopAllowlists } from './types';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 import { looksLikeSecret } from '../../security/redaction';
+import { sanitizeDisplaySelector } from '../../desktop/monitorTopology';
 
 export type ValidatedActionInput =
   | { ok: true; value: Record<string, unknown> }
@@ -201,12 +202,13 @@ export function validateActionInput(
   }
 
   if (capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE) {
-    if (!onlyKeys(input, ['kind', 'applicationId', 'url', 'label', 'display'])) {
-      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only kind, applicationId, url, label, and display are allowed.' };
+    if (!onlyKeys(input, ['kind', 'applicationId', 'url', 'label', 'display', 'projectId'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only kind, applicationId, url, label, display, and projectId are allowed.' };
     }
     const value: Record<string, unknown> = {};
     if (input.kind === 'url' || input.kind === 'application') value.kind = input.kind;
     if (typeof input.applicationId === 'string' && SAFE_ID_PATTERN.test(input.applicationId)) value.applicationId = input.applicationId;
+    if (typeof input.projectId === 'string' && SAFE_ID_PATTERN.test(input.projectId)) value.projectId = input.projectId;
     if (typeof input.label === 'string') value.label = input.label.slice(0, 80);
     if (typeof input.url === 'string') {
       const classified = classifyOpenUrl(input.url, lists);
@@ -218,23 +220,28 @@ export function validateActionInput(
       }
       value.url = classified.normalized;
     }
-    if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) {
-      value.display = input.display;
-    }
+    const display = sanitizeDisplaySelector(input.display);
+    if (display) value.display = display;
     if (!value.url && !value.applicationId) {
       return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'A scoped open needs an application or URL.' };
+    }
+    if (value.projectId && !value.applicationId) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'A project open in an app needs both projectId and applicationId.' };
     }
     return { ok: true, value };
   }
 
   if (capabilityId === DESKTOP_PLACE_WINDOW) {
-    if (!onlyKeys(input, ['kind', 'applicationId', 'url', 'label', 'display'])) {
-      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only kind, applicationId, url, label, and display are allowed.' };
+    if (!onlyKeys(input, ['kind', 'applicationId', 'url', 'label', 'display', 'windowHandle'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only kind, applicationId, url, label, display, and windowHandle are allowed.' };
     }
     const value: Record<string, unknown> = {};
     if (input.kind === 'url' || input.kind === 'application') value.kind = input.kind;
     if (typeof input.applicationId === 'string' && SAFE_ID_PATTERN.test(input.applicationId)) {
       value.applicationId = input.applicationId;
+    }
+    if (typeof input.windowHandle === 'string' && /^[0-9]{1,20}$/u.test(input.windowHandle)) {
+      value.windowHandle = input.windowHandle;
     }
     if (typeof input.label === 'string') value.label = input.label.slice(0, 80);
     if (typeof input.url === 'string') {
@@ -244,9 +251,8 @@ export function validateActionInput(
       }
       value.url = classified.normalized;
     }
-    if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) {
-      value.display = input.display;
-    }
+    const display = sanitizeDisplaySelector(input.display);
+    if (display) value.display = display;
     if (!value.url && !value.applicationId) {
       return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'I need an application or the website window to move.' };
     }
@@ -261,7 +267,8 @@ export function validateActionInput(
       return { ok: false, reasonCode: 'INVALID_APPLICATION_ID', userMessage: 'Unknown or invalid application.' };
     }
     const value: Record<string, unknown> = { applicationId: input.applicationId };
-    if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) value.display = input.display;
+    const display = sanitizeDisplaySelector(input.display);
+    if (display) value.display = display;
     return { ok: true, value };
   }
 

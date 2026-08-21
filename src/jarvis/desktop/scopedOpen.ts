@@ -36,6 +36,7 @@ export type ScopedOpenPlan =
         | 'DISPLAY_NOT_FOUND'
         | 'DISPLAY_TOPOLOGY_UNKNOWN'
         | 'DISPLAY_SELECTOR_MISSING'
+        | 'KNOWN_ALIAS_TARGET_OFFLINE'
         | 'UNSUPPORTED_DESKTOP_SCOPE';
       message: string;
       openAllowed?: boolean;
@@ -135,11 +136,15 @@ function withDisplay(
   return { ...plan, display: resolved.display };
 }
 
-export function scopedWebOpenMessage(label: string, displayRaw?: string): string {
+export function scopedWebOpenMessage(label: string, displayRaw?: string, language?: 'th' | 'en'): string {
   const cleaned = (label || 'that site').replace(/\s+(official\s+)?website$/iu, '').trim() || 'that site';
   const site = /^[a-z0-9._-]+$/u.test(cleaned)
     ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
     : cleaned;
+  const thai = language === 'th' || /[\u0E00-\u0E7F]/.test(`${label} ${displayRaw || ''}`);
+  if (thai) {
+    return `ผมพบเว็บทางการของ ${site} แล้ว แต่โดเมนนี้ยังไม่อยู่ใน allowlist ปัจจุบัน ถ้าอนุมัติ ผมเปิดให้ครั้งนี้ได้ครับ`;
+  }
   const where = displayRaw ? ' on the requested screen' : '';
   return `I found ${site}'s official site. That domain is not on my current allowlist. I can open it${where} this once if you approve.`;
 }

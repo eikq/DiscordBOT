@@ -4,7 +4,7 @@ import type { DesktopActionAdapter, ScopedDesktopResult } from './DesktopActionA
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopAllowlists, DesktopLaunchResult } from './types';
 import { classifyOpenUrl } from './urlSafety';
-import { enumerateWindowsDisplays, placeAllowlistedWindow } from '../../desktop/windowsDisplayHost';
+import { enumerateWindowsDisplays, placeAllowlistedWindow, windowPlacementAgainstDisplay } from '../../desktop/windowsDisplayHost';
 import type { DisplayInfo } from '../../desktop/monitorTopology';
 
 export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
@@ -15,6 +15,18 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     if (!app) return { status: 'failed', errorCode: 'UNKNOWN_APPLICATION' };
     if (!app.installed || !app.executable) return { status: 'unavailable', errorCode: 'NOT_INSTALLED' };
     return launchExact(app.executable, app.allowedArgs);
+  }
+
+  public async openApplicationWithProject(applicationId: string, projectId: string): Promise<DesktopLaunchResult> {
+    if (applicationId !== 'cursor' && applicationId !== 'vscode') {
+      return { status: 'failed', errorCode: 'UNKNOWN_APPLICATION' };
+    }
+    const app = applicationById(this.lists, applicationId);
+    const project = projectById(this.lists, projectId);
+    if (!app) return { status: 'failed', errorCode: 'UNKNOWN_APPLICATION' };
+    if (!app.installed || !app.executable) return { status: 'unavailable', errorCode: 'NOT_INSTALLED' };
+    if (!project?.installed || !project.path) return { status: 'unavailable', errorCode: 'PROJECT_UNAVAILABLE' };
+    return launchExact(app.executable, [project.path]);
   }
 
   public async openProject(projectId: string): Promise<DesktopLaunchResult> {
@@ -38,9 +50,28 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     return enumerateWindowsDisplays();
   }
 
-  public async placeWindow(input: { processName: string; displayId: string }): Promise<ScopedDesktopResult> {
-    const displays = await this.listDisplays();
-    const display = displays.find(item => item.id === input.displayId);
+  public async placeWindow(input: {
+    processName: string;
+    displayId: string;
+    windowHandle?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  }): Promise<ScopedDesktopResult> {
+    const hasBounds = [input.x, input.y, input.width, input.height].every(value => Number.isInteger(value));
+    const displays = hasBounds ? [] : await this.listDisplays();
+    const display = hasBounds
+      ? {
+        id: input.displayId,
+        name: input.displayId,
+        primary: false,
+        x: input.x!,
+        y: input.y!,
+        width: input.width!,
+        height: input.height!,
+      }
+      : displays.find(item => item.id === input.displayId);
     if (!display) {
       return { status: 'unavailable', errorCode: 'DISPLAY_NOT_FOUND', placement: 'unverified', placementReason: 'DISPLAY_NOT_FOUND' };
     }
@@ -50,13 +81,23 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
       y: display.y,
       width: Math.max(800, Math.floor(display.width * 0.92)),
       height: Math.max(600, Math.floor(display.height * 0.92)),
+      ...(input.windowHandle ? { windowHandle: input.windowHandle } : {}),
     });
-    if (placed.ok === true) return { status: 'started', placement: 'placed', displayId: display.id };
+    if (placed.ok !== true) {
+      return {
+        status: placed.reasonCode === 'WINDOW_NOT_FOUND' ? 'unavailable' : 'failed',
+        errorCode: placed.reasonCode,
+        placement: 'failed',
+        placementReason: placed.reasonCode,
+      };
+    }
+    const verified = windowPlacementAgainstDisplay(placed.window, [display, ...displays], display.id);
     return {
-      status: placed.reasonCode === 'WINDOW_NOT_FOUND' ? 'unavailable' : 'failed',
-      errorCode: placed.reasonCode,
-      placement: 'failed',
-      placementReason: placed.reasonCode,
+      status: 'started',
+      placement: verified.verifiedOnIntended ? 'placed' : 'unverified',
+      placementReason: verified.verifiedOnIntended ? undefined : 'PLACEMENT_UNVERIFIED',
+      displayId: display.id,
+      ...(placed.window?.handle ? { windowHandle: placed.window.handle } : {}),
     };
   }
 

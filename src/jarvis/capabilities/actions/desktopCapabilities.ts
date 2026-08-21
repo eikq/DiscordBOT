@@ -13,10 +13,12 @@ import {
 import { readBatteryStatus, type BatterySnapshot } from './batteryStatus';
 import { readNetworkStatus, type NetworkSnapshot } from './networkStatus';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
-import type { DesktopActionAdapter } from './DesktopActionAdapter';
+import type { DesktopActionAdapter, ScopedDesktopResult } from './DesktopActionAdapter';
 import type { DesktopAllowlists, DesktopLaunchResult } from './types';
 import { processNameForApplication, processNameForUrl } from '../../desktop/windowsDisplayHost';
-import { resolveDisplaySelector, type DisplaySelector } from '../../desktop/monitorTopology';
+import { applyOwnerDisplaySelector } from '../../intent/semanticRoute';
+import { resolveDisplaySelector, sanitizeDisplaySelector, type DisplayInfo, type DisplaySelector } from '../../desktop/monitorTopology';
+import type { OwnerAliasRecord } from '../../memory/ownerSemantics';
 
 export type SystemStatusSnapshot = {
   cpu?: { usagePct: number; cores: number };
@@ -38,16 +40,58 @@ export function registerDesktopCapabilities(
     adapter: DesktopActionAdapter;
     allowlists: DesktopAllowlists;
     systemStatus?: SystemStatusPort;
+    displayAliases?: () => OwnerAliasRecord[];
   },
 ): void {
   host.register(createOpenApplicationHandler(options.adapter, options.allowlists));
   host.register(createOpenProjectHandler(options.adapter, options.allowlists));
   host.register(createOpenTrustedUrlHandler(options.adapter));
   host.register(createOpenSettingsHandler(options.adapter, options.allowlists));
-  host.register(createOpenScopedResourceHandler(options.adapter, options.allowlists));
-  host.register(createPlaceWindowHandler(options.adapter, options.allowlists));
+  host.register(createOpenScopedResourceHandler(options.adapter, options.allowlists, options.displayAliases));
+  host.register(createPlaceWindowHandler(options.adapter, options.allowlists, options.displayAliases));
   host.register(createFocusWindowHandler(options.adapter, options.allowlists));
   host.register(createSystemStatusHandler(options.systemStatus));
+}
+
+async function placeAfterOpen(
+  adapter: DesktopActionAdapter,
+  processName: string,
+  display: DisplayInfo,
+  windowHandle?: string,
+): Promise<ScopedDesktopResult> {
+  if (!adapter.placeWindow) {
+    return { status: 'unavailable', errorCode: 'DISPLAY_TOPOLOGY_UNKNOWN', placement: 'unverified' };
+  }
+  let last: ScopedDesktopResult = {
+    status: 'unavailable',
+    errorCode: 'WINDOW_NOT_FOUND',
+    placement: 'failed',
+    placementReason: 'WINDOW_NOT_FOUND',
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    last = await adapter.placeWindow({
+      processName,
+      displayId: display.id,
+      x: display.x,
+      y: display.y,
+      width: display.width,
+      height: display.height,
+      ...(windowHandle ? { windowHandle } : {}),
+    });
+    if (last.placement === 'placed' || last.errorCode !== 'WINDOW_NOT_FOUND') return last;
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
+  return last;
+}
+
+function resolveRequestedDisplay(
+  displays: DisplayInfo[],
+  raw: unknown,
+  aliases?: () => OwnerAliasRecord[],
+  currentDisplayId?: string,
+) {
+  const applied = applyOwnerDisplaySelector(sanitizeDisplaySelector(raw) ?? (raw as DisplaySelector | null), aliases?.());
+  return resolveDisplaySelector(displays, applied ?? null, currentDisplayId);
 }
 
 function createOpenApplicationHandler(
@@ -229,6 +273,7 @@ function createOpenTrustedUrlHandler(adapter: DesktopActionAdapter): CapabilityH
 function createOpenScopedResourceHandler(
   adapter: DesktopActionAdapter,
   lists: DesktopAllowlists,
+  displayAliases?: () => OwnerAliasRecord[],
 ): CapabilityHandler {
   return {
     descriptor: () => ({
@@ -241,6 +286,7 @@ function createOpenScopedResourceHandler(
           kind: { type: 'string' },
           applicationId: { type: 'string' },
           url: { type: 'string' },
+          projectId: { type: 'string' },
           label: { type: 'string' },
           display: { type: 'object' },
         },
@@ -249,7 +295,7 @@ function createOpenScopedResourceHandler(
       sideEffect: 'write',
       requiredService: 'desktop',
       providerKind: 'local',
-      timeoutMs: 8_000,
+      timeoutMs: 35_000,
       untrustedOutput: false,
       effects: [{
         kind: 'APPLICATION_LAUNCH',
@@ -269,7 +315,9 @@ function createOpenScopedResourceHandler(
       const label = String(input.label || input.applicationId || input.url || 'resource');
       const launched = kind === 'url'
         ? await adapter.openUrl(String(input.url ?? ''))
-        : await adapter.openApplication(String(input.applicationId ?? ''));
+        : typeof input.projectId === 'string' && adapter.openApplicationWithProject
+          ? await adapter.openApplicationWithProject(String(input.applicationId ?? ''), String(input.projectId))
+          : await adapter.openApplication(String(input.applicationId ?? ''));
       const base = launchResult(DESKTOP_OPEN_SCOPED_RESOURCE, launched, label, kind);
       if (launched.status !== 'started' || !input.display) return base;
       const displays = adapter.listDisplays ? await adapter.listDisplays() : [];
@@ -280,7 +328,7 @@ function createOpenScopedResourceHandler(
           content: `${base.content} Monitor placement could not be verified.`,
         };
       }
-      const resolved = resolveDisplaySelector(displays, input.display as DisplaySelector);
+      const resolved = resolveRequestedDisplay(displays, input.display, displayAliases);
       if (resolved.ok === false) {
         return {
           ...base,
@@ -298,13 +346,23 @@ function createOpenScopedResourceHandler(
           content: `${base.content} I cannot place that window yet.`,
         };
       }
-      const placed = await adapter.placeWindow({ processName, displayId: resolved.display.id });
+      const placed = await placeAfterOpen(adapter, processName, resolved.display);
+      const reason = placed.placementReason || placed.errorCode;
+      const thai = /[\u0E00-\u0E7F]/.test(base.content);
       return {
         ...base,
-        structured: { ...asRecord(base.structured), placement: placed.placement || 'unverified', displayId: resolved.display.id },
+        structured: {
+          ...asRecord(base.structured),
+          placement: placed.placement || 'unverified',
+          displayId: resolved.display.id,
+          ...(placed.windowHandle ? { windowHandle: placed.windowHandle } : {}),
+          ...(reason ? { reasonCode: reason } : {}),
+        },
         content: placed.placement === 'placed'
-          ? `${label} is open on the requested display.`
-          : `${base.content} Placement is ${placed.placement || 'unverified'}.`,
+          ? (thai ? `เปิด ${label} บนจอที่ขอแล้วครับ` : `${label} is open on the requested display.`)
+          : thai
+            ? `${base.content} ยังย้ายหน้าต่างไปจอที่ขอไม่ได้${reason ? ` (${reason})` : ''}`
+            : `${base.content} Placement is ${placed.placement || 'unverified'}${reason ? ` (${reason})` : ''}.`,
       };
     },
   };
@@ -313,6 +371,7 @@ function createOpenScopedResourceHandler(
 function createPlaceWindowHandler(
   adapter: DesktopActionAdapter,
   lists: DesktopAllowlists,
+  displayAliases?: () => OwnerAliasRecord[],
 ): CapabilityHandler {
   return {
     descriptor: () => ({
@@ -327,13 +386,14 @@ function createPlaceWindowHandler(
           url: { type: 'string' },
           label: { type: 'string' },
           display: { type: 'object' },
+          windowHandle: { type: 'string' },
         },
       },
       outputSchema: { type: 'object' },
       sideEffect: 'write',
       requiredService: 'desktop',
       providerKind: 'local',
-      timeoutMs: 6_000,
+      timeoutMs: 25_000,
       untrustedOutput: false,
       effects: [{
         kind: 'MOVE',
@@ -393,10 +453,7 @@ function createPlaceWindowHandler(
         };
       }
       const displays = await adapter.listDisplays();
-      const selector = input.display && typeof input.display === 'object'
-        ? input.display as DisplaySelector
-        : null;
-      const resolved = resolveDisplaySelector(displays, selector);
+      const resolved = resolveRequestedDisplay(displays, input.display, displayAliases);
       if (resolved.ok === false) {
         return {
           capabilityId: DESKTOP_PLACE_WINDOW,
@@ -412,14 +469,27 @@ function createPlaceWindowHandler(
       const placed = await adapter.placeWindow({
         processName,
         displayId: resolved.display.id,
+        x: resolved.display.x,
+        y: resolved.display.y,
+        width: resolved.display.width,
+        height: resolved.display.height,
+        ...(typeof input.windowHandle === 'string' ? { windowHandle: input.windowHandle } : {}),
       });
       if (placed.status === 'started') {
         return {
           capabilityId: DESKTOP_PLACE_WINDOW,
           status: 'ok',
-          structured: { status: 'completed', risk: 'LOW_RISK_ACTION', placement: placed.placement, displayId: resolved.display.id },
+          structured: {
+            status: 'completed',
+            risk: 'LOW_RISK_ACTION',
+            placement: placed.placement,
+            displayId: resolved.display.id,
+            ...(placed.windowHandle ? { windowHandle: placed.windowHandle } : {}),
+          },
           content: placed.placement === 'placed'
-            ? `Moved ${label} to the requested display.`
+            ? url
+              ? `Moved the trusted browser window for ${label}. If that browser has several tabs, I cannot move only that tab.`
+              : `Moved ${label} to the requested display.`
             : `I found ${label}, but placement is ${placed.placement || 'unverified'}.`,
           sourceUrls: [],
           untrustedOutput: false,

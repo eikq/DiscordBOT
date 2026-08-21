@@ -16,6 +16,9 @@ import { createProposalId, hashArguments } from './hash';
 import { PermissionPolicy } from './PermissionPolicy';
 import { SessionWebGrantStore } from '../../desktop/sessionWebGrants';
 import { validateActionInput } from './schema';
+import { applyOwnerDisplaySelector } from '../../intent/semanticRoute';
+import { sanitizeDisplaySelector } from '../../desktop/monitorTopology';
+import type { OwnerAliasRecord } from '../../memory/ownerSemantics';
 import type {
   ActionProposal,
   ActionRisk,
@@ -51,6 +54,7 @@ export type ActionGateOptions = {
   verification?: VerificationRegistry;
   journal?: ExecutionJournalCoordinator;
   sessionWebGrants?: SessionWebGrantStore;
+  displayAliases?: () => OwnerAliasRecord[];
 };
 
 export interface ActionHost extends CapabilityHost {
@@ -185,6 +189,7 @@ class ActionGate implements ActionHost {
     }
 
     const validated = validateActionInput(request.id, request.input ?? {}, this.options.allowlists);
+    if (validated.ok === true) applyStoredDisplayAliases(validated.value, this.options.displayAliases);
     if (validated.ok === false) {
       return this.denyAndAudit({
         capabilityId: request.id,
@@ -208,7 +213,7 @@ class ActionGate implements ActionHost {
           ...baseDecision,
           decision: 'deny' as const,
           reasonCode: 'FAILURE_CONTAINMENT_ACTIVE',
-          userMessage: 'Related mutation remains stopped after an unexpected action result. Owner recovery review is required.',
+          userMessage: 'I previously failed to verify a related action, so I blocked further mutation for that target. I can inspect the current state and clear only that containment if it is safe.',
           risk: 'BLOCKED' as const,
         }
       : applyCircuitBreakerDecision(baseDecision, proposal.preflight);
@@ -1185,4 +1190,14 @@ function actionRiskFor(risk: OperationalRiskLevel): ActionRisk {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function applyStoredDisplayAliases(
+  input: Record<string, unknown>,
+  aliases?: () => OwnerAliasRecord[],
+): void {
+  if (!input.display || typeof input.display !== 'object' || Array.isArray(input.display)) return;
+  const applied = applyOwnerDisplaySelector(input.display as import('../../desktop/monitorTopology').DisplaySelector, aliases?.());
+  const sanitized = sanitizeDisplaySelector(applied);
+  if (sanitized) input.display = sanitized;
 }
