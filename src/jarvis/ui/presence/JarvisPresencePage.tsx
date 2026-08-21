@@ -15,11 +15,16 @@ import type { PersonalAiRuntimeStatus } from '../operating/JarvisPages';
 import { PresenceApproval } from './PresenceApproval';
 import { PresenceCoreFallback } from './cinematic/PresenceCoreFallback';
 import { PresenceSpatialHud } from './cinematic/PresenceSpatialHud';
+import { pushActivityItem, visibleActivityItems, type PresenceActivityItem } from './cinematic/activityFeed';
+import { parsePresenceReplay } from './cinematic/cinematicReplay';
 import { composePresenceVisual, latestResearchStage, researchActiveFromRuntime } from './cinematic/presenceVisualModel';
+import { inspectDragEnabled, visualDebugEnabled } from './cinematic/pointerAuthority';
 import { pcmAmplitude } from './cinematic/pcmAmplitude';
+import { nextPresenceAutoTier, presenceTierFromLabLevel, type PresenceQualityTier } from './cinematic/presenceQuality';
 import { isResearchOperationType, type ResearchVisualStage } from './cinematic/researchEvents';
-import { presenceTierFromLabLevel } from './cinematic/presenceQuality';
+import { attachPlaybackAnalyser } from './cinematic/speechAmplitude';
 import { parsePresenceVisualScene } from './cinematic/visualFixtures';
+import type { PresenceCoreStats } from './cinematic/PresenceCoreScene';
 import {
   collectPresenceAttention,
   derivePresenceHud,
@@ -115,7 +120,15 @@ export default function JarvisPresencePage() {
   const [researchStage, setResearchStage] = useState<ResearchVisualStage | null>(null);
   const [researchIntent, setResearchIntent] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [activity, setActivity] = useState<PresenceActivityItem[]>([]);
+  const [replayElapsedMs, setReplayElapsedMs] = useState(0);
+  const [autoTier, setAutoTier] = useState<PresenceQualityTier>('HIGH');
+  const [coreStats, setCoreStats] = useState<PresenceCoreStats | null>(null);
+  const speechAmpStop = useRef<(() => void) | null>(null);
   const visualScene = useMemo(() => parsePresenceVisualScene(window.location.search), []);
+  const replayQuery = useMemo(() => parsePresenceReplay(window.location.search), []);
+  const debugHud = useMemo(() => visualDebugEnabled(window.location.search), []);
+  const inspectMode = useMemo(() => inspectDragEnabled(window.location.search), []);
 
   const refreshStatus = useCallback(() => readJson<RuntimeStatus>('/api/jarvis/status').then(setStatus), []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
@@ -185,9 +198,23 @@ export default function JarvisPresencePage() {
 
   useEffect(() => () => {
     unsubMic.current?.();
+    speechAmpStop.current?.();
     void microphone.current?.stop();
     player.current?.pause();
   }, []);
+
+  useEffect(() => {
+    if (!replayQuery) return undefined;
+    const started = performance.now();
+    const timer = window.setInterval(() => {
+      setReplayElapsedMs((performance.now() - started) * replayQuery.speed);
+    }, 80);
+    return () => window.clearInterval(timer);
+  }, [replayQuery]);
+
+  useEffect(() => {
+    setActivity(current => pushActivityItem(current, researchStage));
+  }, [researchStage]);
 
   const setAmbientMode = (next: boolean) => {
     setAmbient(next);
@@ -246,13 +273,28 @@ export default function JarvisPresencePage() {
     const audio = new Audio(`data:${speech.mime || 'audio/mpeg'};base64,${speech.audioBase64}`);
     player.current = audio;
     setSpeechState('speaking');
-    audio.onended = () => { if (generation === playGeneration.current) { setSpeechState('idle'); currentSpeechTurn.current = null; } };
-    audio.onerror = () => { if (generation === playGeneration.current) setSpeechState('idle'); };
+    speechAmpStop.current?.();
+    speechAmpStop.current = attachPlaybackAnalyser(audio, value => setAmplitude(value));
+    audio.onended = () => {
+      speechAmpStop.current?.();
+      speechAmpStop.current = null;
+      setAmplitude(0);
+      if (generation === playGeneration.current) { setSpeechState('idle'); currentSpeechTurn.current = null; }
+    };
+    audio.onerror = () => {
+      speechAmpStop.current?.();
+      speechAmpStop.current = null;
+      setAmplitude(0);
+      if (generation === playGeneration.current) setSpeechState('idle');
+    };
     void audio.play().catch(() => setSpeechState('idle'));
   };
 
   const stopPlayback = () => {
     playGeneration.current += 1;
+    speechAmpStop.current?.();
+    speechAmpStop.current = null;
+    setAmplitude(0);
     player.current?.pause();
     player.current = null;
     setSpeechState('idle');
@@ -613,7 +655,7 @@ export default function JarvisPresencePage() {
     taskActive: commandCenter?.task?.active,
   });
   const effectiveQuality = resolveQualityLevel(qualityMode, 'high');
-  const qualityTier = presenceTierFromLabLevel(effectiveQuality);
+  const qualityTier = qualityMode === 'auto' ? autoTier : presenceTierFromLabLevel(effectiveQuality);
   const use3d = webglOk && !webglLost && qualityMode !== '2d';
   const attention = collectPresenceAttention({
     emergencyActive: operator?.emergency.active,
@@ -660,6 +702,8 @@ export default function JarvisPresencePage() {
     research,
     researchLive,
     researchStage,
+    replayElapsedMs,
+    planSteps: commandCenter?.task?.steps,
     systemAsked: /system status|สถานะระบบ|runtime/i.test(lastAsk),
     reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0,
     reminderActive: /remind|เตือน/i.test(lastAsk),
@@ -696,9 +740,19 @@ export default function JarvisPresencePage() {
         amplitude={micState === 'listening' || speechState === 'speaking' ? amplitude : 0}
         nodes={visual.research?.nodes ?? []}
         links={visual.research?.links ?? []}
+        steps={visual.planSteps}
+        capabilityNodes={visual.capabilityNodes}
+        selectedId={selectedSourceId}
+        inspect={inspectMode}
+        debug={debugHud}
         emergency={visual.phase === 'EMERGENCY_STOP'}
         onSelectNode={setSelectedSourceId}
-        onFps={() => undefined}
+        onFps={fps => {
+          if (qualityMode !== 'auto') return;
+          const next = nextPresenceAutoTier(autoTier, fps);
+          if (next) setAutoTier(next);
+        }}
+        onStats={setCoreStats}
         onContextLost={() => setWebglLost(true)}
       />
     </Suspense>
@@ -762,6 +816,8 @@ export default function JarvisPresencePage() {
           research={visual.research}
           selectedSourceId={selectedSourceId}
           onSelectSource={setSelectedSourceId}
+          activity={visibleActivityItems(activity)}
+          planSteps={visual.planSteps}
           systemLines={systemLines}
           taskObjective={commandCenter?.task?.objective}
           taskStatus={commandCenter?.task?.status}
@@ -782,13 +838,18 @@ export default function JarvisPresencePage() {
         />
       )}
       {error ? <p className="jp-error">{error}</p> : null}
+      {debugHud && coreStats ? (
+        <p className="jp-perf" role="status">
+          {Math.round(coreStats.fps)} fps · {coreStats.calls} calls · {coreStats.triangles} tri · {coreStats.particles} p · dpr {coreStats.dpr.toFixed(2)} · {coreStats.quality}
+        </p>
+      ) : null}
       {!ambientNow ? (
         <div className="jp-dock">
           {answer || heard ? (
-            <div className="jp-reply" data-empty={answer ? 'false' : 'true'}>
-              {heard ? <div className="jp-heard">{heard}</div> : null}
+            <p className="jp-caption" data-empty={answer ? 'false' : 'true'}>
+              {heard ? <span className="jp-heard">{heard}</span> : null}
               {answer}
-            </div>
+            </p>
           ) : null}
           <form className="jp-composer" data-collapsed={composerExpanded ? 'false' : 'true'} onSubmit={submitAsk} aria-busy={busy}>
             <button type="button" className={`jp-icon${micState === 'listening' ? ' is-on' : ''}`} onClick={() => { void toggleMic(); }} aria-label="Listen" disabled={busy}>

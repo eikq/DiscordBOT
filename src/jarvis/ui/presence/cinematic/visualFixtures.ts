@@ -1,13 +1,18 @@
 import type { LabResearchSnapshot, LabResearchSource } from '../../labViewModels';
+import type { LiveOpsStep } from '../../operationsView';
 import type { PresencePhase } from '../presenceRuntime';
 
 export const PRESENCE_VISUAL_SCENES = [
   'idle',
   'listening',
   'thinking',
+  'research-start',
   'research',
   'research-conflict',
+  'synthesizing',
+  'planning',
   'executing',
+  'open-application',
   'waiting-owner',
   'verifying',
   'verified',
@@ -32,6 +37,8 @@ export type PresenceVisualFixture = {
   taskActive: boolean;
   researchLive: boolean;
   research: LabResearchSnapshot | null;
+  planSteps: LiveOpsStep[];
+  applicationLabel?: string;
   answer?: string;
 };
 
@@ -59,39 +66,52 @@ function source(
   };
 }
 
-function researchPack(kind: 'plain' | 'conflict'): LabResearchSnapshot {
+const FIXTURE_PLAN: LiveOpsStep[] = [
+  { id: 'plan-1', index: '01', title: 'Resolve owner intent', state: 'done' },
+  { id: 'plan-2', index: '02', title: 'Open application', state: 'active' },
+  { id: 'plan-3', index: '03', title: 'Verify launch', state: 'pending' },
+];
+
+function researchPack(kind: 'plain' | 'conflict' | 'start' | 'synthesis'): LabResearchSnapshot {
   const last = {
     query: 'Qwen 3',
-    sources: [
-      source('official', 'Qwen official docs', 'qwenlm.github.io', 'fetched', 'OFFICIAL'),
-      source('github', 'Qwen repository', 'github.com', 'fetched', 'PRIMARY'),
-      source('news', 'Model release notes', 'example-news.test', 'fetched', 'NEWS'),
-      source('paper', 'Technical report', 'arxiv.org', 'fetched', 'ACADEMIC'),
-      source('reddit', 'Community thread', 'reddit.com', 'fetched', 'COMMUNITY'),
-      source('blog', 'Independent writeup', 'blog.example', kind === 'conflict' ? 'fetched' : 'listed', 'UNKNOWN', kind === 'conflict'),
-      source('docs2', 'Vendor FAQ', 'help.example', 'fetched', 'REFERENCE'),
-      source('fail', 'Unreachable mirror', 'down.example', 'failed', 'UNKNOWN'),
-    ],
-    evidence: [
-      { evidenceId: 'e1', sourceId: 'official', excerpt: 'Qwen 3 is documented by the vendor.', publishedAt: null, fetchedAt: null, kind: 'SOURCE_SUPPORTED' },
-      { evidenceId: 'e2', sourceId: 'github', excerpt: 'Source repository lists Qwen 3 artifacts.', publishedAt: null, fetchedAt: null, kind: 'SOURCE_SUPPORTED' },
-      { evidenceId: 'e3', sourceId: 'reddit', excerpt: 'Forum post restates the release without provenance.', publishedAt: null, fetchedAt: null, kind: 'UNCERTAIN' },
-      ...(kind === 'conflict'
-        ? [{
-          evidenceId: 'e4',
-          sourceId: 'blog',
-          excerpt: 'This fixture claim disagrees with the official version string.',
-          publishedAt: null,
-          fetchedAt: null,
-          kind: 'CONFLICTING',
-        }]
-        : []),
-    ],
+    sources: kind === 'start'
+      ? [
+        source('official', 'Qwen official docs', 'qwenlm.github.io', 'listed', 'OFFICIAL', false),
+        source('github', 'Qwen repository', 'github.com', 'listed', 'PRIMARY', false),
+      ]
+      : [
+        source('official', 'Qwen official docs', 'qwenlm.github.io', 'fetched', 'OFFICIAL'),
+        source('github', 'Qwen repository', 'github.com', 'fetched', 'PRIMARY'),
+        source('news', 'Model release notes', 'example-news.test', 'fetched', 'NEWS'),
+        source('paper', 'Technical report', 'arxiv.org', 'fetched', 'ACADEMIC'),
+        source('reddit', 'Community thread', 'reddit.com', 'fetched', 'COMMUNITY'),
+        source('blog', 'Independent writeup', 'blog.example', kind === 'conflict' ? 'fetched' : 'listed', 'UNKNOWN', kind === 'conflict'),
+        source('docs2', 'Vendor FAQ', 'help.example', 'fetched', 'REFERENCE'),
+        source('fail', 'Unreachable mirror', 'down.example', 'failed', 'UNKNOWN'),
+      ],
+    evidence: kind === 'start'
+      ? []
+      : [
+        { evidenceId: 'e1', sourceId: 'official', excerpt: 'Qwen 3 is documented by the vendor.', publishedAt: null, fetchedAt: null, kind: 'SOURCE_SUPPORTED' },
+        { evidenceId: 'e2', sourceId: 'github', excerpt: 'Source repository lists Qwen 3 artifacts.', publishedAt: null, fetchedAt: null, kind: 'SOURCE_SUPPORTED' },
+        { evidenceId: 'e3', sourceId: 'reddit', excerpt: 'Forum post restates the release without provenance.', publishedAt: null, fetchedAt: null, kind: 'UNCERTAIN' },
+        ...(kind === 'conflict'
+          ? [{
+            evidenceId: 'e4',
+            sourceId: 'blog',
+            excerpt: 'This fixture claim disagrees with the official version string.',
+            publishedAt: null,
+            fetchedAt: null,
+            kind: 'CONFLICTING',
+          }]
+          : []),
+      ],
     stages: [
       { id: 'search', label: 'Search', detail: 'Fixture search', state: 'done' },
-      { id: 'fetch', label: 'Fetch', detail: 'Fixture fetch', state: 'done' },
-      { id: 'compare', label: 'Compare', detail: kind === 'conflict' ? '1 conflict' : 'Agreeing sources', state: kind === 'conflict' ? 'active' : 'done' },
-      { id: 'synthesis', label: 'Synthesis', detail: 'Fixture synthesis', state: kind === 'conflict' ? 'pending' : 'done' },
+      { id: 'fetch', label: 'Fetch', detail: 'Fixture fetch', state: kind === 'start' ? 'active' : 'done' },
+      { id: 'compare', label: 'Compare', detail: kind === 'conflict' ? '1 conflict' : 'Agreeing sources', state: kind === 'conflict' ? 'active' : kind === 'start' ? 'pending' : 'done' },
+      { id: 'synthesis', label: 'Synthesis', detail: 'Fixture synthesis', state: kind === 'synthesis' ? 'active' : kind === 'conflict' || kind === 'start' ? 'pending' : 'done' },
     ],
     researchedAt: '2026-08-21T00:00:00.000Z',
     cached: false,
@@ -120,22 +140,31 @@ export function presenceVisualFixture(scene: PresenceVisualScene): PresenceVisua
     taskActive: false,
     researchLive: false,
     research: null,
+    planSteps: [],
   };
   switch (scene) {
     case 'listening':
       return { ...base, phase: 'LISTENING' };
     case 'thinking':
       return { ...base, phase: 'THINKING' };
+    case 'research-start':
+      return { ...base, phase: 'RESEARCHING', researchLive: true, research: researchPack('start') };
     case 'research':
       return { ...base, phase: 'RESEARCHING', researchLive: true, research: researchPack('plain') };
     case 'research-conflict':
       return { ...base, phase: 'RESEARCHING', researchLive: true, research: researchPack('conflict') };
+    case 'synthesizing':
+      return { ...base, phase: 'RESEARCHING', researchLive: true, research: researchPack('synthesis') };
+    case 'planning':
+      return { ...base, phase: 'PLANNING', taskActive: true, planSteps: FIXTURE_PLAN };
     case 'executing':
-      return { ...base, phase: 'EXECUTING', taskActive: true };
+      return { ...base, phase: 'EXECUTING', taskActive: true, planSteps: FIXTURE_PLAN };
+    case 'open-application':
+      return { ...base, phase: 'EXECUTING', taskActive: true, planSteps: FIXTURE_PLAN, applicationLabel: 'Cursor' };
     case 'waiting-owner':
       return { ...base, phase: 'WAITING_OWNER', waitingPermission: true };
     case 'verifying':
-      return { ...base, phase: 'VERIFYING', taskActive: true };
+      return { ...base, phase: 'VERIFYING', taskActive: true, planSteps: FIXTURE_PLAN.map((step, index) => ({ ...step, state: index < 2 ? 'done' : 'active' })) };
     case 'verified':
       return { ...base, phase: 'IDLE', answer: 'Requested change was verified.' };
     case 'system':

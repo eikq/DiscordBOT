@@ -40,6 +40,7 @@ export type PresenceResearchView = {
   counts: {
     sources: number;
     reviewed: number;
+    evidence: number;
     verified: number;
     conflicts: number;
     untrusted: number;
@@ -98,7 +99,7 @@ export function presentResearch(
       nodes: [],
       overflow: 0,
       links: [],
-      counts: { sources: 0, reviewed: 0, verified: 0, conflicts: 0, untrusted: 0 },
+      counts: { sources: 0, reviewed: 0, evidence: 0, verified: 0, conflicts: 0, untrusted: 0 },
       degraded: !snapshot.healthy,
       unavailable: !snapshot.attached || !snapshot.healthy,
       reason: snapshot.reason || 'Research provider is unavailable.',
@@ -157,6 +158,7 @@ export function presentResearch(
     counts: {
       sources: sources.length,
       reviewed,
+      evidence: evidence.length,
       verified,
       conflicts,
       untrusted,

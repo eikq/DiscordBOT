@@ -1,4 +1,6 @@
+import type { LiveOpsStep } from '../../operationsView';
 import type { PresenceHudKind, PresencePhase } from '../presenceRuntime';
+import type { PresenceActivityItem } from './activityFeed';
 import type { PresenceHudSlot } from './hudComposition';
 import type { HonestProgress, PresenceResearchNode, PresenceResearchView } from './researchPresentation';
 
@@ -8,6 +10,8 @@ export function PresenceSpatialHud(props: {
   research?: PresenceResearchView | null;
   selectedSourceId?: string | null;
   onSelectSource?: (id: string | null) => void;
+  activity?: PresenceActivityItem[];
+  planSteps?: LiveOpsStep[];
   systemLines?: string[];
   taskObjective?: string;
   taskStatus?: string;
@@ -26,16 +30,24 @@ export function PresenceSpatialHud(props: {
 
   return (
     <aside
-      className={`jp-panel jp-panel--${slot.zone.toLowerCase().replaceAll('_', '-')}`}
+      className={`jp-panel jp-panel--${slot.zone.toLowerCase().replaceAll('_', '-')} jp-panel--construct`}
       data-kind={slot.kind}
       data-depth={slot.depth}
       data-zone={slot.zone}
       aria-label={`${slot.kind} context`}
     >
-      {slot.kind === 'research' ? <ResearchPanel view={props.research} selectedId={props.selectedSourceId} onSelect={props.onSelectSource} simulated={props.simulated} /> : null}
+      {slot.kind === 'research' ? (
+        <ResearchPanel
+          view={props.research}
+          selectedId={props.selectedSourceId}
+          onSelect={props.onSelectSource}
+          activity={props.activity}
+          simulated={props.simulated}
+        />
+      ) : null}
       {slot.kind === 'system' ? <SimplePanel title="System" lines={props.systemLines ?? ['UNKNOWN']} /> : null}
       {slot.kind === 'execution' ? (
-        <TaskPanel objective={props.taskObjective} status={props.taskStatus} progress={props.progress} simulated={props.simulated} />
+        <TaskPanel objective={props.taskObjective} status={props.taskStatus} progress={props.progress} steps={props.planSteps} simulated={props.simulated} />
       ) : null}
       {slot.kind === 'verification' ? <VerificationPanel model={props.verification} /> : null}
       {slot.kind === 'waiting-input' ? (
@@ -74,7 +86,7 @@ function SimplePanel(props: { title: string; lines: string[]; badge?: string }) 
   );
 }
 
-function TaskPanel(props: { objective?: string; status?: string; progress?: HonestProgress; simulated?: boolean }) {
+function TaskPanel(props: { objective?: string; status?: string; progress?: HonestProgress; steps?: LiveOpsStep[]; simulated?: boolean }) {
   const progress = props.progress;
   return (
     <>
@@ -83,6 +95,16 @@ function TaskPanel(props: { objective?: string; status?: string; progress?: Hone
         {props.simulated ? <em className="jp-sim">SIMULATION</em> : null}
       </header>
       <p>{props.objective || 'Scoped work is in progress.'}</p>
+      {props.steps && props.steps.length > 0 ? (
+        <ol className="jp-dag">
+          {props.steps.slice(0, 6).map(step => (
+            <li key={step.id} data-state={step.state}>
+              <i>{step.index}</i>
+              <span>{step.title}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
       {progress?.kind === 'steps' ? (
         <div className="jp-progress" role="progressbar" aria-valuenow={progress.done} aria-valuemax={progress.total}>
           <i style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
@@ -116,6 +138,7 @@ function ResearchPanel(props: {
   view?: PresenceResearchView | null;
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
+  activity?: PresenceActivityItem[];
   simulated?: boolean;
 }) {
   const view = props.view;
@@ -136,13 +159,19 @@ function ResearchPanel(props: {
       </header>
       {view.query ? <p className="jp-panel__query">{view.query}</p> : null}
       {view.unavailable || view.degraded ? <p>{view.reason}</p> : null}
-      <p className="jp-counts">
-        {view.counts.sources} sources
-        {view.counts.reviewed ? ` · ${view.counts.reviewed} reviewed` : ''}
-        {view.counts.verified ? ` · ${view.counts.verified} verified` : ''}
-        {view.counts.conflicts ? ` · ${view.counts.conflicts} conflict` : ''}
-        {view.overflow ? ` · +${view.overflow} more` : ''}
-      </p>
+      <dl className="jp-stats">
+        <div><dt>Sources</dt><dd>{view.counts.sources}</dd></div>
+        <div><dt>Reviewed</dt><dd>{view.counts.reviewed}</dd></div>
+        <div><dt>Evidence</dt><dd>{view.counts.evidence}</dd></div>
+        <div><dt>Verified</dt><dd>{view.counts.verified}</dd></div>
+        {view.counts.conflicts > 0 ? <div><dt>Conflicts</dt><dd>{view.counts.conflicts}</dd></div> : null}
+        {view.overflow ? <div><dt>More</dt><dd>+{view.overflow}</dd></div> : null}
+      </dl>
+      {props.activity && props.activity.length > 0 ? (
+        <ul className="jp-activity" aria-label="Research activity">
+          {props.activity.map(item => <li key={item.id}>{item.text}</li>)}
+        </ul>
+      ) : null}
       <ul className="jp-sources">
         {view.nodes.map(node => (
           <li key={node.id}>
@@ -168,4 +197,3 @@ function nodeLabel(node: PresenceResearchNode): string {
   if (node.trust === 'untrusted') return `UNTRUSTED · ${node.visual.replaceAll('_', ' ')}`;
   return `${node.visual.replaceAll('_', ' ')}${node.domain ? ` · ${node.domain}` : ''}`;
 }
-
