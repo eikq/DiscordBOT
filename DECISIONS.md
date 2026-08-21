@@ -879,5 +879,48 @@ Ollama GPU, Whonix, mic, or CCTV.
 - Host live-QA remains required for SSE-in-browser, Ollama multi-step,
   Whonix, mic, screen capture, and CCTV.
 
+---
+
+## ADR-023 — Typed action effects, owner-only stop latch, and evidence-based model routing
+
+Date: 2026-08-21
+Status: Accepted for Core hardening; owner-machine acceptance pending
+
+### Context
+
+Trusted Operator components existed as UI contracts, while capability metadata
+could describe only read/write and WorkAgent treated completed steps as verified.
+Emergency Stop had no runtime endpoint. Current inference default was Qwen, but
+Core needed a clean boundary before later Community Edition model selection.
+
+### Decision
+
+- Capability-authored typed effects drive deterministic destructive and
+  mass-change preflight below the model. Unknown mutation requires review;
+  destructive unknown scope is blocked.
+- Emergency Stop is a restart-persistent execution latch. Owner/system may
+  engage; only owner may resume. It blocks new autonomous work, invalidates
+  pending confirmation, revokes/suspends temporary leases, and reports honest
+  cancellation capability.
+- Handler completion alone is partial/unverified. VERIFIED requires a registered
+  postcondition. Rollback AVAILABLE requires recorded recovery state.
+- Unexpected destructive failure or reported target-scope mismatch contains
+  further related mutation; recovery is another privileged owner-reviewed action.
+- Keep one model-profile registry separate from the existing adaptation-candidate
+  registry. Model routing uses evidence-backed certification, not family name or
+  model-card claims. Unknown metadata remains unknown.
+- Do not build the Community installer, Hugging Face browser/downloader, hardware
+  profiler, runtime installer, or GGUF picker in this phase.
+
+### Consequences
+
+- Trusted Operator UI can render real structured state without example values.
+- Current Qwen/Ollama and Qwen ASR names remain because they describe the owner
+  configuration and actual services, not because policy depends on Qwen.
+- Typed handlers without AbortSignal remain honestly NOT_CANCELLABLE once
+  running; new actions are still blocked immediately.
+- Windows/browser/provider behavior remains BLOCKED_LOCAL_ACCEPTANCE.
+
+See `docs/JARVIS_CORE_HARDENING_PRE_COMMUNITY.md`.
 
 

@@ -259,12 +259,15 @@ test('personal AI operating shell owns the route and stays Discord-free', () => 
   assert.match(page, /\/api\/jarvis\/actions\/confirm/);
   assert.match(page, /EventSource/);
   assert.match(page, /\/api\/jarvis\/command-center\/task/);
+  assert.match(page, /\/api\/jarvis\/operator/);
+  assert.match(page, /\/api\/jarvis\/emergency-stop/);
   assert.match(page, /Single-use proposal token/);
   assert.doesNotMatch(page, /Microphone is not enabled yet/);
   const shell = fs.readFileSync(files[5]!, 'utf8');
   assert.match(shell, /metaKey \|\| event\.ctrlKey/);
   assert.match(shell, /Emergency stop/);
-  assert.match(shell, /available=\{false\}/);
+  assert.match(shell, /available=\{emergencyAvailable\}/);
+  assert.match(shell, /onResume=\{onEmergencyResume\}/);
   const pages = fs.readFileSync(files[6]!, 'utf8');
   assert.match(pages, /Task Center/);
   assert.match(pages, /Capability Explorer/);

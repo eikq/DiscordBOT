@@ -6,8 +6,9 @@ Cloud may prepare interfaces, diagnostics, UI states, and fail-closed mocks only
 Labels: **BLOCKED_LOCAL_ACCEPTANCE**. Do not mark these LIVE_VERIFIED until the owner
 runs them on the physical Windows machine.
 
-Recommended order: LA-001 → LA-002 → LA-008 → LA-003 → LA-004 → LA-005 →
-LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-014 → LA-013.
+Recommended order: LA-015 → LA-001 → LA-016 → LA-002 → LA-008 → LA-003 →
+LA-004 → LA-005 → LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 →
+LA-014 → LA-013.
 
 ---
 
@@ -38,6 +39,9 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-014 → LA-
   permission wait, post-action evidence, empty Fluctlight when no data, and
   SIMULATION labels on demos; no hidden chain-of-thought. Check responsive and
   reduced-motion behavior.
+  Activate Emergency Stop with a queued task, a waiting permission, and an
+  ACTIVE test lease; confirm the UI shows exact cancellation/lease states,
+  refresh/restart preserves the latch, and only owner resume clears it.
 - Expected: UI matches real records. Demos stay labeled SIMULATION.
 - Failure evidence: screenshots, EventSource console, `/api/jarvis/events`
   after= cursor, `present()` JSON.
@@ -165,6 +169,37 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-014 → LA-
 
 ---
 
+## LA-015 Trusted Operator runtime on owner Windows
+
+- Purpose: Accept the real execution interlock without pretending to terminate
+  processes Jarvis does not own.
+- Preconditions: local loopback dashboard; disposable typed test capability;
+  one queued task, one waiting approval, and one short-lived test lease.
+- Exact verification: activate Emergency Stop; new WorkAgent tasks and
+  capability execution fail with `EMERGENCY_STOP_ACTIVE`; pending confirmation
+  cannot be reused; test lease becomes REVOKED; cancellation is exactly
+  CANCELLED / CANCELLATION_REQUESTED / NOT_CANCELLABLE; reload and restart leave
+  the stop active; a model/system request cannot resume; explicit owner RESUME
+  does. Inspect redacted Activity events.
+- Expected: no new autonomous mutation or lease grant while active; evidence is
+  preserved; no claim that an arbitrary external OS process was killed.
+- Failure evidence: `/api/jarvis/operator`, event sequence, task/lease ids,
+  restart logs, and the typed capability result. Do not include secrets.
+
+## LA-016 Model-agnostic local provider acceptance
+
+- Purpose: Prove current Qwen remains a configuration profile while Core works
+  through family-neutral contracts.
+- Preconditions: current Ollama/Qwen available; a separately configured
+  non-Qwen OpenAI-compatible test model if the owner chooses to test one.
+- Exact verification: status returns the configured model/runtime without
+  invented family/parameter metadata; uncertified TOOL_SELECTION does not
+  route; run certification fixtures; only evidence-backed PASS becomes
+  eligible; compare one conversation through each configured provider.
+- Expected: no model-family branch changes permission or capability authority.
+- Failure evidence: model profile, certification records, provider health, and
+  redacted request/result metrics.
+
 ## Cloud-prepared but not live
 
 - ScreenCaptureProvider / VisionAnalyzer / VisualContext / SensitiveRegionPolicy
@@ -175,4 +210,5 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-014 → LA-
 - ActionGate confirmation store (in-memory; restart requires re-confirm)
 - Personal Digital Memory privacy/provider contract (no capture provider active)
 - Security Academy reference/sandbox design (no external project executed)
-- Emergency Stop confirmation UI (runtime cancellation/revocation endpoint not connected)
+- Emergency Stop runtime/UI are cloud-tested; owner Windows execution,
+  restart, browser, and actual provider cancellation remain LA-015.
