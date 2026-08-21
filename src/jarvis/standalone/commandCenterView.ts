@@ -52,6 +52,9 @@ export type CommandCenterClientSnapshot = {
     cancellation?: NonNullable<CommandCenterSnapshot['task']>['cancellation'];
     gapResolution?: NonNullable<CommandCenterSnapshot['task']>['gapResolution'];
     blockers?: NonNullable<CommandCenterSnapshot['task']>['blockers'];
+    goalResolution?: NonNullable<CommandCenterSnapshot['task']>['goalResolution'];
+    goalOutcome?: NonNullable<CommandCenterSnapshot['task']>['goalOutcome'];
+    adapters: Array<{ stepId: string; capability: string; adapterId: string; evidence: string[] }>;
   } | null;
   recentTasks: Array<{ id: string; objective: string; status: string; simulated?: boolean }>;
   evolution: {
@@ -143,6 +146,14 @@ export function presentCommandCenter(
           ...(task.cancellation ? { cancellation: task.cancellation } : {}),
           ...(task.gapResolution ? { gapResolution: task.gapResolution } : {}),
           ...(task.blockers ? { blockers: task.blockers } : {}),
+          ...(task.goalResolution ? { goalResolution: task.goalResolution } : {}),
+          ...(task.goalOutcome ? { goalOutcome: task.goalOutcome } : {}),
+          adapters: task.plan.flatMap(step => step.inputAdapter ? [{
+            stepId: step.id,
+            capability: step.capability || 'unknown',
+            adapterId: step.inputAdapter.id,
+            evidence: [...step.inputAdapter.evidence],
+          }] : []),
           ...([...task.plan].reverse().find(step => step.preflight)?.preflight
             ? { preflight: [...task.plan].reverse().find(step => step.preflight)!.preflight }
             : {}),
