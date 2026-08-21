@@ -16,6 +16,7 @@ import {
   isExplicitActionConfirmation,
   labPhaseFromVisual,
 } from '../src/jarvis/ui/labUiState';
+import { JARVIS_PAGES, parseJarvisPage } from '../src/jarvis/ui/operating/JarvisOperatingShell';
 
 test('lab core phase is driven by observable UI state only', () => {
   assert.equal(deriveLabCorePhase({
@@ -224,7 +225,9 @@ test('lab status catalog is descriptor metadata and does not invoke capabilities
   const status = await lab.status();
   assert.equal(status.capabilities.attached, true);
   assert.equal(status.capabilities.catalog[0]?.id, 'lab.ping');
+  assert.equal(status.capabilities.catalog[0]?.description, 'ping');
   assert.equal(status.capabilities.catalog[0]?.providerKind, 'local');
+  assert.equal(status.capabilities.catalog[0]?.sideEffect, 'read');
   assert.equal(invoked, false);
 });
 
@@ -235,41 +238,70 @@ test('action activity labels stay observable and confirmation phrases are explic
   assert.equal(isExplicitActionConfirmation('maybe later'), false);
 });
 
-test('jarvis lab page is a command center and stays Discord-free', () => {
+test('personal AI operating shell owns the route and stays Discord-free', () => {
   const files = [
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'JarvisLabPage.tsx'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'JarvisCoreVisual.tsx'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'labUiState.ts'),
     path.join(process.cwd(), 'src', 'jarvis', 'ui', 'browserMicrophone.ts'),
-    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'CommandCenterPanels.tsx'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'operating', 'JarvisOperatingPage.tsx'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'operating', 'JarvisOperatingShell.tsx'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'operating', 'JarvisPages.tsx'),
+    path.join(process.cwd(), 'src', 'jarvis', 'ui', 'operating', 'TrustedOperator.tsx'),
   ];
   const discord = /from\s+['"](?:discord(?:\.js)?|@discordjs\/)['"]/u;
-  const page = fs.readFileSync(files[0]!, 'utf8');
-  assert.match(page, /jcc-ribbon/);
-  assert.match(page, /jcc-memory/);
-  assert.match(page, /jcc-tools/);
-  assert.match(page, /jcc-timeline/);
-  assert.match(page, /jcc-dock/);
+  const route = fs.readFileSync(files[0]!, 'utf8');
+  assert.match(route, /export default JarvisOperatingPage/);
+  const page = fs.readFileSync(files[4]!, 'utf8');
   assert.match(page, /toggleMic/);
-  assert.match(page, /ask-stream/);
-  assert.match(page, /Review the text, then Ask/);
-  assert.match(page, /Speak/);
-  assert.match(page, /jcc-permit/);
-  assert.match(page, /Allow once/);
-  assert.match(page, /speak: shouldSpeak/);
+  assert.match(page, /OwnerApprovalDialog/);
+  assert.match(page, /\/api\/jarvis\/security/);
+  assert.match(page, /\/api\/jarvis\/actions\/confirm/);
   assert.match(page, /EventSource/);
-  assert.match(page, /\/api\/jarvis\/command-center/);
   assert.match(page, /\/api\/jarvis\/command-center\/task/);
-  assert.match(page, /jcc-sim-banner/);
+  assert.match(page, /Single-use proposal token/);
   assert.doesNotMatch(page, /Microphone is not enabled yet/);
-  assert.doesNotMatch(page, /<select/);
-  const panels = fs.readFileSync(files[4]!, 'utf8');
-  assert.match(panels, /SIMULATION/);
-  assert.match(panels, /Run task/);
-  assert.match(panels, /Night cycle/);
-  assert.doesNotMatch(panels, /Discord/);
+  const shell = fs.readFileSync(files[5]!, 'utf8');
+  assert.match(shell, /metaKey \|\| event\.ctrlKey/);
+  assert.match(shell, /Emergency stop/);
+  assert.match(shell, /available=\{false\}/);
+  const pages = fs.readFileSync(files[6]!, 'utf8');
+  assert.match(pages, /Task Center/);
+  assert.match(pages, /Capability Explorer/);
+  assert.match(pages, /Personal Digital Memory/);
+  assert.match(pages, /Security Academy/);
+  assert.match(pages, /no chain-of-thought/);
+  assert.match(pages, /BLOCKED_LOCAL_ACCEPTANCE/);
+  const trusted = fs.readFileSync(files[7]!, 'utf8');
+  assert.match(trusted, /Possible impact/);
+  assert.match(trusted, /Permission scope/);
+  assert.match(trusted, /Allow once/);
+  assert.match(trusted, /No permanent broad grant/);
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');
     assert.equal(discord.test(source), false, file);
   }
+});
+
+test('application information architecture has stable deep links without fake memory navigation', () => {
+  assert.equal(parseJarvisPage('/jarvis-lab'), 'home');
+  assert.equal(parseJarvisPage('/jarvis-lab/tasks'), 'tasks');
+  assert.equal(parseJarvisPage('/jarvis-lab/security'), 'security');
+  assert.equal(parseJarvisPage('/jarvis-lab/not-real'), 'home');
+  assert.deepEqual(JARVIS_PAGES.map(page => page.id), [
+    'home', 'assistant', 'tasks', 'research', 'documents', 'workspace', 'content',
+    'devices', 'automations', 'evolution', 'security', 'system', 'activity', 'settings',
+  ]);
+  assert.equal(JARVIS_PAGES.some(page => page.id === ('memory' as never)), false);
+});
+
+test('perceptual memory and Security Academy study remains contract-only', () => {
+  const study = fs.readFileSync(path.join(process.cwd(), 'docs', 'JARVIS_PERCEPTUAL_MEMORY_SECURITY_ACADEMY.md'), 'utf8');
+  assert.match(study, /REDACT_BEFORE_STORAGE/);
+  assert.match(study, /Capture every window, key, clipboard value and screenshot \| REJECT/);
+  assert.match(study, /Administrator\/global-input monitoring as a default \| REJECT/);
+  assert.match(study, /OBSERVATION != FACT/);
+  assert.match(study, /REFERENCE_ONLY.*SANDBOX_REQUIRED/);
+  assert.match(study, /reflection, high model confidence, or one successful demonstration is not proof/);
+  assert.match(study, /Hardware capture and perpetual monitoring: `BLOCKED_LOCAL_ACCEPTANCE`/);
 });

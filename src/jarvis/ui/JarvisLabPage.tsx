@@ -59,6 +59,7 @@ import type { CameraAction, CoreSceneLayers } from './three/CoreScene';
 import { webglAvailable } from './three/webglAvailability';
 import type { CommandCenterClientSnapshot } from '../standalone/commandCenterView';
 import type { DemoScenarioId } from '../standalone/commandCenterHttp';
+import JarvisOperatingPage from './operating/JarvisOperatingPage';
 import './jarvis-lab.css';
 
 const CoreScene = lazy(() => import('./three/CoreScene'));
@@ -73,7 +74,14 @@ type LabStatus = {
   capabilities?: {
     attached: boolean;
     ids: string[];
-    catalog?: Array<{ id: string; providerKind: string; untrustedOutput: boolean; requiredService: string }>;
+    catalog?: Array<{
+      id: string;
+      description?: string;
+      providerKind: string;
+      untrustedOutput: boolean;
+      requiredService: string;
+      sideEffect?: 'read' | 'write';
+    }>;
   };
   llm?: { enabled?: boolean; reachable?: boolean; model?: string; loaded?: boolean };
   stt?: { reachable?: boolean; model?: string; baseUrl?: string; reason?: string };
@@ -212,7 +220,13 @@ type NodeDetail = {
   reason?: string;
 };
 
-export default function JarvisLabPage() {
+export default JarvisOperatingPage;
+
+/**
+ * Retained temporarily as an implementation reference while the Personal AI OS
+ * shell reaches local visual acceptance. It is no longer mounted by the route.
+ */
+function LegacyJarvisLabPage() {
   const [status, setStatus] = useState<LabStatus | null>(null);
   const [text, setText] = useState('');
   const [personaProfileId, setPersonaProfileId] = useState(JARVIS_PERSONA_ID);

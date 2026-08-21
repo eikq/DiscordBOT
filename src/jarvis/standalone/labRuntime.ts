@@ -115,9 +115,11 @@ export type JarvisLabStatus = {
     ids: string[];
     catalog: Array<{
       id: string;
+      description: string;
       providerKind: CapabilityProviderKind;
       untrustedOutput: boolean;
       requiredService: string;
+      sideEffect: 'read' | 'write';
     }>;
   };
   presentation: JarvisLabPresentationStatus;
@@ -303,9 +305,11 @@ export class JarvisLabRuntime {
         ids: [...this.capabilityIds],
         catalog: this.capabilityHost?.list().map(item => ({
           id: item.id,
+          description: item.description,
           providerKind: item.providerKind,
           untrustedOutput: item.untrustedOutput,
           requiredService: item.requiredService,
+          sideEffect: item.sideEffect,
         })) ?? [],
       },
       presentation: await this.presentationStatus(sessionId),
