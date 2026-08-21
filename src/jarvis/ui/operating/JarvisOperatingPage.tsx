@@ -338,6 +338,10 @@ export default function JarvisOperatingPage() {
         const event = JSON.parse(line) as { type?: string; text?: string; payload?: AskResponse; error?: string };
         if (event.type === 'draft' && event.text) setDraft(event.text);
         if (event.type === 'final' && event.payload) finalPayload = event.payload;
+        if (event.type === 'speech' && event.payload) {
+          const speech = event.payload as AskResponse['speech'];
+          if (speech && finalPayload) finalPayload = { ...finalPayload, speech };
+        }
         if (event.type === 'error' && event.error) throw new Error(event.error);
       } catch (err) {
         if (err instanceof SyntaxError) return;

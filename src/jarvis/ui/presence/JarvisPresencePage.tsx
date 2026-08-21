@@ -22,6 +22,10 @@ import { inspectDragEnabled, visualDebugEnabled } from './cinematic/pointerAutho
 import { pcmAmplitude } from './cinematic/pcmAmplitude';
 import { nextPresenceAutoTier, presenceTierFromLabLevel, type PresenceQualityTier } from './cinematic/presenceQuality';
 import { isResearchOperationType, type ResearchVisualStage } from './cinematic/researchEvents';
+import { applySpeechControl, defaultSpeechSession, parseSpeechControl } from '../../speech/speechSession';
+import { parseSpeechModeCommand } from '../../speech/speechPolicy';
+import { classifyVoiceFamily, isWakeUtterance } from '../../intent/voiceFamilies';
+import { sttMayExecute } from '../../intent/sttRiskGate';
 import { attachPlaybackAnalyser } from './cinematic/speechAmplitude';
 import { parsePresenceVisualScene } from './cinematic/visualFixtures';
 import type { PresenceCoreStats } from './cinematic/PresenceCoreScene';
@@ -31,7 +35,9 @@ import {
   derivePresencePhase,
   desktopAuthorityMaturity,
   formatAttentionSpoken,
+  formatTaskStatusSpoken,
   inferDesktopAuthorityClass,
+  isCancelLikeUnbound,
   interpretPresenceOwnerReply,
   interpretPresenceShellCommand,
   isPresenceAmbientPath,
@@ -97,6 +103,8 @@ export default function JarvisPresencePage() {
   const [micState, setMicState] = useState<MicState>('idle');
   const [speechState, setSpeechState] = useState<'idle' | 'loading' | 'speaking'>('idle');
   const [speakEnabled, setSpeakEnabled] = useState(true);
+  const [wakeAttention, setWakeAttention] = useState(false);
+  const speechSession = useRef(defaultSpeechSession());
   const [lastAsk, setLastAsk] = useState('');
   const [clock, setClock] = useState(() => new Date());
   const [ambient, setAmbient] = useState(() => isPresenceAmbientPath(window.location.pathname, window.location.search));
@@ -406,6 +414,25 @@ export default function JarvisPresencePage() {
     if (approvalTarget.kind === 'grant') return settleGrant(decision);
   };
 
+  const cancelCurrentTask = async () => {
+    const taskId = commandCenter?.task?.id;
+    if (!taskId || !commandCenter?.task?.active) {
+      speakLocal('Nothing is running to cancel.');
+      return;
+    }
+    try {
+      await fetch('/api/jarvis/command-center/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      });
+      speakLocal('I cancelled the current task. Emergency Stop is unchanged.');
+      void refreshCommandCenter();
+    } catch (err) {
+      setError(safeError(err));
+    }
+  };
+
   const askOnce = async (payloadText: string, spoken = false) => {
     const reply = await fetch('/api/jarvis/ask', {
       method: 'POST',
@@ -446,6 +473,10 @@ export default function JarvisPresencePage() {
         const event = JSON.parse(line) as { type?: string; text?: string; payload?: AskResponse; error?: string };
         if (event.type === 'draft' && event.text) setDraft(event.text);
         if (event.type === 'final' && event.payload) finalPayload = event.payload;
+        if (event.type === 'speech' && event.payload) {
+          const speech = event.payload as AskResponse['speech'];
+          if (speech && finalPayload) finalPayload = { ...finalPayload, speech };
+        }
         if (event.type === 'error' && event.error) throw new Error(event.error);
       } catch (err) {
         if (err instanceof SyntaxError) return;
@@ -476,6 +507,61 @@ export default function JarvisPresencePage() {
     event?.preventDefault();
     const payloadText = (spokenText ?? text).trim();
     if (!payloadText || busy) return;
+
+    if (isWakeUtterance(payloadText)) {
+      setWakeAttention(true);
+      speakLocal("I'm here.");
+      if (!spokenText) setText('');
+      window.setTimeout(() => setWakeAttention(false), 8000);
+      return;
+    }
+    const speechControl = parseSpeechControl(payloadText);
+    if (speechControl) {
+      speechSession.current = applySpeechControl(speechSession.current, speechControl);
+      if (speechControl.kind === 'stop' || speechControl.kind === 'pause') stopPlayback();
+      if (speechControl.kind === 'continue' || speechControl.kind === 'repeat') {
+        if (speechSession.current.lastSpoken) speakLocal(speechSession.current.lastSpoken);
+      } else {
+        speakLocal(speechControl.kind === 'stop' ? 'Okay. I’ll stay quiet.' : 'Okay.');
+      }
+      if (!spokenText) setText('');
+      return;
+    }
+    const nextMode = parseSpeechModeCommand(payloadText);
+    if (nextMode) {
+      speechSession.current = { ...speechSession.current, mode: nextMode };
+      speakLocal('I’ll follow that speech preference.');
+      if (!spokenText) setText('');
+      return;
+    }
+    const voice = classifyVoiceFamily(payloadText);
+    if (voice.family === 'VISUAL_INSPECT') {
+      speakLocal('That’s a presentation control only. It does not change permissions.');
+      if (!spokenText) setText('');
+      return;
+    }
+    if (voice.family === 'MEDIA_UNSUPPORTED') {
+      speakLocal('Opening a site is not the same as controlling playback. Play, search, upload, and publish stay unavailable until those capabilities are certified.');
+      if (!spokenText) setText('');
+      return;
+    }
+    if (voice.family === 'TASK_STATUS') {
+      speakLocal(formatTaskStatusSpoken(commandCenter?.task ?? null));
+      if (!spokenText) setText('');
+      return;
+    }
+    if (voice.family === 'WORK_CONTINUE') {
+      speakLocal(commandCenter?.task?.active
+        ? 'I’ll continue the current task with the same authority. I will not retry forever.'
+        : 'There is no active task to continue.');
+      if (!spokenText) setText('');
+      return;
+    }
+    if (voice.family === 'CANCEL_TASK') {
+      await cancelCurrentTask();
+      if (!spokenText) setText('');
+      return;
+    }
 
     const shell = interpretPresenceShellCommand(payloadText);
     if (shell.kind === 'presence') {
@@ -511,6 +597,11 @@ export default function JarvisPresencePage() {
       return;
     }
     if (reply.kind === 'unbound') {
+      if (isCancelLikeUnbound(payloadText)) {
+        await cancelCurrentTask();
+        if (!spokenText) setText('');
+        return;
+      }
       speakLocal('Nothing is waiting for approval. Say the request you want instead.');
       if (!spokenText) setText('');
       return;
@@ -588,9 +679,17 @@ export default function JarvisPresencePage() {
       });
       const payload = await reply.json() as { status?: string; text?: string; confidence?: number; reason?: string; error?: string };
       if (!reply.ok) throw new Error(payload.error || `STT returned ${reply.status}`);
-      if (payload.status !== 'final' || !payload.text?.trim() || (payload.confidence ?? 1) < 0.8) {
+      if (payload.status !== 'final' || !payload.text?.trim()) {
         if (payload.text) { setText(payload.text); setHeard(payload.text); }
         throw new Error(payload.reason || 'Review the transcript before asking.');
+      }
+      const gate = sttMayExecute({ text: payload.text, confidence: payload.confidence });
+      if (gate.execute === false) {
+        setText(payload.text);
+        setHeard(payload.text);
+        speakLocal(gate.message);
+        setMicState('idle');
+        return;
       }
       setText(payload.text);
       setHeard(payload.text);
@@ -646,6 +745,7 @@ export default function JarvisPresencePage() {
     error,
     ready: status?.ready,
     llmReachable: status?.llm?.reachable,
+    attention: wakeAttention,
     micState: micState === 'listening' || micState === 'transcribing' ? micState : 'idle',
     speechState,
     visualState: commandCenter?.visualState,
@@ -681,7 +781,7 @@ export default function JarvisPresencePage() {
     taskActive: commandCenter?.task?.active,
     verificationComplete: commandCenter?.task?.verification?.state === 'VERIFIED',
     researchActive: researchLive,
-    systemAsked: /system status|สถานะระบบ|runtime/i.test(lastAsk),
+    systemAsked: classifyVoiceFamily(lastAsk).family === 'SYSTEM_STATUS' || /system status|สถานะระบบ|runtime/i.test(lastAsk),
     reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0 && /remind|เตือน|attention/i.test(lastAsk),
     reminderActive: /remind|เตือน/i.test(lastAsk),
     cctvAsked: /cctv|camera|กล้อง/i.test(lastAsk),
@@ -704,7 +804,7 @@ export default function JarvisPresencePage() {
     researchStage,
     replayElapsedMs,
     planSteps: commandCenter?.task?.steps,
-    systemAsked: /system status|สถานะระบบ|runtime/i.test(lastAsk),
+    systemAsked: classifyVoiceFamily(lastAsk).family === 'SYSTEM_STATUS' || /system status|สถานะระบบ|runtime/i.test(lastAsk),
     reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0,
     reminderActive: /remind|เตือน/i.test(lastAsk),
     cctvAsked: /cctv|camera|กล้อง/i.test(lastAsk),

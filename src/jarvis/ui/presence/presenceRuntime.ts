@@ -72,8 +72,8 @@ export type PresenceOwnerReply =
 export const DESKTOP_AUTHORITY_CLASSES = ['SEE', 'OPEN', 'CLICK', 'TYPE', 'SUBMIT'] as const;
 export type DesktopAuthorityClass = (typeof DESKTOP_AUTHORITY_CLASSES)[number];
 
-const CONFIRM = /^(yes|y|ok|okay|allow|allow once|proceed|go ahead|ได้|ตกลง|อนุญาต|เปิดได้|เอาเลย|ใช่|ดำเนินการ)$/iu;
-const DENY = /^(no|n|deny|cancel|stop|don'?t|never mind|ไม่|ยกเลิก|ปฏิเสธ)$/iu;
+const CONFIRM = /^(yes|y|ok|okay|allow|allow once|proceed|do it|go ahead|approved|ได้|ตกลง|อนุญาต|อนุญาตครั้งนี้|เปิดได้|เอาเลย|ใช่|ทำเลย|ดำเนินการ|โอเค ทำต่อ)$/iu;
+const DENY = /^(no|n|deny|cancel|cancel it|stop|don'?t|dont|never mind|ไม่|ไม่อนุญาต|ยกเลิก|ปฏิเสธ)$/iu;
 
 export function stripJarvisAddress(text: string): string {
   return text.replace(/^\s*(jarvis[,:]?\s*)+/iu, '').trim();
@@ -84,6 +84,7 @@ export function derivePresencePhase(input: {
   error?: string | null;
   ready?: boolean;
   llmReachable?: boolean;
+  attention?: boolean;
   micState?: 'idle' | 'listening' | 'transcribing';
   speechState?: 'idle' | 'loading' | 'speaking';
   visualState?: string;
@@ -97,7 +98,7 @@ export function derivePresencePhase(input: {
   if (input.ready === false && input.llmReachable === false && !input.busy) return 'OFFLINE';
   if (input.waitingPermission) return 'WAITING_OWNER';
   if (input.waitingOwnerInput && !input.busy) return 'WAITING_OWNER';
-  if (input.micState === 'listening') return 'LISTENING';
+  if (input.micState === 'listening' || input.attention) return 'LISTENING';
   if (input.micState === 'transcribing') return 'UNDERSTANDING';
   if (input.speechState === 'speaking') return 'SPEAKING';
   const visual = presencePhaseFromVisual(input.visualState);
@@ -380,11 +381,11 @@ export function interpretPresenceShellCommand(text: string): PresenceShellComman
   if (/open presence|return to jarvis|back to jarvis|กลับไป jarvis|เปิด presence/.test(raw)) {
     return { kind: 'presence' };
   }
-  if (/ambient mode|presence mode|cinema mode|โหมด ambient|โหมดจอใหญ่/.test(raw) && /off|exit|leave|ปิด/.test(raw)) {
+  if (/go ambient|ambient mode|presence mode|cinema mode|เข้า ambient|โหมด ambient|โหมดจอใหญ่/.test(raw) && /off|exit|leave|ปิด/.test(raw)) {
     return { kind: 'ambient-off' };
   }
-  if (/ambient mode|presence mode|cinema mode|โหมด ambient|โหมดจอใหญ่/.test(raw)) return { kind: 'ambient-on' };
-  if (/what(?:'s| is) happening|what needs my attention|what do you need|สถานะงาน|ต้องการความสนใจ/.test(raw)) {
+  if (/go ambient|ambient mode|presence mode|cinema mode|เข้า ambient|โหมด ambient|โหมดจอใหญ่/.test(raw)) return { kind: 'ambient-on' };
+  if (/what(?:'s| is) happening|what's going on|what needs my attention|anything important|do i need to know|สถานะงาน|ต้องการความสนใจ|มีอะไรสำคัญไหม|ตอนนี้เป็นยังไงบ้าง/.test(raw)) {
     return { kind: 'attention' };
   }
   return { kind: 'none' };
@@ -429,7 +430,7 @@ export function resolvePresenceApproval(input: {
 }
 
 export function interpretPresenceOwnerReply(text: string, target: PresenceApprovalTarget): PresenceOwnerReply {
-  const raw = stripJarvisAddress(text);
+  const raw = stripJarvisAddress(text).replace(/[.!?]+$/u, '').trim();
   const isConfirm = CONFIRM.test(raw);
   const isDeny = DENY.test(raw);
   if (!isConfirm && !isDeny) return { kind: 'not-approval' };
@@ -469,6 +470,36 @@ export function formatAttentionSpoken(items: PresenceAttention[]): string {
   const lead = items[0]!;
   if (items.length === 1) return `${lead.title}. ${lead.detail}`;
   return `${items.length} items need attention. First: ${lead.title}. ${lead.detail}`;
+}
+
+export function formatTaskStatusSpoken(task: {
+  active?: boolean;
+  status?: string;
+  objective?: string;
+  waitingPermission?: boolean;
+  waitingOwnerInput?: boolean;
+  waitingInput?: { question?: string } | null;
+  steps?: Array<{ state: string; title: string }>;
+  errors?: string[];
+} | null): string {
+  if (!task?.active && !task?.status) return 'I am not running a task right now.';
+  if (task.waitingPermission) return `I am waiting for your permission${task.objective ? ` on ${task.objective}` : ''}.`;
+  if (task.waitingOwnerInput) return task.waitingInput?.question || 'I am waiting for one missing field.';
+  const failed = task.steps?.find(step => step.state === 'failed');
+  if (failed || task.errors?.length) {
+    return `A verified step failed${failed ? `: ${failed.title}` : ''}${task.errors?.[0] ? `. ${task.errors[0]}` : ''}.`;
+  }
+  const active = task.steps?.find(step => step.state === 'active' || step.state === 'waiting');
+  const done = task.steps?.filter(step => step.state === 'done').length ?? 0;
+  const total = task.steps?.length ?? 0;
+  if (active && total > 0) return `I am on ${active.title}. ${done} of ${total} verified steps are done.`;
+  if (total > 0) return `${task.objective || 'Current work'}: ${task.status}. ${done} of ${total} verified steps are done.`;
+  return `${task.objective || 'Current work'} is ${task.status}.`;
+}
+
+export function isCancelLikeUnbound(text: string): boolean {
+  return /cancel that|cancel it|never mind|stop this|ยกเลิก|ไม่ต้องทำแล้ว|หยุดงานนี้/iu.test(text)
+    && !/emergency/iu.test(text);
 }
 
 export function isPresenceAmbientPath(pathname: string, search = ''): boolean {

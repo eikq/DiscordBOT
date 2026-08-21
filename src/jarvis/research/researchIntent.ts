@@ -25,6 +25,7 @@ const THAI_RESEARCH_CUES = [
   'หาอะไรเกี่ยวกับ',
   'ลองดูว่า',
   'ข่าวล่าสุด',
+  'รีเสิร์ช',
 ];
 
 const ENGLISH_RESEARCH_CUES = [
@@ -36,6 +37,7 @@ const ENGLISH_RESEARCH_CUES = [
   'official documentation',
   'how recent',
   'research this',
+  'research the',
   'look up',
   'look into',
   'find out',

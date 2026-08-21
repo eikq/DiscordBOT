@@ -61,6 +61,7 @@ export type IntentResolution = {
   goal?: GoalResolution;
   pendingGoalId?: string;
   pendingGoalExpiresAt?: string;
+  extraCalls?: Array<{ id: string; input?: Record<string, unknown> }>;
 };
 
 export type InteractionContext = {

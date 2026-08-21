@@ -2,6 +2,7 @@ import { inferActionIntent } from '../capabilities/actions/actionIntent';
 import {
   DESKTOP_OPEN_APPLICATION,
   DESKTOP_OPEN_PROJECT,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
   JARVIS_HEALTH_CHECK,
@@ -13,6 +14,8 @@ import { SERVICE_ALIASES, type JarvisServiceId } from '../capabilities/actions/s
 import { RESEARCH_COMPARE, RESEARCH_CURRENT, RESEARCH_PRIVATE_BROWSE } from '../research/constants';
 import { WORKSPACE_COMPARE, WORKSPACE_CURRENT, WORKSPACE_GET, WORKSPACE_SEARCH } from '../workspace/constants';
 import { REMINDERS_CANCEL, REMINDERS_LIST, REMINDERS_RESCHEDULE } from '../automation/constants';
+import { classifyVoiceFamily } from './voiceFamilies';
+import { routeVoiceFamily } from './voiceRoute';
 import { classifyActionability, isTalkingAboutTopic, shouldTreatAsForbiddenRequest } from './classify';
 import { catalogHas } from './catalog';
 import { newClarificationId } from './context';
@@ -55,9 +58,23 @@ export function heuristicResolve(
   const followUp = resolveFollowUp(raw, options.context, options.catalog);
   if (followUp) return followUp;
 
+  const voice = classifyVoiceFamily(raw);
+  const routed = routeVoiceFamily(raw, { catalog: options.catalog, context: options.context });
+  if (routed) return routed;
+
   const site = matchSite(raw);
-  if (site && catalogHas(options.catalog, DESKTOP_OPEN_TRUSTED_URL) && wantsOpen(raw)) {
-    return capability(DESKTOP_OPEN_TRUSTED_URL, { url: site.url }, 'HEURISTIC_URL', 'HIGH', true);
+  if (site && wantsOpen(raw)) {
+    if (voice.display && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+      return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
+        kind: 'url',
+        url: site.url,
+        label: site.label,
+        display: voice.display,
+      }, 'HEURISTIC_SCOPED_URL', 'HIGH', true);
+    }
+    if (catalogHas(options.catalog, DESKTOP_OPEN_TRUSTED_URL)) {
+      return capability(DESKTOP_OPEN_TRUSTED_URL, { url: site.url }, 'HEURISTIC_URL', 'HIGH', true);
+    }
   }
 
   if (isVagueTask(raw)) {
@@ -114,6 +131,14 @@ export function heuristicResolve(
   }
 
   const app = matchApp(raw, options.applicationIds);
+  if (app && wantsOpen(raw) && voice.display && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
+    return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
+      kind: 'application',
+      applicationId: app,
+      label: app,
+      display: voice.display,
+    }, 'HEURISTIC_SCOPED_APP', 'HIGH', true);
+  }
   if (app && catalogHas(options.catalog, DESKTOP_OPEN_APPLICATION) && wantsOpen(raw)) {
     const resolution = capability(DESKTOP_OPEN_APPLICATION, { applicationId: app }, 'HEURISTIC_OPEN_APP', 'HIGH', true);
     if (app === 'spotify') {
@@ -198,6 +223,7 @@ export function fastPathResolution(
       consumed: intent.consumed,
       source: 'fast-path',
       actionClass: classifyActionability(text) === 'FORBIDDEN' ? 'ACTIONABLE' : classifyActionability(text) === 'CONVERSATION' ? 'ACTIONABLE' : classifyActionability(text),
+      ...(intent.calls.length > 1 ? { extraCalls: intent.calls.slice(1) } : {}),
     };
     if (call.id === DESKTOP_OPEN_APPLICATION && call.input?.applicationId === 'spotify' && catalogHas(options.catalog, DESKTOP_OPEN_TRUSTED_URL)) {
       resolution.alternatives = [{
@@ -255,6 +281,12 @@ function resolveFollowUp(
       freshness: 'latest',
       reuseLast: true,
     }, 'CONTEXT_RESEARCH_OFFICIAL', 'HIGH', true, 'context');
+  }
+  if (context.lastCapabilityId?.startsWith('research.') && /show me the sources|ขอดูแหล่งข้อมูล|summarize what you found|สรุปสั้น|keep researching|ค้นต่อ/iu.test(raw) && catalogHas(catalog, RESEARCH_CURRENT)) {
+    return capability(RESEARCH_CURRENT, {
+      query: context.recentResearchQuery || raw,
+      reuseLast: true,
+    }, 'CONTEXT_RESEARCH_FOLLOWUP', 'HIGH', true, 'context');
   }
   if (context.lastCapabilityId?.startsWith('research.') && /เทียบ|compare|สองอันแรก/iu.test(raw) && catalogHas(catalog, RESEARCH_COMPARE)) {
     return capability(RESEARCH_COMPARE, { sourceIds: [] }, 'CONTEXT_RESEARCH_COMPARE', 'HIGH', true, 'context');

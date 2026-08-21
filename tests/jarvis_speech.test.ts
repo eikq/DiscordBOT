@@ -178,6 +178,31 @@ test('typed ask does not speak unless requested; mic path can', async () => {
   assert.equal(source.calls.length, 1);
 });
 
+test('conversation askStream attaches speech to final before emitting it', async () => {
+  const source = mockSynth();
+  const lab = createJarvisLabRuntime({
+    attachDefaultMemory: false,
+    attachDefaultCapabilities: false,
+    attachDefaultPresentation: false,
+    attachDefaultSpeech: false,
+    speech: new StandaloneVoiceRouter({
+      synthesizer: source.synth,
+      probeServices: async () => ({ qwenLoaded: true, asrReachable: true, jaittsReady: false, rvcReady: false }),
+    }),
+    core: new LocalLlmJarvisCore({ generateText: async () => 'I am here and ready.' }),
+  });
+  const events: Array<{ type: string; payload?: { speech?: { status?: string } } }> = [];
+  const asked = await lab.askStream(
+    { text: 'hello from stream', speak: true, voiceProfileId: JARVIS_VOICE_ID },
+    event => { events.push(event); },
+  );
+  const final = events.find(item => item.type === 'final');
+  assert.equal(final?.payload?.speech?.status, 'spoken');
+  assert.equal(asked.speech?.status, 'spoken');
+  assert.ok(events.findIndex(item => item.type === 'final') <= events.findIndex(item => item.type === 'speech'));
+  assert.equal(source.calls.length, 1);
+});
+
 test('Persona and Voice stay independent through speech', async () => {
   const source = mockSynth();
   const lab = createJarvisLabRuntime({

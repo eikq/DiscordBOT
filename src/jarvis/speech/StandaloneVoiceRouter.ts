@@ -6,6 +6,7 @@ import { StandaloneVoiceResourcePolicy } from './resourcePolicy';
 import { resolveVoiceRoute } from './routes';
 import { cancelRvc, convertWithRvc, probeRvc } from './rvcConvert';
 import { TurnGate } from './TurnGate';
+import { shapeSpokenText } from './speechShape';
 import type {
   CloneConsentGate,
   RvcConverter,
@@ -108,7 +109,7 @@ export class StandaloneVoiceRouter implements VoiceOutputRouter {
 
   public async speak(text: string, profile: VoiceProfile, turn: VoiceTurnContext): Promise<VoiceOutputResult> {
     const started = Date.now();
-    const spoken = text.trim();
+    const spoken = shapeSpokenText(text);
     if (!this.enabled) {
       return this.finish(turn.turnId, profile, 'skipped', started, { reason: 'Speech is off.' });
     }

@@ -86,6 +86,8 @@ import { StandalonePresentationSessions } from '../presentation/standaloneSessio
 import { ProbeVoiceProfileResolver } from '../presentation/voiceAvailability';
 import { RouterVoiceResolver, StandaloneVoiceRouter } from '../speech';
 import type { VoiceOutputResult, VoiceOutputRouter } from '../speech';
+import { classifySpeechEvent, decideSpeech, type SpeechMode } from '../speech/speechPolicy';
+import { isDuplicateUtterance, shapeSpokenText } from '../speech/speechShape';
 import { LocalLlmJarvisCore, type StandaloneLlm } from './LocalLlmJarvisCore';
 import { describeJarvisRuntimeProfile, type JarvisRuntimeProfile } from './runtimeProfile';
 import { runStandaloneTextTurn, type StandaloneTextTurnOutput } from './textHarness';
@@ -240,6 +242,8 @@ export class JarvisLabRuntime {
   private readonly stt: SpeechToTextProvider;
   private readonly probeStt: () => Promise<SttRuntimeProbe>;
   private readonly speech?: VoiceOutputRouter;
+  private lastSpoken = '';
+  private speechMode: SpeechMode = 'normal';
   private readonly applicationIds: string[];
   private readonly projectIds: string[];
   private readonly reminders?: ReminderRuntime;
@@ -724,6 +728,7 @@ export class JarvisLabRuntime {
     });
     this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
+    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
     const finalPayload = {
       ...adjusted,
       coreState: 'complete' as const,
@@ -734,11 +739,11 @@ export class JarvisLabRuntime {
       route,
       affectStyle: this.workCenter()?.affect.style(),
       ...(prepared.pendingGoal ? { pendingGoal: prepared.pendingGoal } : {}),
+      ...(speech ? { speech } : {}),
     };
     emit({ type: 'final', payload: finalPayload });
-    const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
     if (speech) emit({ type: 'speech', payload: speech });
-    return { ...finalPayload, ...(speech ? { speech } : {}) };
+    return finalPayload;
   }
 
   public async cancelSpeech(turnId: string): Promise<void> {
@@ -1012,10 +1017,28 @@ export class JarvisLabRuntime {
     voiceProfileId: string,
     speak?: boolean,
   ): Promise<VoiceOutputResult | undefined> {
-    if (!speak || !this.speech) return undefined;
-    return await this.speech.speak(text, this.speech.resolveProfile(voiceProfileId), {
+    if (!this.speech) return undefined;
+    const shaped = shapeSpokenText(text);
+    if (!shaped) return undefined;
+    const speechClass = classifySpeechEvent({
+      greeting: /^(hello|hi\b|hey\b|สวัสดี|I'm here)/iu.test(shaped),
+      actionCompleted: /is open|opened|moved|เปิด .+ ให้แล้ว/iu.test(shaped),
+      error: /can't|cannot|failed|ไม่สำเร็จ/iu.test(shaped),
+      blocked: /allowlist|CLICK|TYPE|SUBMIT|blocked/iu.test(shaped),
+      clarification: /\?$/.test(shaped),
+      conversation: true,
+    });
+    const decision = decideSpeech({
+      speechClass,
+      mode: this.speechMode,
+      speakRequested: speak,
+      duplicateOfLast: isDuplicateUtterance(this.lastSpoken, shaped),
+    });
+    if (!decision.speak) return undefined;
+    this.lastSpoken = shaped;
+    return await this.speech.speak(shaped, this.speech.resolveProfile(voiceProfileId), {
       turnId,
-      text,
+      text: shaped,
     });
   }
 
@@ -1422,7 +1445,10 @@ async function resolveLabActionTurn(text: string, input: {
   if (resolution.kind === 'CAPABILITY' && resolution.capabilityId) {
     return {
       capabilities: [resolution.capabilityId],
-      capabilityCalls: [{ id: resolution.capabilityId, input: resolution.arguments ?? {} }],
+      capabilityCalls: [
+        { id: resolution.capabilityId, input: resolution.arguments ?? {} },
+        ...(resolution.extraCalls ?? []),
+      ],
       actionOnly: resolution.consumed !== false,
       resolution,
     };

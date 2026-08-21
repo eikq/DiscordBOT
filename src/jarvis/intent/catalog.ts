@@ -23,6 +23,21 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     argumentSchemaSummary: 'settingsId',
     sideEffectClass: 'LOW_RISK_ACTION',
   },
+  'desktop.openScopedResource': {
+    shortDescription: 'Open an allowlisted app or website, optionally on a verified display.',
+    argumentSchemaSummary: 'kind, applicationId?, url?, display?',
+    sideEffectClass: 'LOW_RISK_ACTION',
+  },
+  'desktop.placeWindow': {
+    shortDescription: 'Move an allowlisted application window onto a verified display.',
+    argumentSchemaSummary: 'applicationId, display',
+    sideEffectClass: 'LOW_RISK_ACTION',
+  },
+  'desktop.focusWindow': {
+    shortDescription: 'Focus an allowlisted application window.',
+    argumentSchemaSummary: 'applicationId',
+    sideEffectClass: 'LOW_RISK_ACTION',
+  },
   'system.status': {
     shortDescription: 'Read local CPU/RAM/GPU/disk status.',
     argumentSchemaSummary: '(none)',

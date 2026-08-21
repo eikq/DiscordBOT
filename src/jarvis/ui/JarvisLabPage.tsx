@@ -593,6 +593,7 @@ function LegacyJarvisLabPage() {
     line: string,
     onDraft: (text: string) => void,
     onFinal: (payload: LabAskResponse) => void,
+    onSpeech?: (speech: NonNullable<LabAskResponse['speech']>) => void,
   ) => {
     const trimmed = line.trim();
     if (!trimmed) return;
@@ -604,6 +605,7 @@ function LegacyJarvisLabPage() {
     }
     if (event.type === 'draft' && event.text) onDraft(event.text);
     if (event.type === 'final' && event.payload) onFinal(event.payload);
+    if (event.type === 'speech' && event.payload) onSpeech?.(event.payload as NonNullable<LabAskResponse['speech']>);
     if (event.type === 'error' && event.error) throw new Error(event.error);
   };
 
@@ -624,9 +626,13 @@ function LegacyJarvisLabPage() {
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
-      for (const line of lines) consumeStreamLine(line, onDraft, payload => { finalPayload = payload; });
+      for (const line of lines) consumeStreamLine(line, onDraft, payload => { finalPayload = payload; }, speech => {
+        if (finalPayload) finalPayload = { ...finalPayload, speech };
+      });
     }
-    if (buffer.trim()) consumeStreamLine(buffer, onDraft, payload => { finalPayload = payload; });
+    if (buffer.trim()) consumeStreamLine(buffer, onDraft, payload => { finalPayload = payload; }, speech => {
+      if (finalPayload) finalPayload = { ...finalPayload, speech };
+    });
     return finalPayload;
   };
 
