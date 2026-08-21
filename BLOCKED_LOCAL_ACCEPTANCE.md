@@ -7,7 +7,7 @@ Labels: **BLOCKED_LOCAL_ACCEPTANCE**. Do not mark these LIVE_VERIFIED until the 
 runs them on the physical Windows machine.
 
 Recommended order: LA-001 → LA-002 → LA-008 → LA-003 → LA-004 → LA-005 →
-LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013.
+LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-014 → LA-013.
 
 ---
 
@@ -27,14 +27,17 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013.
 - Failure evidence: Ollama probe, `/api/jarvis` status, requestId, route JSON,
   work.db task row if any.
 
-## LA-002 Command Center browser / SSE visual QA
+## LA-002 Personal AI OS browser / SSE visual QA
 
-- Purpose: Owner visual acceptance of `/jarvis-lab` as the observability surface.
+- Purpose: Owner visual acceptance of `/jarvis-lab` as the Personal AI operating interface.
 - Preconditions: local dashboard; browser; reduced-motion check; EventSource
   supported.
-- Exact verification: load `/jarvis-lab`; confirm SSE reconnect + replay;
-  run a real task; confirm DAG, permission wait, empty Fluctlight when no data,
-  SIMULATION labels on demos; no hidden chain-of-thought.
+- Exact verification: load `/jarvis-lab`; confirm Home answers core/current work/
+  attention/Ask within five seconds; navigate every deep link; use Ctrl/Cmd+K;
+  confirm SSE reconnect + replay; run a real task; confirm DAG, Risk Brief,
+  permission wait, post-action evidence, empty Fluctlight when no data, and
+  SIMULATION labels on demos; no hidden chain-of-thought. Check responsive and
+  reduced-motion behavior.
 - Expected: UI matches real records. Demos stay labeled SIMULATION.
 - Failure evidence: screenshots, EventSource console, `/api/jarvis/events`
   after= cursor, `present()` JSON.
@@ -134,13 +137,31 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013.
 
 ## LA-013 owner visual / UI sign-off
 
-- Purpose: Human acceptance of Command Center + Fluctlight honesty.
+- Purpose: Human acceptance of the Personal AI OS, Trusted Operator UX, and Fluctlight honesty.
 - Preconditions: LA-001 and LA-002 done; at least one real task and one empty
   profile.
-- Exact verification: owner reviews conversation vs agentic routes, permission
-  wait, evolution graph (no decorative edges), SIMULATION vs REAL labels.
+- Exact verification: owner reviews calm Home, conversation vs agentic routes,
+  Task Center, Permission/Risk Brief, Security, Activity, expert disclosure,
+  evolution graph (no decorative edges), and SIMULATION vs REAL labels.
 - Expected: owner accepts or files specific UI defects. Not claimed by cloud.
 - Failure evidence: owner notes, screenshots, rejected states.
+
+## LA-014 privacy-first perceptual memory
+
+- Purpose: Prove any future Personal Digital Memory capture is source-scoped,
+  consented, minimized, redacted, retained, and deletable on the owner PC.
+- Preconditions: separately reviewed Windows capture provider; Privacy Gate and
+  Sensitive Context Filter implemented; capture disabled by default; owner has
+  configured private apps/windows and retention.
+- Exact verification: password manager, OTP, credential dialog, banking view,
+  `.env`, token-like clipboard and owner-private window produce no stored raw
+  content; allowed test activity is redacted before SQLite/FTS/blob/model access;
+  pause, delete-day, delete-app and delete-all work; filter failure fails closed.
+- Expected: observations remain untrusted data with authority=`none`; summaries
+  keep provenance and cannot overwrite owner facts or invoke capabilities.
+- Failure evidence: redacted policy decision logs, observation IDs, deletion
+  verification, storage inspection, performance/retention measurements. Never
+  place rejected secret values in logs or screenshots.
 
 ---
 
@@ -152,3 +173,6 @@ LA-006 → LA-007 → LA-009 → LA-010 → LA-011 → LA-012 → LA-013.
 - PRIVATE_BROWSER fail-closed host policy
 - Night cycle resource pause hooks
 - ActionGate confirmation store (in-memory; restart requires re-confirm)
+- Personal Digital Memory privacy/provider contract (no capture provider active)
+- Security Academy reference/sandbox design (no external project executed)
+- Emergency Stop confirmation UI (runtime cancellation/revocation endpoint not connected)
