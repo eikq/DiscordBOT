@@ -5,6 +5,7 @@
     "http://localhost:3010"
   ],
   "trustedPathPrefixes": [
+    "/jarvis",
     "/jarvis-lab"
   ]
 }

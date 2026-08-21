@@ -52,7 +52,7 @@ type PageDefinition = {
 };
 
 export const JARVIS_PAGES: PageDefinition[] = [
-  { id: 'home', label: 'Home', description: 'Jarvis at a glance', icon: Home, section: 'daily', keywords: ['status', 'overview', 'ask'] },
+  { id: 'home', label: 'Home', description: 'Advanced operating console', icon: Home, section: 'daily', keywords: ['status', 'overview', 'ask'] },
   { id: 'assistant', label: 'Assistant', description: 'Conversation and voice', icon: Bot, section: 'daily', keywords: ['ask', 'chat', 'voice', 'microphone'] },
   { id: 'tasks', label: 'Tasks', description: 'WorkAgent task center', icon: Boxes, section: 'daily', keywords: ['work', 'plan', 'dag', 'queue'] },
   { id: 'research', label: 'Research', description: 'Sources and claims', icon: Search, section: 'daily', keywords: ['web', 'sources', 'evidence'] },
@@ -79,11 +79,12 @@ type QuickCommand = {
   hint: string;
   icon: LucideIcon;
   page?: JarvisPageId;
-  action?: 'ask' | 'emergency';
+  action?: 'ask' | 'emergency' | 'presence';
   keywords: string[];
 };
 
 const QUICK_COMMANDS: QuickCommand[] = [
+  { id: 'presence', label: 'Open Presence', hint: 'Return to Jarvis', icon: Sparkles, action: 'presence', keywords: ['jarvis', 'presence', 'home'] },
   { id: 'ask', label: 'Ask Jarvis', hint: 'Open the conversation', icon: Sparkles, page: 'assistant', action: 'ask', keywords: ['chat', 'question', 'voice'] },
   { id: 'research', label: 'Start research', hint: 'Open Research Center', icon: Search, page: 'research', keywords: ['web', 'sources'] },
   { id: 'workspace', label: 'Open workspace', hint: 'Search the local project', icon: FolderCode, page: 'workspace', keywords: ['code', 'files'] },
@@ -170,6 +171,10 @@ export default function JarvisOperatingShell({
       setEmergencyOpen(true);
       return;
     }
+    if (command.action === 'presence') {
+      window.location.assign('/jarvis');
+      return;
+    }
     if (command.page) onNavigate(command.page);
     if (command.action === 'ask') window.setTimeout(onFocusAsk, 0);
   };
@@ -181,7 +186,7 @@ export default function JarvisOperatingShell({
           <div className="jai-mark" aria-hidden="true"><span>J</span></div>
           <div className="jai-nav__brand-copy">
             <strong>JARVIS</strong>
-            <span>Personal AI</span>
+            <span>Control Center</span>
           </div>
           <button type="button" className="jai-icon-button jai-nav__collapse" onClick={() => setNavCollapsed(value => !value)} aria-label={navCollapsed ? 'Expand navigation' : 'Collapse navigation'}>
             {navCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
@@ -212,11 +217,15 @@ export default function JarvisOperatingShell({
         ))}
 
         <div className="jai-nav__footer">
+          <button type="button" className="jai-emergency-link" onClick={() => window.location.assign('/jarvis')} title="Return to Jarvis Presence">
+            <Bot size={18} />
+            <span>Jarvis Presence</span>
+          </button>
           <button type="button" className="jai-emergency-link" onClick={() => setEmergencyOpen(true)} title="Emergency stop contract">
             <CircleStop size={18} />
             <span>Emergency stop</span>
           </button>
-          <span className="jai-nav__local"><i /> Local-first runtime</span>
+          <span className="jai-nav__local"><i /> Advanced console</span>
         </div>
       </aside>
 
