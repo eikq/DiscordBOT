@@ -1,3 +1,4 @@
+import { DEFAULT_ALLOWLISTED_WEB_HOSTS, hostAllowed } from '../../desktop/webAllowlist';
 import type { ActionRisk, DesktopAllowlists } from './types';
 
 const BLOCKED_SCHEMES = new Set([
@@ -28,7 +29,7 @@ function isTrustedLocal(parsed: URL, lists: Pick<DesktopAllowlists, 'trustedOrig
 
 export function classifyOpenUrl(
   raw: string,
-  lists: Pick<DesktopAllowlists, 'trustedOrigins' | 'trustedPathPrefixes'>,
+  lists: Pick<DesktopAllowlists, 'trustedOrigins' | 'trustedPathPrefixes' | 'allowlistedWebHosts'>,
 ): UrlClassification {
   if (typeof raw !== 'string') return { ok: false, reasonCode: 'INVALID_URL' };
   const trimmed = raw.trim();
@@ -53,15 +54,19 @@ export function classifyOpenUrl(
   const trusted = isTrustedLocal(parsed, lists);
   if (scheme === 'http:') {
     if (!trusted) return { ok: false, reasonCode: 'BLOCKED_URL_SCHEME', risk: 'BLOCKED' };
-    return { ok: true, risk: 'LOW_RISK_ACTION', normalized: parsed.href, target: parsed.href };
+    return { ok: true, risk: 'LOW_RISK_ACTION', reasonCode: 'TRUSTED_LOCAL_URL', normalized: parsed.href, target: parsed.href };
   }
   if (trusted) {
-    return { ok: true, risk: 'LOW_RISK_ACTION', normalized: parsed.href, target: parsed.href };
+    return { ok: true, risk: 'LOW_RISK_ACTION', reasonCode: 'TRUSTED_LOCAL_URL', normalized: parsed.href, target: parsed.href };
   }
-  return { ok: true, risk: 'CONFIRM_REQUIRED', normalized: parsed.href, target: parsed.href };
+  const allowlistedHosts = lists.allowlistedWebHosts ?? DEFAULT_ALLOWLISTED_WEB_HOSTS;
+  if (hostAllowed(parsed.hostname, allowlistedHosts)) {
+    return { ok: true, risk: 'LOW_RISK_ACTION', reasonCode: 'ALLOWLISTED_WEB_DOMAIN', normalized: parsed.href, target: parsed.href };
+  }
+  return { ok: true, risk: 'CONFIRM_REQUIRED', reasonCode: 'EXTERNAL_HTTPS', normalized: parsed.href, target: parsed.href };
 }
 
-export function urlTargetClass(url: string, lists: Pick<DesktopAllowlists, 'trustedOrigins' | 'trustedPathPrefixes'>): string {
+export function urlTargetClass(url: string, lists: Pick<DesktopAllowlists, 'trustedOrigins' | 'trustedPathPrefixes' | 'allowlistedWebHosts'>): string {
   const classified = classifyOpenUrl(url, lists);
   if (!classified.ok) return `url:${classified.reasonCode || 'invalid'}`;
   if (classified.risk === 'LOW_RISK_ACTION') return 'url:trusted-local';

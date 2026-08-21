@@ -1,7 +1,13 @@
 import type { CapabilityDescriptor, CapabilityHost } from '../capabilities/types';
 import { RESEARCH_CURRENT, RESEARCH_PRIVATE_BROWSE, RESEARCH_SEARCH } from '../research/constants';
 import { WORKSPACE_CURRENT, WORKSPACE_SEARCH } from '../workspace/constants';
-import { JARVIS_RUNTIME_STATUS, SYSTEM_STATUS } from '../capabilities/actions/constants';
+import {
+  DESKTOP_OPEN_APPLICATION,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
+  DESKTOP_OPEN_TRUSTED_URL,
+  JARVIS_RUNTIME_STATUS,
+  SYSTEM_STATUS,
+} from '../capabilities/actions/constants';
 import { REMINDERS_CREATE } from '../automation/constants';
 import type { InputCompatibility } from './types';
 import { validateAdapterAuthorityBoundary, validateAgainstJsonSchema } from './schema';
@@ -152,6 +158,40 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
       title: boundedString(input.title, 'title', 200),
       ...(typeof input.message === 'string' && input.message.trim() ? { message: input.message.trim().slice(0, 500) } : {}),
     }),
+  });
+  registry.register({
+    id: 'desktop.scoped.v1',
+    capabilityId: DESKTOP_OPEN_SCOPED_RESOURCE,
+    acceptedGoalFields: ['resource', 'display', 'applicationId', 'url', 'kind', 'label'],
+    adapt: input => {
+      const resource = input.resource && typeof input.resource === 'object' ? input.resource as Record<string, unknown> : {};
+      const kind = resource.kind === 'url' || input.kind === 'url' || resource.url || input.url ? 'url' : 'application';
+      return {
+        kind,
+        ...(typeof resource.applicationId === 'string' ? { applicationId: resource.applicationId } : {}),
+        ...(typeof resource.url === 'string' ? { url: resource.url } : {}),
+        ...(typeof resource.label === 'string' ? { label: resource.label } : {}),
+        ...(input.display && typeof input.display === 'object' ? { display: input.display } : {}),
+      };
+    },
+  });
+  registry.register({
+    id: 'desktop.app.v1',
+    capabilityId: DESKTOP_OPEN_APPLICATION,
+    acceptedGoalFields: ['resource', 'applicationId', 'display'],
+    adapt: input => {
+      const resource = input.resource && typeof input.resource === 'object' ? input.resource as { applicationId?: string } : {};
+      return { applicationId: boundedString(resource.applicationId || input.applicationId, 'applicationId', 32) };
+    },
+  });
+  registry.register({
+    id: 'desktop.url.v1',
+    capabilityId: DESKTOP_OPEN_TRUSTED_URL,
+    acceptedGoalFields: ['resource', 'url', 'display'],
+    adapt: input => {
+      const resource = input.resource && typeof input.resource === 'object' ? input.resource as { url?: string } : {};
+      return { url: boundedString(resource.url || input.url, 'url', 500) };
+    },
   });
   for (const capabilityId of [JARVIS_RUNTIME_STATUS, SYSTEM_STATUS]) {
     registry.register({

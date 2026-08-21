@@ -120,6 +120,7 @@ export function loadDesktopAllowlists(options: {
     projects,
     trustedOrigins: (trusted.trustedOrigins ?? []).filter(item => typeof item === 'string'),
     trustedPathPrefixes: (trusted.trustedPathPrefixes ?? []).filter(item => typeof item === 'string'),
+    allowlistedWebHosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'],
     explorerExecutable: applications.find(item => item.id === 'explorer' && item.installed)?.executable,
     workspaceRoot,
   };

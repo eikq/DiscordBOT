@@ -4,10 +4,13 @@ import { isPrivateResearchCapabilityId } from '../../research/private/constants'
 import { isWorkspaceCapabilityId } from '../../workspace/constants';
 import {
   APPLICATIONS_STATUS,
+  DESKTOP_FOCUS_WINDOW,
   DESKTOP_OPEN_APPLICATION,
   DESKTOP_OPEN_PROJECT,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_PLACE_WINDOW,
   JARVIS_HEALTH_CHECK,
   JARVIS_RESTART_SERVICE,
   JARVIS_RUNTIME_STATUS,
@@ -21,6 +24,8 @@ import { applicationById, projectById } from './allowlists';
 import { serviceRecord } from './services/catalog';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { ActionProposal, DesktopAllowlists, PermissionDecision } from './types';
+import { DEFAULT_ALLOWLISTED_WEB_HOSTS } from '../../desktop/webAllowlist';
+import { planScopedOpen, structuredBlockExplanation } from '../../desktop/scopedOpen';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 
@@ -128,8 +133,10 @@ export class PermissionPolicy {
         return {
           ...base,
           decision: 'allow',
-          reasonCode: 'TRUSTED_LOCAL_URL',
-          userMessage: 'Open a trusted local Jarvis URL.',
+          reasonCode: classified.reasonCode || 'TRUSTED_LOCAL_URL',
+          userMessage: classified.reasonCode === 'ALLOWLISTED_WEB_DOMAIN'
+            ? 'Open an allowlisted website.'
+            : 'Open a trusted local Jarvis URL.',
           risk: 'LOW_RISK_ACTION',
         };
       }
@@ -178,6 +185,59 @@ export class PermissionPolicy {
         decision: 'allow',
         reasonCode: 'ALLOWLISTED_SETTINGS',
         userMessage: `Open ${page.displayName} settings.`,
+        risk: 'LOW_RISK_ACTION',
+      };
+    }
+
+    if (proposal.capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE || proposal.capabilityId === DESKTOP_PLACE_WINDOW || proposal.capabilityId === DESKTOP_FOCUS_WINDOW) {
+      const args = proposal.normalizedArguments;
+      const kind = args.kind === 'url' || args.url ? 'url' : 'application';
+      const plan = planScopedOpen({
+        resource: {
+          kind,
+          applicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
+          url: typeof args.url === 'string' ? args.url : undefined,
+          label: String(args.label || args.applicationId || args.url || 'resource'),
+        },
+        display: args.display && typeof args.display === 'object' ? args.display as { raw: string; index?: number; role?: 'primary' } : null,
+      }, {
+        applicationIds: lists.applications.map(item => item.id),
+        allowlistedHosts: lists.allowlistedWebHosts ?? DEFAULT_ALLOWLISTED_WEB_HOSTS,
+      });
+      if (plan.ok === false) {
+        if (plan.openAllowed && proposal.capabilityId === DESKTOP_OPEN_SCOPED_RESOURCE) {
+          return {
+            ...base,
+            decision: 'allow',
+            reasonCode: plan.reasonCode,
+            userMessage: structuredBlockExplanation(plan.reasonCode, plan.message),
+            risk: 'LOW_RISK_ACTION',
+          };
+        }
+        return {
+          ...base,
+          decision: 'deny',
+          reasonCode: plan.reasonCode,
+          userMessage: structuredBlockExplanation(plan.reasonCode, plan.message),
+          risk: 'BLOCKED',
+        };
+      }
+      if (proposal.capabilityId === DESKTOP_PLACE_WINDOW || proposal.capabilityId === DESKTOP_FOCUS_WINDOW) {
+        if (kind !== 'application' || !applicationById(lists, String(args.applicationId ?? ''))) {
+          return {
+            ...base,
+            decision: 'deny',
+            reasonCode: 'UNKNOWN_APPLICATION',
+            userMessage: 'I can only move or focus an allowlisted application window.',
+            risk: 'BLOCKED',
+          };
+        }
+      }
+      return {
+        ...base,
+        decision: 'allow',
+        reasonCode: plan.reasonCode,
+        userMessage: plan.reasonCode === 'ALLOWLISTED_WEB' ? 'Open an allowlisted website.' : `Open ${plan.resource.label}.`,
         risk: 'LOW_RISK_ACTION',
       };
     }

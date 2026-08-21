@@ -10,6 +10,7 @@ export const GOAL_SCOPES = [
   'SELF_KNOWLEDGE',
   'OWNER_DEVICE',
   'OWNER_SELECTED_SOURCE',
+  'DESKTOP',
 ] as const;
 
 export type GoalScope = (typeof GOAL_SCOPES)[number];

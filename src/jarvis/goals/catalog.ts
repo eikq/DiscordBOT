@@ -1,5 +1,11 @@
 import { REMINDERS_CREATE } from '../automation/constants';
-import { JARVIS_RUNTIME_STATUS, SYSTEM_STATUS } from '../capabilities/actions/constants';
+import {
+  DESKTOP_OPEN_APPLICATION,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
+  DESKTOP_OPEN_TRUSTED_URL,
+  JARVIS_RUNTIME_STATUS,
+  SYSTEM_STATUS,
+} from '../capabilities/actions/constants';
 import { RESEARCH_CURRENT, RESEARCH_PRIVATE_BROWSE, RESEARCH_SEARCH } from '../research/constants';
 import { WORKSPACE_CURRENT, WORKSPACE_LIST, WORKSPACE_LIST_DOCUMENTS, WORKSPACE_SEARCH } from '../workspace/constants';
 import type { GoalDefinition, GoalRouteDefinition } from './types';
@@ -274,6 +280,35 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
     maturity: 'PREPARE_CONTRACT',
     allowedCapabilityPrefixes: ['cctv.'],
     distribution: ['OWNER_ONLY', 'COMMUNITY_EXCLUDED', 'DEMO_EXCLUDED'],
+  },
+  {
+    id: 'desktop.open-resource',
+    version: 1,
+    name: 'Open an allowlisted desktop resource',
+    description: 'Open one allowlisted application or website. Monitor placement is optional and must resolve against real topology.',
+    scope: 'DESKTOP',
+    handler: 'CAPABILITY_PLAN',
+    examples: ['Open Cursor.', 'Open YouTube on monitor two.', 'เปิด YouTube ที่จอ 2'],
+    matchingHints: ['open', 'launch', 'monitor', 'youtube', 'cursor', 'เปิด'],
+    requiredInputs: [{ id: 'resource', description: 'Allowlisted application or website.', required: true, smallestQuestion: 'Which allowlisted app or site should I open?' }],
+    optionalInputs: [{ id: 'display', description: 'Verified monitor reference.', required: false }],
+    routes: [
+      route('open-scoped', 'Open one scoped allowlisted resource', 1, 'DESKTOP', 'LOW', [
+        { capabilityId: DESKTOP_OPEN_SCOPED_RESOURCE, adapterId: 'desktop.scoped.v1' },
+      ]),
+      route('open-app', 'Open an allowlisted application', 2, 'DESKTOP', 'LOW', [
+        { capabilityId: DESKTOP_OPEN_APPLICATION, adapterId: 'desktop.app.v1' },
+      ]),
+      route('open-url', 'Open an allowlisted or confirmed URL', 3, 'DESKTOP', 'LOW', [
+        { capabilityId: DESKTOP_OPEN_TRUSTED_URL, adapterId: 'desktop.url.v1' },
+      ]),
+    ],
+    expectedOutcome: 'The named allowlisted resource is opened, with honest placement if a monitor was requested.',
+    verificationExpectation: 'Launcher acceptance plus real display topology. Do not invent placement.',
+    permissionImplications: 'Scoped OPEN only. Never upgrades to shell, click, type, or submit.',
+    maturity: 'REAL',
+    allowedCapabilityPrefixes: ['desktop.'],
+    distribution: ['CORE'],
   },
 ];
 

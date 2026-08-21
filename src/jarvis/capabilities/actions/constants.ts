@@ -22,6 +22,9 @@ export const DESKTOP_OPEN_APPLICATION = 'desktop.openApplication';
 export const DESKTOP_OPEN_PROJECT = 'desktop.openProject';
 export const DESKTOP_OPEN_TRUSTED_URL = 'desktop.openTrustedUrl';
 export const DESKTOP_OPEN_SETTINGS = 'desktop.openSettings';
+export const DESKTOP_OPEN_SCOPED_RESOURCE = 'desktop.openScopedResource';
+export const DESKTOP_PLACE_WINDOW = 'desktop.placeWindow';
+export const DESKTOP_FOCUS_WINDOW = 'desktop.focusWindow';
 export const SYSTEM_STATUS = 'system.status';
 export const SYSTEM_BATTERY_STATUS = 'system.batteryStatus';
 export const SYSTEM_NETWORK_STATUS = 'system.networkStatus';
@@ -37,6 +40,9 @@ export const GATED_CAPABILITY_IDS = [
   DESKTOP_OPEN_PROJECT,
   DESKTOP_OPEN_TRUSTED_URL,
   DESKTOP_OPEN_SETTINGS,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
+  DESKTOP_PLACE_WINDOW,
+  DESKTOP_FOCUS_WINDOW,
   SYSTEM_STATUS,
   SYSTEM_BATTERY_STATUS,
   SYSTEM_NETWORK_STATUS,

@@ -86,6 +86,7 @@ export type DesktopAllowlists = {
   projects: ProjectRecord[];
   trustedOrigins: string[];
   trustedPathPrefixes: string[];
+  allowlistedWebHosts?: string[];
   explorerExecutable?: string;
   workspaceRoot: string;
 };

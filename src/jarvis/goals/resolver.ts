@@ -5,6 +5,7 @@ import { buildSelfKnowledgeSnapshot } from '../intelligence/selfKnowledge';
 import { resolveCapabilityGoal } from '../intelligence/capabilityGraph';
 import type { InteractionContext } from '../intent/types';
 import { redactSecrets } from '../security/redaction';
+import { classifyVoiceFamily } from '../intent/voiceFamilies';
 import { createDefaultGoalCatalog, type GoalCatalog } from './catalog';
 import { createDefaultInputAdapterRegistry, directCapabilityInput, type TrustedInputAdapterRegistry } from './inputAdapters';
 import type {
@@ -145,7 +146,21 @@ function deterministicMatch(text: string, catalog: GoalCatalog, context?: Intera
   if (/why can(?:'|’)?t|why can you not|what do you need|ทำไม.*ไม่ได้|ต้องการอะไร.*จาก.*ผม/iu.test(text)) {
     return matched(fromCatalog('self.explain-gap'), 0.98, {}, ['matcher:self.explain-gap']);
   }
-  if (/\b(cctv|nvr|rtsp|onvif)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(text) && /connect|open|view|เชื่อม|เปิด|ดู/iu.test(text)) {
+  const voice = classifyVoiceFamily(text);
+  if (voice.family === 'DESKTOP_OPEN' || voice.family === 'COMPOUND_OPEN') {
+    const resource = voice.resources[0];
+    return matched(fromCatalog('desktop.open-resource'), resource ? 0.96 : 0.8, {
+      ...(resource ? {
+        resource,
+        kind: resource.kind,
+        applicationId: resource.applicationId,
+        url: resource.url,
+        label: resource.label,
+      } : {}),
+      ...(voice.display ? { display: voice.display } : {}),
+    }, ['matcher:desktop.open-resource']);
+  }
+  if (/\b(cctv|nvr|rtsp|onvif|camera|กล้อง)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(text) && /connect|open|view|show|check|เชื่อม|เปิด|ดู/iu.test(text)) {
     const deviceIdentity = extractAfter(text, /(?:cctv|nvr|camera|กล้องวงจรปิด|กล้องบ้าน)/iu);
     return matched(fromCatalog('devices.cctv.connect'), 0.96, deviceIdentity ? { deviceIdentity } : {}, ['matcher:devices.cctv.connect']);
   }

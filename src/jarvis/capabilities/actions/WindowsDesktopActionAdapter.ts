@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
 import { applicationById, projectById } from './allowlists';
-import type { DesktopActionAdapter } from './DesktopActionAdapter';
+import type { DesktopActionAdapter, ScopedDesktopResult } from './DesktopActionAdapter';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopAllowlists, DesktopLaunchResult } from './types';
 import { classifyOpenUrl } from './urlSafety';
+import { enumerateWindowsDisplays, placeAllowlistedWindow } from '../../desktop/windowsDisplayHost';
+import type { DisplayInfo } from '../../desktop/monitorTopology';
 
 export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
   constructor(private readonly lists: DesktopAllowlists) {}
@@ -30,6 +32,39 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     const explorer = this.lists.explorerExecutable;
     if (!explorer) return { status: 'unavailable', errorCode: 'EXPLORER_UNAVAILABLE' };
     return launchExact(explorer, [page.uri]);
+  }
+
+  public async listDisplays(): Promise<DisplayInfo[]> {
+    return enumerateWindowsDisplays();
+  }
+
+  public async placeWindow(input: { processName: string; displayId: string }): Promise<ScopedDesktopResult> {
+    const displays = await this.listDisplays();
+    const display = displays.find(item => item.id === input.displayId);
+    if (!display) {
+      return { status: 'unavailable', errorCode: 'DISPLAY_NOT_FOUND', placement: 'unverified', placementReason: 'DISPLAY_NOT_FOUND' };
+    }
+    const placed = await placeAllowlistedWindow({
+      processName: input.processName,
+      x: display.x,
+      y: display.y,
+      width: Math.max(800, Math.floor(display.width * 0.92)),
+      height: Math.max(600, Math.floor(display.height * 0.92)),
+    });
+    if (placed.ok === true) return { status: 'started', placement: 'placed', displayId: display.id };
+    return {
+      status: placed.reasonCode === 'WINDOW_NOT_FOUND' ? 'unavailable' : 'failed',
+      errorCode: placed.reasonCode,
+      placement: 'failed',
+      placementReason: placed.reasonCode,
+    };
+  }
+
+  public async focusWindow(input: { processName: string }): Promise<ScopedDesktopResult> {
+    const displays = await this.listDisplays();
+    const primary = displays.find(item => item.primary) || displays[0];
+    if (!primary) return { status: 'unavailable', errorCode: 'DISPLAY_TOPOLOGY_UNKNOWN', placement: 'unverified' };
+    return this.placeWindow({ processName: input.processName, displayId: primary.id });
   }
 
   public async openUrl(url: string): Promise<DesktopLaunchResult> {

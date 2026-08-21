@@ -1018,6 +1018,18 @@ function describeProposal(
     const url = String(input.url ?? '');
     return { displayName: 'Open website', summary: `Open ${url}`, target: url, risk: 'CONFIRM_REQUIRED' };
   }
+  if (capabilityId === 'desktop.openScopedResource') {
+    const label = String(input.label || input.applicationId || input.url || 'resource');
+    return { displayName: label, summary: `Open ${label}`, target: label, risk: 'LOW_RISK_ACTION' };
+  }
+  if (capabilityId === 'desktop.placeWindow') {
+    const name = String(input.applicationId || 'window');
+    return { displayName: name, summary: `Move ${name}`, target: name, risk: 'LOW_RISK_ACTION' };
+  }
+  if (capabilityId === 'desktop.focusWindow') {
+    const name = String(input.applicationId || 'window');
+    return { displayName: name, summary: `Focus ${name}`, target: name, risk: 'LOW_RISK_ACTION' };
+  }
   if (capabilityId === 'desktop.openSettings') {
     const settingsId = String(input.settingsId ?? 'settings');
     return { displayName: settingsId, summary: `Open ${settingsId} settings`, target: settingsId, risk: 'LOW_RISK_ACTION' };

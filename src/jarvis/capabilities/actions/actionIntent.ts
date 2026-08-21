@@ -3,10 +3,13 @@ import { inferResearchIntent } from '../../research/researchIntent';
 import { inferWorkspaceIntent } from '../../workspace/workspaceIntent';
 import {
   APPLICATIONS_STATUS,
+  DESKTOP_FOCUS_WINDOW,
   DESKTOP_OPEN_APPLICATION,
   DESKTOP_OPEN_PROJECT,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_PLACE_WINDOW,
   JARVIS_HEALTH_CHECK,
   JARVIS_RESTART_SERVICE,
   JARVIS_RUNTIME_STATUS,
@@ -16,6 +19,7 @@ import {
   SYSTEM_NETWORK_STATUS,
   SYSTEM_STATUS,
 } from './constants';
+import { classifyVoiceFamily } from '../../intent/voiceFamilies';
 import { SERVICE_ALIASES, type JarvisServiceId } from './services/catalog';
 import type { CapabilityCall } from './types';
 
@@ -127,6 +131,35 @@ export function inferActionIntent(
     };
   }
 
+  const voiceEarly = classifyVoiceFamily(raw);
+  if (voiceEarly.family === 'SYSTEM_STATUS') {
+    return { kind: 'action', consumed: true, calls: [{ id: SYSTEM_STATUS, input: {} }] };
+  }
+  if (voiceEarly.family === 'COMPOUND_OPEN' && voiceEarly.resources.length >= 2) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: voiceEarly.resources.map(resource => scopedOpenCall(resource)),
+    };
+  }
+  if (voiceEarly.family === 'DESKTOP_OPEN' && voiceEarly.display && voiceEarly.resources[0]) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [scopedOpenCall(voiceEarly.resources[0])],
+    };
+  }
+  if (voiceEarly.family === 'DESKTOP_PLACE' && voiceEarly.resources[0]?.applicationId) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [{
+        id: DESKTOP_PLACE_WINDOW,
+        input: { applicationId: voiceEarly.resources[0].applicationId, ...(voiceEarly.display ? { display: voiceEarly.display } : {}) },
+      }],
+    };
+  }
+
   const settingsId = matchSettings(raw);
   if (settingsId && (hasActionVerb(raw, ['open', 'เปิด', 'settings', 'ตั้งค่า']) || /settings|ตั้งค่า/iu.test(raw))) {
     return {
@@ -203,6 +236,46 @@ export function inferActionIntent(
     };
   }
 
+  const voice = classifyVoiceFamily(raw);
+  if (voice.family === 'UNSUPPORTED_COMPUTER_USE') {
+    return {
+      kind: 'unsupported',
+      reasonCode: 'UNSUPPORTED_DESKTOP_SCOPE',
+      userMessage: 'That would require CLICK, TYPE, or SUBMIT, which is not enabled. I can open an allowlisted app or site.',
+    };
+  }
+  if (voice.family === 'COMPOUND_OPEN' && voice.resources.length >= 2) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: voice.resources.map(resource => scopedOpenCall(resource)),
+    };
+  }
+  if (voice.family === 'DESKTOP_PLACE' && voice.resources[0]?.applicationId) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [{
+        id: DESKTOP_PLACE_WINDOW,
+        input: { applicationId: voice.resources[0].applicationId, ...(voice.display ? { display: voice.display } : {}) },
+      }],
+    };
+  }
+  if (voice.family === 'DESKTOP_FOCUS' && voice.resources[0]?.applicationId) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [{ id: DESKTOP_FOCUS_WINDOW, input: { applicationId: voice.resources[0].applicationId } }],
+    };
+  }
+  if (voice.family === 'DESKTOP_OPEN' && voice.display && voice.resources[0]) {
+    return {
+      kind: 'action',
+      consumed: true,
+      calls: [scopedOpenCall(voice.resources[0])],
+    };
+  }
+
   if (hasActionVerb(raw, ['open', 'เปิด']) && hasActionVerb(raw, ['project', 'โปรเจกต์', 'โฟลเดอร์', 'jarvis-project'])) {
     const projectId = (options.projectIds ?? []).includes('jarvis-project')
       ? 'jarvis-project'
@@ -237,8 +310,9 @@ function matchSettings(text: string): string | undefined {
     ['windows-update', 'windows-update'],
     ['bluetooth', 'bluetooth'],
     ['บลูทูธ', 'bluetooth'],
-    ['display', 'display'],
-    ['จอ', 'display'],
+    ['display settings', 'display'],
+    ['ตั้งค่าจอ', 'display'],
+    ['ตั้งค่าหน้าจอ', 'display'],
     ['sound', 'sound'],
     ['เสียง', 'sound'],
     ['network', 'network'],
@@ -289,6 +363,19 @@ function isConversationAboutBlockedTopic(text: string, reasonCode: string): bool
     || reasonCode === 'BLOCKED_ARBITRARY_EXECUTABLE'
     || reasonCode === 'BLOCKED_GENERIC_PROCESS'
     || reasonCode === 'BLOCKED_REGISTRY';
+}
+
+function scopedOpenCall(resource: { kind: string; applicationId?: string; url?: string; label: string; display?: { raw: string; index?: number; role?: string; name?: string } | null }): CapabilityCall {
+  return {
+    id: DESKTOP_OPEN_SCOPED_RESOURCE,
+    input: {
+      kind: resource.kind,
+      ...(resource.applicationId ? { applicationId: resource.applicationId } : {}),
+      ...(resource.url ? { url: resource.url } : {}),
+      label: resource.label,
+      ...(resource.display ? { display: resource.display } : {}),
+    },
+  };
 }
 
 function leftoverIsNoise(text: string, matched: string): boolean {

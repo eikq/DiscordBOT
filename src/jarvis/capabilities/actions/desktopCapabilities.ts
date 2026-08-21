@@ -1,10 +1,13 @@
 import type { CapabilityHandler, CapabilityHost, CapabilityResult } from '../types';
 import { applicationById, projectById } from './allowlists';
 import {
+  DESKTOP_FOCUS_WINDOW,
   DESKTOP_OPEN_APPLICATION,
   DESKTOP_OPEN_PROJECT,
+  DESKTOP_OPEN_SCOPED_RESOURCE,
   DESKTOP_OPEN_SETTINGS,
   DESKTOP_OPEN_TRUSTED_URL,
+  DESKTOP_PLACE_WINDOW,
   SYSTEM_STATUS,
 } from './constants';
 import { readBatteryStatus, type BatterySnapshot } from './batteryStatus';
@@ -12,6 +15,8 @@ import { readNetworkStatus, type NetworkSnapshot } from './networkStatus';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopActionAdapter } from './DesktopActionAdapter';
 import type { DesktopAllowlists, DesktopLaunchResult } from './types';
+import { processNameForApplication, processNameForUrl } from '../../desktop/windowsDisplayHost';
+import { resolveDisplaySelector, type DisplaySelector } from '../../desktop/monitorTopology';
 
 export type SystemStatusSnapshot = {
   cpu?: { usagePct: number; cores: number };
@@ -39,6 +44,9 @@ export function registerDesktopCapabilities(
   host.register(createOpenProjectHandler(options.adapter, options.allowlists));
   host.register(createOpenTrustedUrlHandler(options.adapter));
   host.register(createOpenSettingsHandler(options.adapter, options.allowlists));
+  host.register(createOpenScopedResourceHandler(options.adapter, options.allowlists));
+  host.register(createPlaceWindowHandler(options.adapter, options.allowlists));
+  host.register(createFocusWindowHandler(options.adapter, options.allowlists));
   host.register(createSystemStatusHandler(options.systemStatus));
 }
 
@@ -216,6 +224,217 @@ function createOpenTrustedUrlHandler(adapter: DesktopActionAdapter): CapabilityH
       return launchResult(DESKTOP_OPEN_TRUSTED_URL, launched, url, 'url');
     },
   };
+}
+
+function createOpenScopedResourceHandler(
+  adapter: DesktopActionAdapter,
+  lists: DesktopAllowlists,
+): CapabilityHandler {
+  return {
+    descriptor: () => ({
+      id: DESKTOP_OPEN_SCOPED_RESOURCE,
+      description: 'Open one allowlisted application or web destination, optionally targeting a verified display.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          kind: { type: 'string' },
+          applicationId: { type: 'string' },
+          url: { type: 'string' },
+          label: { type: 'string' },
+          display: { type: 'object' },
+        },
+      },
+      outputSchema: { type: 'object' },
+      sideEffect: 'write',
+      requiredService: 'desktop',
+      providerKind: 'local',
+      timeoutMs: 8_000,
+      untrustedOutput: false,
+      effects: [{
+        kind: 'APPLICATION_LAUNCH',
+        description: 'Open one allowlisted resource and optionally place its window.',
+        destructive: false,
+        reversible: true,
+        privilege: 'standard_user',
+        targetInputFields: ['applicationId', 'url'],
+        estimatedAffectedObjects: 1,
+      }],
+      verification: { mode: 'handler_result', description: 'Confirm the trusted opener accepted the request and report placement honestly.' },
+      rollback: { mode: 'not_required', strategy: 'Opening a resource does not mutate persistent owner state.' },
+    }),
+    availability: async () => ({ id: DESKTOP_OPEN_SCOPED_RESOURCE, availability: 'up', degraded: false }),
+    invoke: async (input) => {
+      const kind = input.kind === 'url' || input.url ? 'url' : 'application';
+      const label = String(input.label || input.applicationId || input.url || 'resource');
+      const launched = kind === 'url'
+        ? await adapter.openUrl(String(input.url ?? ''))
+        : await adapter.openApplication(String(input.applicationId ?? ''));
+      const base = launchResult(DESKTOP_OPEN_SCOPED_RESOURCE, launched, label, kind);
+      if (launched.status !== 'started' || !input.display) return base;
+      const displays = adapter.listDisplays ? await adapter.listDisplays() : [];
+      if (!displays.length || !adapter.placeWindow) {
+        return {
+          ...base,
+          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: 'DISPLAY_TOPOLOGY_UNKNOWN' },
+          content: `${base.content} Monitor placement could not be verified.`,
+        };
+      }
+      const resolved = resolveDisplaySelector(displays, input.display as DisplaySelector);
+      if (resolved.ok === false) {
+        return {
+          ...base,
+          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: resolved.reasonCode },
+          content: `${base.content} ${resolved.message}`,
+        };
+      }
+      const processName = kind === 'url'
+        ? processNameForUrl(String(input.url ?? ''))
+        : processNameForApplication(String(input.applicationId ?? ''));
+      if (!processName) {
+        return {
+          ...base,
+          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: 'PROCESS_NOT_ALLOWLISTED' },
+          content: `${base.content} I cannot place that window yet.`,
+        };
+      }
+      const placed = await adapter.placeWindow({ processName, displayId: resolved.display.id });
+      return {
+        ...base,
+        structured: { ...asRecord(base.structured), placement: placed.placement || 'unverified', displayId: resolved.display.id },
+        content: placed.placement === 'placed'
+          ? `${label} is open on the requested display.`
+          : `${base.content} Placement is ${placed.placement || 'unverified'}.`,
+      };
+    },
+  };
+}
+
+function createPlaceWindowHandler(
+  adapter: DesktopActionAdapter,
+  lists: DesktopAllowlists,
+): CapabilityHandler {
+  return {
+    descriptor: () => ({
+      id: DESKTOP_PLACE_WINDOW,
+      description: 'Move an allowlisted application window onto a verified display.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['applicationId'],
+        properties: {
+          applicationId: { type: 'string' },
+          display: { type: 'object' },
+        },
+      },
+      outputSchema: { type: 'object' },
+      sideEffect: 'write',
+      requiredService: 'desktop',
+      providerKind: 'local',
+      timeoutMs: 6_000,
+      untrustedOutput: false,
+    }),
+    availability: async () => ({ id: DESKTOP_PLACE_WINDOW, availability: adapter.placeWindow ? 'up' : 'unavailable', degraded: !adapter.placeWindow }),
+    invoke: async (input) => {
+      const applicationId = String(input.applicationId ?? '');
+      const app = applicationById(lists, applicationId);
+      if (!app) {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'error',
+          structured: { status: 'failed', reasonCode: 'UNKNOWN_APPLICATION', risk: 'BLOCKED' },
+          content: 'That application is not on the open allowlist.',
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: 'UNKNOWN_APPLICATION',
+        };
+      }
+      if (!adapter.placeWindow || !adapter.listDisplays) {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'unavailable',
+          structured: { status: 'unavailable', reasonCode: 'DISPLAY_TOPOLOGY_UNKNOWN', risk: 'LOW_RISK_ACTION' },
+          content: 'I cannot verify monitor placement on this host.',
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: 'DISPLAY_TOPOLOGY_UNKNOWN',
+        };
+      }
+      const placed = await adapter.placeWindow({ processName: applicationId, displayId: JSON.stringify(input.display ?? {}) });
+      if (placed.status === 'started') {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'ok',
+          structured: { status: 'completed', risk: 'LOW_RISK_ACTION', placement: placed.placement },
+          content: placed.placement === 'placed'
+            ? `Moved ${app.displayName} to the requested display.`
+            : `I opened or found ${app.displayName}, but placement is ${placed.placement || 'unverified'}.`,
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+        };
+      }
+      return {
+        capabilityId: DESKTOP_PLACE_WINDOW,
+        status: placed.status === 'unavailable' ? 'unavailable' : 'error',
+        structured: { status: 'failed', reasonCode: placed.errorCode, risk: 'LOW_RISK_ACTION' },
+        content: placed.message || `I could not move ${app.displayName}.`,
+        sourceUrls: [],
+        untrustedOutput: false,
+        sideEffect: 'write',
+        error: placed.errorCode,
+      };
+    },
+  };
+}
+
+function createFocusWindowHandler(
+  adapter: DesktopActionAdapter,
+  lists: DesktopAllowlists,
+): CapabilityHandler {
+  return {
+    descriptor: () => ({
+      id: DESKTOP_FOCUS_WINDOW,
+      description: 'Focus an allowlisted application window.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['applicationId'],
+        properties: { applicationId: { type: 'string' } },
+      },
+      outputSchema: { type: 'object' },
+      sideEffect: 'write',
+      requiredService: 'desktop',
+      providerKind: 'local',
+      timeoutMs: 5_000,
+      untrustedOutput: false,
+    }),
+    availability: async () => ({ id: DESKTOP_FOCUS_WINDOW, availability: adapter.focusWindow ? 'up' : 'unavailable', degraded: !adapter.focusWindow }),
+    invoke: async (input) => {
+      const applicationId = String(input.applicationId ?? '');
+      const app = applicationById(lists, applicationId);
+      if (!app || !adapter.focusWindow) {
+        return {
+          capabilityId: DESKTOP_FOCUS_WINDOW,
+          status: 'unavailable',
+          structured: { status: 'unavailable', reasonCode: app ? 'FOCUS_UNAVAILABLE' : 'UNKNOWN_APPLICATION', risk: 'LOW_RISK_ACTION' },
+          content: app ? 'Focus is unavailable on this host.' : 'That application is not on the open allowlist.',
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: app ? 'FOCUS_UNAVAILABLE' : 'UNKNOWN_APPLICATION',
+        };
+      }
+      const focused = await adapter.focusWindow({ processName: applicationId });
+      return launchResult(DESKTOP_FOCUS_WINDOW, focused, app.displayName, `focus:${applicationId}`);
+    },
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
 }
 
 function createSystemStatusHandler(port?: SystemStatusPort): CapabilityHandler {

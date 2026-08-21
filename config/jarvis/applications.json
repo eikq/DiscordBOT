@@ -64,6 +64,24 @@
       "allowedArgs": []
     },
     {
+      "id": "vscode",
+      "displayName": "VS Code",
+      "candidates": [
+        "%LocalAppData%\\Programs\\Microsoft VS Code\\Code.exe",
+        "%ProgramFiles%\\Microsoft VS Code\\Code.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
+      "id": "discord",
+      "displayName": "Discord",
+      "candidates": [
+        "%LocalAppData%\\Discord\\Discord.exe",
+        "%LocalAppData%\\Discord\\Update.exe"
+      ],
+      "allowedArgs": []
+    },
+    {
       "id": "browser",
       "displayName": "Browser",
       "candidates": [
