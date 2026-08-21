@@ -54,7 +54,7 @@ function createHandler(id: string, deps: ReminderCapabilityDeps): CapabilityHand
     descriptor: () => ({
       id,
       description: `Jarvis reminder ${id.replace('reminders.', '')}. Delivers a notification only.`,
-      inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+      inputSchema: reminderInputSchema(id),
       outputSchema: { type: 'object' },
       sideEffect: read ? 'read' : 'write',
       requiredService: 'reminders',
@@ -440,6 +440,83 @@ function capabilityFor(action: 'cancel' | 'pause' | 'resume' | 'complete'): stri
   if (action === 'pause') return REMINDERS_PAUSE;
   if (action === 'resume') return REMINDERS_RESUME;
   return REMINDERS_COMPLETE;
+}
+
+function reminderInputSchema(id: string): Record<string, unknown> {
+  const reminderId = { type: 'string', pattern: '^rem_[a-f0-9]{16}$' };
+  const query = { type: 'string', minLength: 1, maxLength: MAX_QUERY_CHARS };
+  const target = {
+    type: 'object',
+    additionalProperties: false,
+    properties: { reminderId, query },
+    anyOf: [
+      { type: 'object', required: ['reminderId'] },
+      { type: 'object', required: ['query'] },
+    ],
+  };
+  if (id === REMINDERS_LIST) {
+    return {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        status: { type: 'string', enum: ['ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', 'EXPIRED', 'FAILED'] },
+        query,
+      },
+    };
+  }
+  if (id === REMINDERS_GET) {
+    return { type: 'object', additionalProperties: false, required: ['reminderId'], properties: { reminderId } };
+  }
+  if ([REMINDERS_CANCEL, REMINDERS_PAUSE, REMINDERS_RESUME, REMINDERS_COMPLETE].includes(id)) return target;
+  if (id === REMINDERS_RESCHEDULE) {
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: ['whenText'],
+      properties: { reminderId, query, whenText: { type: 'string', minLength: 1, maxLength: 400 } },
+      anyOf: [
+        { type: 'object', required: ['reminderId', 'whenText'] },
+        { type: 'object', required: ['query', 'whenText'] },
+      ],
+    };
+  }
+  if (id === REMINDERS_DISMISS) {
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: ['reminderId', 'occurrenceAt'],
+      properties: { reminderId, occurrenceAt: { type: 'string', minLength: 1, maxLength: 64 } },
+    };
+  }
+  if (id === REMINDERS_SNOOZE) {
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: ['minutes'],
+      properties: {
+        reminderId,
+        query,
+        occurrenceAt: { type: 'string', maxLength: 64 },
+        minutes: { type: 'integer', enum: [...SNOOZE_MINUTES] },
+      },
+      anyOf: [
+        { type: 'object', required: ['reminderId', 'minutes'] },
+        { type: 'object', required: ['query', 'minutes'] },
+      ],
+    };
+  }
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['whenText', 'title'],
+    properties: {
+      whenText: { type: 'string', minLength: 1, maxLength: 400 },
+      title: { type: 'string', minLength: 1, maxLength: MAX_TITLE_CHARS },
+      message: { type: 'string', maxLength: MAX_MESSAGE_CHARS },
+      createdFrom: { type: 'string', enum: ['user_text', 'ui'] },
+      deliveryMode: { type: 'string', enum: ['notification', 'notification_and_speech'] },
+    },
+  };
 }
 
 function terminal(
