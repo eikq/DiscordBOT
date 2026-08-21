@@ -266,6 +266,8 @@ test('personal AI operating shell owns the route and stays Discord-free', () => 
   const shell = fs.readFileSync(files[5]!, 'utf8');
   assert.match(shell, /metaKey \|\| event\.ctrlKey/);
   assert.match(shell, /Emergency stop/);
+  assert.match(shell, /Control Center/);
+  assert.match(shell, /Open Presence/);
   assert.match(shell, /available=\{emergencyAvailable\}/);
   assert.match(shell, /onResume=\{onEmergencyResume\}/);
   const pages = fs.readFileSync(files[6]!, 'utf8');

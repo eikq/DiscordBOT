@@ -3,6 +3,25 @@
 Updated: 2026-08-21
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
+## This turn — Presence-first interface
+
+Branch: `local/jarvis-presence-interface-2026-08-21` from exact
+`a28265ffcbcf125feb4e6ac38182ddc41e48c86c`. Did not modify `main`.
+
+Primary owner URL: `http://127.0.0.1:3000/jarvis`  
+Control Center (preserved): `http://127.0.0.1:3000/jarvis-lab`
+
+Labels: **IMPLEMENTED** + **UNIT_VERIFIED**. **OWNER_VISUAL_VERIFIED** is not claimed.
+
+- Presence is the default living assistant: Core, operational phase, voice/text, contextual HUD.
+- `/jarvis-lab` is the advanced Control Center; Tasks/Security/System/Activity/Evolution remain.
+- Yes/Allow Once binds one exact pending confirm or grant. Not a global approval.
+- Ambient: `/jarvis?mode=ambient`. `Ctrl+.`. Open Control Center by speech or `Ctrl+Shift+L`.
+- OPEN Cursor is allowlisted. SEE/CLICK/TYPE/SUBMIT and CCTV stay PREPARE_CONTRACT.
+- Verification: `npx tsc --noEmit` PASS; `npm run test:cloud` **578 / 578**.
+
+See `docs/JARVIS_PRESENCE_INTERFACE.md`.
+
 ## This turn — Local acceptance completion
 
 Branch: `local/jarvis-acceptance-completion-2026-08-21` from exact

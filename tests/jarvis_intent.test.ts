@@ -24,7 +24,7 @@ import { InteractionContextStore } from '../src/jarvis/intent';
 import { loadDesktopAllowlists } from '../src/jarvis/capabilities/actions/allowlists';
 import { createJarvisLabRuntime } from '../src/jarvis/standalone/labRuntime';
 
-const APPS = ['chrome', 'notepad', 'browser', 'spotify', 'msedge', 'calculator', 'explorer'];
+const APPS = ['chrome', 'notepad', 'browser', 'spotify', 'msedge', 'calculator', 'explorer', 'cursor'];
 const PROJECTS = ['jarvis-project'];
 const CATALOG = compactCapabilityCatalog();
 
@@ -340,6 +340,7 @@ test('evaluation corpus covers supported, ambiguous, forbidden, and conversation
     { text: 'ช่วยเปิดโน้ตแพด', expect: 'capability', id: DESKTOP_OPEN_APPLICATION },
     { text: 'Open YouTube for me', expect: 'capability', id: DESKTOP_OPEN_TRUSTED_URL },
     { text: 'ช่วยเปิดเว็บ YouTube ให้หน่อย', expect: 'capability', id: DESKTOP_OPEN_TRUSTED_URL },
+    { text: 'Open Cursor', expect: 'capability', id: DESKTOP_OPEN_APPLICATION },
     { text: 'เปิด Sound settings', expect: 'capability', id: DESKTOP_OPEN_SETTINGS },
     { text: 'สถานะระบบ', expect: 'capability', id: SYSTEM_STATUS },
     { text: 'ASR เป็นไงบ้าง', expect: 'capability', id: JARVIS_HEALTH_CHECK },
