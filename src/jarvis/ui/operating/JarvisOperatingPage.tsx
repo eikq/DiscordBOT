@@ -18,7 +18,6 @@ import {
   deriveLabCorePhase,
   enrichToolActivity,
   formatTurnTimingsLine,
-  isExplicitActionConfirmation,
   type LabActionResult,
   type LabPendingConfirmation,
 } from '../labUiState';
@@ -43,6 +42,7 @@ import { webglAvailable } from '../three/webglAvailability';
 import JarvisOperatingShell, { parseJarvisPage, type JarvisPageId, type ShellStatus } from './JarvisOperatingShell';
 import JarvisPages, { type ConversationView, type PersonalAiRuntimeStatus } from './JarvisPages';
 import { OwnerApprovalDialog, riskBriefFromPreflight, type RiskBriefModel } from './TrustedOperator';
+import { interpretPresenceOwnerReply, interpretPresenceShellCommand, resolvePresenceApproval } from '../presence/presenceRuntime';
 
 const CoreScene = lazy(() => import('../three/CoreScene'));
 
@@ -392,8 +392,38 @@ export default function JarvisOperatingPage() {
     event?.preventDefault();
     const payloadText = (spokenText ?? text).trim();
     if (!payloadText || busy) return;
-    if (pendingConfirmation && isExplicitActionConfirmation(payloadText)) {
-      await settleConfirmation('allow');
+    const shell = interpretPresenceShellCommand(payloadText);
+    if (shell.kind === 'control-center') {
+      if (!window.location.pathname.startsWith('/jarvis-lab')) window.location.assign('/jarvis-lab');
+      if (!spokenText) setText('');
+      return;
+    }
+    if (shell.kind === 'presence') {
+      window.location.assign('/jarvis');
+      return;
+    }
+    const approvalTarget = resolvePresenceApproval({
+      pendingConfirmation,
+      waitingPermission: commandCenter?.permission,
+    });
+    const ownerReply = interpretPresenceOwnerReply(payloadText, approvalTarget);
+    if (ownerReply.kind === 'allow' || ownerReply.kind === 'deny') {
+      if (ownerReply.target.kind === 'confirm') await settleConfirmation(ownerReply.kind);
+      else {
+        const permission = commandCenter?.permission;
+        const taskId = commandCenter?.task?.id || permission?.taskId;
+        if (taskId) {
+          if (ownerReply.kind === 'deny') await postCommandCenter('/api/jarvis/command-center/cancel', { taskId });
+          else await postCommandCenter('/api/jarvis/command-center/grant', { taskId, stepId: permission?.stepId, proposalId: permission?.proposalId, capability: permission?.capability });
+        }
+      }
+      if (!spokenText) setText('');
+      return;
+    }
+    if (ownerReply.kind === 'unbound' || ownerReply.kind === 'ambiguous') {
+      setError(ownerReply.kind === 'ambiguous'
+        ? 'More than one permission is waiting. Allow Once binds a single request.'
+        : 'Nothing is waiting for approval.');
       if (!spokenText) setText('');
       return;
     }
