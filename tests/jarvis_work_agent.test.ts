@@ -83,10 +83,12 @@ test('cancellation stops a running task', async () => {
   const running = agent.run(task.id);
   await new Promise(resolve => setTimeout(resolve, 20));
   const cancelled = agent.cancel(task.id);
-  assert.equal(cancelled.status, 'CANCELLED');
+  assert.equal(cancelled.status, 'EXECUTING');
+  assert.equal(cancelled.cancellation?.state, 'CANCELLATION_REQUESTED');
   const done = await running;
   assert.equal(done.status, 'CANCELLED');
   assert.equal(done.outcome, 'cancelled');
+  assert.equal(done.cancellation?.state, 'FAILED_TO_CANCEL');
   assert.equal(started, true);
 });
 

@@ -196,10 +196,13 @@ test('Emergency Stop reports cancellation semantics for running WorkAgent tasks'
   await new Promise(resolve => setImmediate(resolve));
   const stopped = runtime.emergency.engage('owner', 'Stop running task');
   assert.equal(stopped.cancellations[0]?.state, 'CANCELLATION_REQUESTED');
-  assert.equal(agent.store.get(task.id)?.status, 'CANCELLED');
+  assert.equal(agent.store.get(task.id)?.status, 'EXECUTING');
+  assert.equal(agent.store.get(task.id)?.cancellation?.state, 'CANCELLATION_REQUESTED');
   assert.throws(() => agent.receive('Blocked new task', [step('apply_new')]), /Emergency Stop is active/u);
   release();
-  assert.equal((await running).status, 'CANCELLED');
+  const done = await running;
+  assert.equal(done.status, 'CANCELLED');
+  assert.equal(done.cancellation?.state, 'COMPLETED_BEFORE_CANCEL');
 });
 
 test('verification lifecycle does not equate handler completion with objective success', () => {
