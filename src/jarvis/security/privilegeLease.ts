@@ -204,6 +204,10 @@ export class PrivilegeLeaseStore {
     return this.match(capabilityId, resourceScope, false);
   }
 
+  public peekOptional(capabilityId: string, resourceScope?: string): PrivilegeDecision {
+    return this.match(capabilityId, resourceScope, false, true);
+  }
+
   public consume(capabilityId: string, resourceScope?: string): PrivilegeDecision {
     return this.match(capabilityId, resourceScope, true);
   }
@@ -221,14 +225,14 @@ export class PrivilegeLeaseStore {
     return [...this.leases.values()].map(lease => this.inventory(lease));
   }
 
-  private match(capabilityId: string, resourceScope: string | undefined, consume: boolean): PrivilegeDecision {
+  private match(capabilityId: string, resourceScope: string | undefined, consume: boolean, optional = false): PrivilegeDecision {
     if (isForbiddenGenericShell(capabilityId)) {
       return denied('GENERIC_SHELL_FORBIDDEN', 'Generic unrestricted shell is not a Jarvis capability.');
     }
     if (this.issuanceSuspendedReason) {
       return denied('LEASE_ISSUANCE_SUSPENDED', this.issuanceSuspendedReason);
     }
-    if (capabilityRequiresLease(capabilityId) === false && consume === false) {
+    if (!optional && capabilityRequiresLease(capabilityId) === false && consume === false) {
       return denied('LEASE_NOT_REQUIRED', 'That capability does not use a privilege lease.');
     }
     const now = this.now();

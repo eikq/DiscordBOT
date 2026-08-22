@@ -30,6 +30,7 @@ import { SessionWebGrantStore } from '../../desktop/sessionWebGrants';
 import { processNameForUrl } from '../../desktop/windowsDisplayHost';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
+import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../../build/constants';
 
 export class PermissionPolicy {
   constructor(private readonly deps: { sessionWebGrants?: SessionWebGrantStore } = {}) {}
@@ -379,6 +380,25 @@ export class PermissionPolicy {
         userMessage: proposal.capabilityId === RECOVERY_SANDBOX_MUTATE
           ? 'Review the bounded Jarvis recovery-sandbox mutation and its checkpoint protection.'
           : 'Rollback is a new scoped mutation and requires explicit owner authorization.',
+        risk: 'CONFIRM_REQUIRED',
+      };
+    }
+
+    if (proposal.capabilityId === SOFTWARE_PLAN_BUILD) {
+      return {
+        ...base,
+        decision: 'allow',
+        reasonCode: 'PLAN_ONLY',
+        userMessage: 'Create a build plan without writing files.',
+        risk: 'READ_ONLY',
+      };
+    }
+    if (proposal.capabilityId === SOFTWARE_APPLY_BUILD) {
+      return {
+        ...base,
+        decision: 'confirm',
+        reasonCode: 'WRITE_PROJECT_REVIEW',
+        userMessage: 'ทำได้ครับ แต่ต้องขอสิทธิ์สร้าง/แก้ไฟล์และรัน build/test ในโฟลเดอร์โปรเจกต์นี้จนกว่างานนี้จะจบ',
         risk: 'CONFIRM_REQUIRED',
       };
     }

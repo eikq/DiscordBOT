@@ -7,7 +7,7 @@ import type { PlanStep, WorkStepInvoker, WorkStepResult, WorkTask } from './type
 
 export type CapabilityInvokerOptions = {
   host?: CapabilityHost | (() => CapabilityHost | undefined);
-  sessionId?: string;
+  sessionId?: string | (() => string | undefined);
   researchDepth?: () => string | undefined;
 };
 
@@ -107,7 +107,7 @@ async function invokeThroughHost(
     id: resolved.id,
     input,
     source: 'system',
-    sessionId: options.sessionId || task.id,
+    sessionId: (typeof options.sessionId === 'function' ? options.sessionId() : options.sessionId) || task.id,
     requestId: `${task.id}:${step.id}`,
     signal,
     ...(confirmation ? { confirmation } : {}),

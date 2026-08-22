@@ -20,6 +20,9 @@ export function inferCapabilityFromObjective(objective: string, host?: Capabilit
   if ((/system status|สถานะระบบ|runtime status/iu.test(text) || /^status$/iu.test(text)) && has(SYSTEM_STATUS)) {
     return SYSTEM_STATUS;
   }
+  if ((/สร้างเว็บ|ทำเว็บ|build (?:a |an )?(?:web|site|portfolio)|สร้างแอป|build (?:a |an )?(?:app|todo|dashboard)/iu.test(text)) && (has('software.planBuild'))) {
+    return 'software.planBuild';
+  }
   if ((/research|ค้นเว็บ|search the web|official source/iu.test(text)) && has(RESEARCH_SEARCH)) {
     return RESEARCH_SEARCH;
   }
@@ -52,6 +55,10 @@ function defaultInputFor(id: string, task: WorkTask, step: PlanStep): Record<str
   delete extra.capability;
   if (id === RESEARCH_SEARCH || id === WORKSPACE_SEARCH) {
     return { query: String(extra.query || task.objective).slice(0, 200), ...extra };
+  }
+  if (id === 'software.planBuild' || id === 'software.applyBuild') {
+    const brief = String(extra.brief || extra.query || task.objective).slice(0, 400);
+    return { brief, query: brief, ...extra };
   }
   return extra;
 }

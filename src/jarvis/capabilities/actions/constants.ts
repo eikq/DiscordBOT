@@ -3,6 +3,7 @@ import { isResearchReadCapability, RESEARCH_CAPABILITY_IDS } from '../../researc
 import { RESEARCH_PRIVATE_BROWSE } from '../../research/private/constants';
 import { isWorkspaceReadCapability, WORKSPACE_CAPABILITY_IDS } from '../../workspace/constants';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
+import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../../build/constants';
 
 export {
   REMINDERS_CANCEL,
@@ -58,6 +59,8 @@ export const GATED_CAPABILITY_IDS = [
   ...WORKSPACE_CAPABILITY_IDS,
   RECOVERY_SANDBOX_MUTATE,
   RECOVERY_SANDBOX_ROLLBACK,
+  SOFTWARE_PLAN_BUILD,
+  SOFTWARE_APPLY_BUILD,
 ] as const;
 
 export const CONFIRMATION_TTL_MS = 120_000;
@@ -80,5 +83,6 @@ export function isReadOnlyGatedCapability(id: string): boolean {
     || id === JARVIS_HEALTH_CHECK
     || isReminderReadCapability(id)
     || isResearchReadCapability(id)
-    || isWorkspaceReadCapability(id);
+    || isWorkspaceReadCapability(id)
+    || id === SOFTWARE_PLAN_BUILD;
 }

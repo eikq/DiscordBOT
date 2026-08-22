@@ -55,6 +55,7 @@ export type PendingConfirmation = {
   reason: string;
   expiresAt: string;
   preflight?: ActionPreflight;
+  permissionProposal?: import('../../security/permissionProposal').PermissionProposal;
 };
 
 export type DesktopLaunchStatus = 'started' | 'failed' | 'unavailable';

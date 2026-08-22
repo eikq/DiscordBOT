@@ -43,6 +43,10 @@ function render(
   evidence: string[],
   observations: string[],
 ): string {
+  const planSpeak = task.toolResults.find(item => item.capability === 'software.planBuild' && item.status === 'ok')?.summary;
+  if (planSpeak && !planSpeak.startsWith('untrusted')) return planSpeak;
+  const applySpeak = task.toolResults.find(item => item.capability === 'software.applyBuild' && item.status === 'ok')?.summary;
+  if (applySpeak && !applySpeak.startsWith('untrusted')) return applySpeak;
   const objective = task.objective.slice(0, 160);
   const lines = [`${label(outcome)} for “${objective}”.`];
   if (task.verification?.summary) lines.push(task.verification.summary);

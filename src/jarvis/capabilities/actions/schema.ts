@@ -68,6 +68,7 @@ import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopAllowlists } from './types';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
+import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../../build/constants';
 import { looksLikeSecret } from '../../security/redaction';
 import { sanitizeDisplaySelector } from '../../desktop/monitorTopology';
 
@@ -332,7 +333,39 @@ export function validateActionInput(
     return { ok: true, value: { checkpointId: input.checkpointId, rollbackId: input.rollbackId } };
   }
 
+  if (capabilityId === SOFTWARE_PLAN_BUILD || capabilityId === SOFTWARE_APPLY_BUILD) {
+    return validateSoftwareInput(capabilityId, input);
+  }
+
   return { ok: false, reasonCode: 'UNKNOWN_CAPABILITY', userMessage: 'Unknown capability.' };
+}
+
+function validateSoftwareInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {
+  const allowed = capabilityId === SOFTWARE_PLAN_BUILD
+    ? ['brief', 'query', 'goalId']
+    : ['brief', 'planId', 'goalId'];
+  if (!onlyKeys(input, allowed)) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Those software arguments are not allowed.' };
+  }
+  const value: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (input[key] === undefined) continue;
+    if (typeof input[key] !== 'string') {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: `${key} must be text.` };
+    }
+    const text = input[key].trim();
+    if (text.length > 400) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: `${key} is too long.` };
+    }
+    if (looksLikeSecret(text)) {
+      return { ok: false, reasonCode: 'SECRET_INPUT_REJECTED', userMessage: 'Secret-like values are not allowed in a build request.' };
+    }
+    value[key] = text;
+  }
+  if (capabilityId === SOFTWARE_PLAN_BUILD && !value.brief && !value.query) {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'brief is required.' };
+  }
+  return { ok: true, value };
 }
 
 function parseServiceId(value: unknown): ValidatedActionInput {

@@ -38,6 +38,7 @@ import type { FailureContainment } from '../../safety/failureContainment';
 import type { EmergencyStopController } from '../../security/emergencyStop';
 import type { VerificationRegistry } from '../../safety/verificationRegistry';
 import { toJournalOperationId, type ExecutionJournalCoordinator } from '../../executionJournal';
+import { permissionProposalFromBuild } from '../../security/permissionProposal';
 
 export type ActionGateOptions = {
   policy?: PermissionPolicy | null;
@@ -65,6 +66,7 @@ export interface ActionHost extends CapabilityHost {
     source?: ActionSource;
     requestId?: string;
     sessionId?: string;
+    duration?: 'ONCE' | 'THIS_GOAL';
   }): Promise<CapabilityResult>;
   denyProposal(proposalId: string, source?: ActionSource): Promise<CapabilityResult>;
   pendingFrom(result: CapabilityResult): PendingConfirmation | undefined;
@@ -268,9 +270,18 @@ class ActionGate implements ActionHost {
       if (leaseCheck) return leaseCheck;
     }
 
-    if (decision.decision === 'confirm') {
+    const gated = decision.decision === 'confirm' && this.hasOptionalGoalLease(proposal)
+      ? {
+          ...decision,
+          decision: 'allow' as const,
+          reasonCode: 'GOAL_LEASE',
+          userMessage: 'Using the owner goal lease.',
+        }
+      : decision;
+
+    if (gated.decision === 'confirm') {
       if (!request.confirmation) {
-        this.options.events?.emit('PERMISSION_REQUESTED', decision.userMessage, {
+        this.options.events?.emit('PERMISSION_REQUESTED', gated.userMessage, {
           capabilityId: proposal.capabilityId,
           proposalId: proposal.proposalId,
           risk: proposal.preflight?.risk,
@@ -318,6 +329,7 @@ class ActionGate implements ActionHost {
         proposalId: proposal.proposalId,
         scope: proposal.preflight?.permissionScope,
       });
+      if (request.duration !== 'ONCE') this.issueBuildGoalLease(proposal);
       return this.execute(proposal, validated.value, request);
     }
 
@@ -330,6 +342,7 @@ class ActionGate implements ActionHost {
     source?: ActionSource;
     requestId?: string;
     sessionId?: string;
+    duration?: 'ONCE' | 'THIS_GOAL';
   }): Promise<CapabilityResult> {
     const stored = this.confirmations.peek(input.proposalId);
     if (!stored) {
@@ -342,6 +355,7 @@ class ActionGate implements ActionHost {
       source: input.source ?? 'ui',
       requestId: input.requestId,
       sessionId: input.sessionId,
+      duration: input.duration,
     });
   }
 
@@ -384,6 +398,9 @@ class ActionGate implements ActionHost {
       reason: String(structured.reason ?? 'Confirmation required.'),
       expiresAt: String(structured.expiresAt ?? ''),
       ...(isRecord(structured.preflight) ? { preflight: structured.preflight as PendingConfirmation['preflight'] } : {}),
+      ...(isRecord(structured.permissionProposal)
+        ? { permissionProposal: structured.permissionProposal as PendingConfirmation['permissionProposal'] }
+        : {}),
     };
   }
 
@@ -599,6 +616,15 @@ class ActionGate implements ActionHost {
         reasonCode: decision.reasonCode,
         expiresAt: new Date(issued.record.expiresAt).toISOString(),
         preflight: proposal.preflight,
+        ...(proposal.capabilityId === 'software.applyBuild' ? {
+          permissionProposal: permissionProposalFromBuild({
+            title: String(proposal.normalizedArguments.brief || proposal.displayName),
+            slug: String(proposal.normalizedArguments.planId || proposal.target || 'project').slice(0, 40),
+            capabilityId: proposal.capabilityId,
+            planId: typeof proposal.normalizedArguments.planId === 'string' ? proposal.normalizedArguments.planId : undefined,
+            goalId: typeof proposal.normalizedArguments.goalId === 'string' ? proposal.normalizedArguments.goalId : undefined,
+          }),
+        } : {}),
       },
       content: proposal.capabilityId === 'desktop.openTrustedUrl'
         ? 'ต้องการให้ผมเปิดเว็บไซต์นี้ไหม?'
@@ -709,6 +735,27 @@ class ActionGate implements ActionHost {
       at: new Date(this.now()).toISOString(),
       ...event,
     });
+  }
+
+  private hasOptionalGoalLease(proposal: ActionProposal): boolean {
+    if (proposal.capabilityId !== 'software.applyBuild') return false;
+    if (!this.options.leases) return false;
+    const resource = String(proposal.normalizedArguments.planId || proposal.capabilityId);
+    const peeked = this.options.leases.peekOptional(proposal.capabilityId, resource);
+    return !isPrivilegeDenied(peeked);
+  }
+
+  private issueBuildGoalLease(proposal: ActionProposal): void {
+    if (proposal.capabilityId !== 'software.applyBuild' || !this.options.leases) return;
+    this.options.leases.issue({
+      capabilityIds: ['software.applyBuild'],
+      resourceScopes: [String(proposal.normalizedArguments.planId || 'software.applyBuild')],
+      reason: 'Owner granted this build goal.',
+      ttlMs: 2 * 60 * 60_000,
+      maxActions: 32,
+      ownerApproved: true,
+      approvalProvenance: { proposalId: proposal.proposalId },
+    }, 'owner');
   }
 
   private requireLease(proposal: ActionProposal, consume: boolean): CapabilityResult | undefined {
@@ -1123,6 +1170,22 @@ function describeProposal(
       risk: 'CONFIRM_REQUIRED',
     };
   }
+  if (capabilityId === 'software.planBuild') {
+    return {
+      displayName: 'Build plan',
+      summary: 'Create a structured build plan without writing files',
+      target: String(input.brief || 'build'),
+      risk: 'READ_ONLY',
+    };
+  }
+  if (capabilityId === 'software.applyBuild') {
+    return {
+      displayName: String(input.brief || 'Build project'),
+      summary: 'ขอสิทธิ์สร้าง/แก้ไฟล์และรัน build/test ในโฟลเดอร์โปรเจกต์นี้จนกว่างานนี้จะจบ',
+      target: String(input.planId || 'data/jarvis/builds'),
+      risk: 'CONFIRM_REQUIRED',
+    };
+  }
   return { displayName: 'System status', summary: 'Read system status', target: 'system', risk: 'READ_ONLY' };
 }
 
@@ -1153,6 +1216,9 @@ function targetClassOf(proposal: ActionProposal, lists: DesktopAllowlists): stri
     return `workspace:${String(proposal.normalizedArguments.documentId || proposal.normalizedArguments.workspaceId || 'registry')}`;
   }
   if (proposal.capabilityId.startsWith('operator.sandbox.')) return 'jarvis:recovery-sandbox';
+  if (proposal.capabilityId.startsWith('software.')) {
+    return `software:${String(proposal.normalizedArguments.planId || proposal.normalizedArguments.brief || 'sandbox')}`;
+  }
   return 'system:status';
 }
 

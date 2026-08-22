@@ -166,7 +166,19 @@ export type JarvisOperationEventType =
   | 'GOAL_RESUMED'
   | 'JOURNAL_PROPOSED'
   | 'JOURNAL_STATE'
-  | 'JOURNAL_RECONCILED';
+  | 'JOURNAL_RECONCILED'
+  | 'PLAN_CREATED'
+  | 'PLAN_UPDATED'
+  | 'PLAN_APPROVED'
+  | 'PLAN_STAGE_STARTED'
+  | 'PLAN_STAGE_COMPLETED'
+  | 'PLAN_STAGE_FAILED'
+  | 'ARTIFACT_CREATED'
+  | 'ARTIFACT_UPDATED'
+  | 'VERIFY_STARTED'
+  | 'VERIFY_RESULT'
+  | 'MEMORY_UPDATED'
+  | 'MODEL_STATUS_CHANGED';
 
 export type JarvisOperationEvent = {
   id: string;
