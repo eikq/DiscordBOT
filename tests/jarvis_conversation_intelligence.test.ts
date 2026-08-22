@@ -1446,6 +1446,28 @@ test('ok-follow-that after a permission status is ack, not leftover execute', ()
   assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD);
 });
 
+test('daily fail, hold-in-plan, and build verification stay honest', () => {
+  const state = softwareState({
+    recentVerification: { kind: 'test', ok: true, summary: 'Tests passed for portfolio', at: 9, slug: 'portfolio' },
+    lastResearchQuery: 'Framer Motion vs GSAP',
+    pendingPlanReview: { planId: 'plan_new', goalId: 'BUILD_WEBSITE', title: 'Leftover' },
+  });
+  const daily = interpretDiscourse('วันนี้มีอะไร fail จริงบ้าง', state);
+  assert.equal(daily.act, 'STATUS_QUERY');
+  assert.equal(daily.statusFocus, 'summary');
+  const hold = interpretDiscourse('ใส่ไว้ในแผนก่อน ยังไม่ต้องแตะโค้ด', state);
+  assert.equal(hold.act, 'ACKNOWLEDGE');
+  assert.equal(hold.change, 'HOLD_MUTATION');
+  const buildAsk = bindDiscourseToIntent(interpretDiscourse('ล่าสุด build ผ่านไหม', state), state, 'ล่าสุด build ผ่านไหม');
+  assert.match(String(buildAsk?.userMessage || ''), /ยังไม่มีผล build/);
+  assert.doesNotMatch(String(buildAsk?.userMessage || ''), /Tests passed/i);
+  const previewAsk = interpretDiscourse('ตอนนี้ preview ใช้งานได้ไหม', softwareState({
+    activePreview: { slug: 'portfolio', url: 'http://127.0.0.1:4174', port: 4174 },
+  }));
+  assert.equal(previewAsk.act, 'STATUS_QUERY');
+  assert.equal(previewAsk.statusFocus, 'preview');
+});
+
 test('if-build-passed-then-preview does not rerun build when the last build already passed', () => {
   const state = softwareState({
     recentVerification: { kind: 'build', ok: true, summary: 'Ran build', at: 9, slug: 'portfolio' },

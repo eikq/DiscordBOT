@@ -255,7 +255,7 @@ function isPrepareDeploy(text: string): boolean {
 }
 
 function isDailySummary(text: string): boolean {
-  return /วันนี้เราทำ|อะไรสำเร็จแล้ว|อะไรยังไม่เสร็จ|มีอะไร fail บ้าง|แล้วแก้ไปยังไง/iu.test(text);
+  return /วันนี้เราทำ|อะไรสำเร็จแล้ว|อะไรยังไม่เสร็จ|มีอะไร fail|แล้วแก้ไปยังไง/iu.test(text);
 }
 
 function isContinueIfPending(text: string): boolean {
@@ -292,8 +292,8 @@ function isGrant(text: string): boolean {
 
 function isAcceptAndHold(text: string): boolean {
   const accept = /เอาตามนั้น|ตามที่แนะนำ|ตามนั้น|go with that|use that|เอาตามที่/iu.test(text);
-  const hold = /ยังไม่ต้องแก้|ยังไม่ต้องแตะ|ยังไม่ต้องเปลี่ยน|don't (?:change|edit|touch)|ไม่ต้องแก้เว็บ|ยังไม่ต้องแตะโค้ด/iu.test(text);
-  return accept && hold;
+  const hold = /ยังไม่ต้องแก้|ยังไม่ต้องแตะ|ยังไม่ต้องเปลี่ยน|don't (?:change|edit|touch)|ไม่ต้องแก้เว็บ|ยังไม่ต้องแตะโค้ด|ใส่ไว้ในแผนก่อน/iu.test(text);
+  return hold && (accept || /แผนก่อน|ยังไม่ต้องแตะโค้ด|ยังไม่เขียนไฟล์/iu.test(text));
 }
 
 function isStopPreview(text: string): boolean {
@@ -332,19 +332,19 @@ function isRerun(text: string): boolean {
 
 function isStatus(text: string): boolean {
   return /^(ผ่าน)$/u.test(text)
-    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
+    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|preview ใช้งาน|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง|โอเคไหม/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|what projects|which project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
 function classifyStatusFocus(text: string, state: ConversationState | null | undefined): import('./types').StatusFocus {
   if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|จำได้ไหม|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
   if (/พร้อมทำงาน|พร้อมไหม|are you ready|ready to work/iu.test(text)) return 'readiness';
-  if (/ผ่านไหม|ผ่าน\?|^ผ่าน$/iu.test(text)) return 'verification';
+  if (/ผ่านไหม|ผ่าน\?|^ผ่าน$|โอเคไหม/iu.test(text)) return 'verification';
   if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
   if (/เราแก้|มีโอกาสเกิดอีก|แก้ไปยังไง/iu.test(text)) return 'recovery';
   if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก|เช็กของจริง|มีปัญหาไหม/iu.test(text)) return 'failure';
   if (/มีงานอะไรค้าง|มีอะไรค้าง|what(?:'s| is) left/iu.test(text)) return 'pending';
-  if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
+  if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|preview ใช้งาน/iu.test(text)) return 'preview';
   if (/มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|what projects/iu.test(text)) return 'inventory';
   if (/project หลัก|main project|current project|กำลังทำอยู่คืออันไหน|project ที่(?:เรา)?กำลังทำ|which project/iu.test(text)) {
     return 'inventory';

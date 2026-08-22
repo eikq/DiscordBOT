@@ -637,6 +637,14 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
   }
   if (focus === 'verification') {
     const last = state.recentVerification;
+    const wantBuild = /build/iu.test(text) && !/test/iu.test(text);
+    const wantTest = /test/iu.test(text) && !/build/iu.test(text);
+    if (wantBuild && last?.kind !== 'build') {
+      return talk('ยังไม่มีผล build ล่าสุดครับ', 'STATUS_QUERY');
+    }
+    if (wantTest && last?.kind !== 'test') {
+      return talk(last ? `${last.kind} ล่าสุดไม่ใช่ test ครับ` : 'ยังไม่มีผล test ล่าสุดครับ', 'STATUS_QUERY');
+    }
     if (!last) return talk('ยังไม่มีผล test หรือ build ล่าสุดครับ', 'STATUS_QUERY');
     const verdict = last.ok === true ? 'ผ่าน' : last.ok === false ? 'ยังไม่ผ่าน' : 'ยังไม่ทราบผล';
     return talk(`${last.kind} ล่าสุด${last.slug ? ` ของ ${last.slug}` : ''} ${verdict}${last.summary ? ` · ${last.summary}` : ''}`, 'STATUS_QUERY');
