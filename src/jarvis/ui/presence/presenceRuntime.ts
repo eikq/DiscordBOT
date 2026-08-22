@@ -69,7 +69,7 @@ export type PresenceOwnerReply =
   | { kind: 'ambiguous' }
   | { kind: 'not-approval' };
 
-export const DESKTOP_AUTHORITY_CLASSES = ['SEE', 'OPEN', 'CLICK', 'TYPE', 'SUBMIT'] as const;
+export const DESKTOP_AUTHORITY_CLASSES = ['SEE', 'OPEN', 'PLACE', 'FOCUS', 'CLICK', 'TYPE', 'SUBMIT'] as const;
 export type DesktopAuthorityClass = (typeof DESKTOP_AUTHORITY_CLASSES)[number];
 
 const CONFIRM = /^(yes|y|ok|okay|allow|allow once|proceed|do it|go ahead|approved|ได้|ตกลง|อนุญาต|อนุญาตครั้งนี้|เปิดได้|เอาเลย|ใช่|ทำเลย|ดำเนินการ|โอเค ทำต่อ)$/iu;
@@ -312,6 +312,7 @@ export function collectPresenceAttention(input: {
   taskActive?: boolean;
   taskObjective?: string;
   degraded?: boolean;
+  placementUnverified?: boolean;
 }): PresenceAttention[] {
   const items: PresenceAttention[] = [];
   if (input.emergencyActive) {
@@ -364,6 +365,15 @@ export function collectPresenceAttention(input: {
       id: 'runtime',
       title: 'Runtime limited',
       detail: 'One or more required services are degraded.',
+      tone: 'warning',
+      kind: 'briefing',
+    });
+  }
+  if (input.placementUnverified) {
+    items.push({
+      id: 'placement-unverified',
+      title: 'PLACEMENT UNVERIFIED',
+      detail: 'The handler finished, but observed window bounds did not confirm the target display.',
       tone: 'warning',
       kind: 'briefing',
     });
@@ -445,6 +455,8 @@ export function inferDesktopAuthorityClass(text: string): DesktopAuthorityClass 
   if (/\b(type|enter text|fill)\b|พิมพ์/.test(raw)) return 'TYPE';
   if (/\b(submit|send form)\b|ส่งฟอร์ม/.test(raw)) return 'SUBMIT';
   if (/\b(see|look at|show me the screen|what's on (the )?screen)\b|ดูหน้าจอ/.test(raw)) return 'SEE';
+  if (/\b(focus|to the front|โฟกัส)\b/.test(raw)) return 'FOCUS';
+  if (/\b(move|place|bring it back|ย้าย)\b/.test(raw)) return 'PLACE';
   if (/\b(open|launch|start)\b|เปิด/.test(raw)) return 'OPEN';
   return null;
 }
@@ -456,12 +468,30 @@ export function desktopAuthorityMaturity(kind: DesktopAuthorityClass): {
   if (kind === 'OPEN') {
     return {
       state: 'REAL',
-      note: 'Allowlisted OPEN actions exist. CLICK, TYPE, and SUBMIT remain separately authorized and are not implied.',
+      note: 'Allowlisted OPEN actions exist. A handler start is not window verification.',
+    };
+  }
+  if (kind === 'SEE') {
+    return {
+      state: 'REAL',
+      note: 'Structured desktop perception is live: displays, top-level windows, bounds, and foreground. Continuous screenshot vision is not.',
+    };
+  }
+  if (kind === 'PLACE') {
+    return {
+      state: 'REAL',
+      note: 'PLACE is REAL only when read-back overlap verifies the target display. Unverified moves must say PLACEMENT UNVERIFIED.',
+    };
+  }
+  if (kind === 'FOCUS') {
+    return {
+      state: 'REAL',
+      note: 'FOCUS is REAL only for a Jarvis-managed window after foreground read-back.',
     };
   }
   return {
     state: 'PREPARE_CONTRACT',
-    note: `${kind} is a separate authority class from OPEN. Live screen SEE/CLICK/TYPE/SUBMIT still needs a reviewed local provider and owner-machine acceptance.`,
+    note: `${kind} is a separate authority class. Scoped CLICK/TYPE/SUBMIT wait until SEE, window identity, and placement verification are reliable.`,
   };
 }
 

@@ -118,6 +118,16 @@ export function interpretSemanticIntent(
     };
   }
 
+  if (/\bfocus\b|to the front|โฟกัส|ดึงมาหน้า/iu.test(raw)) {
+    return {
+      ...base,
+      action: 'FOCUS',
+      objectType: options.context?.lastOpenedResource ? objectTypeFromKind(options.context.lastOpenedResource.kind) : guessObjectType(leftoverEntity(raw) || ''),
+      entity: leftoverEntity(raw) || options.context?.lastOpenedResource?.label,
+      confidence: options.context?.lastOpenedResource?.windowHandle || leftoverEntity(raw) ? 'HIGH' : 'MEDIUM',
+    };
+  }
+
   if (references.includes('back') && (references.includes('it') || OPEN_VERB.test(raw) || /bring|ย้ายกลับ|กลับ/iu.test(raw))) {
     return {
       ...base,
@@ -235,7 +245,7 @@ function leftoverEntity(text: string): string | undefined {
     .replace(DISPLAY_PHRASE, ' ')
     .replace(ADDRESS, ' ')
     .replace(/\b(please|could you|can you|jarvis|จาร์วิส|หน่อย|ให้ที|ให้หน่อย|too|ด้วย)\b/giu, ' ')
-    .replace(/\b(open|launch|start|put|show|bring|move|research|look into|look up|find out)\b|เปิด|เอา|วาง|ย้าย|รีเสิร์ช|หาข้อมูล/giu, ' ')
+    .replace(/\b(open|launch|start|put|show|bring|move|focus|maximize|minimize|research|look into|look up|find out)\b|to the front|โฟกัส|ดึงมาหน้า|เปิด|เอา|วาง|ย้าย|รีเสิร์ช|หาข้อมูล/giu, ' ')
     .replace(WEBSITE_MARK, ' ')
     .replace(PROJECT_MARK, ' ')
     .replace(/\b(on|in|to|at|onto|into|the|my|a|an|ที่|บน|ไป|ใน)\b/giu, ' ')

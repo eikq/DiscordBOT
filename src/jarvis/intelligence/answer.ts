@@ -323,8 +323,8 @@ function deviceControlAnswer(snapshot: SelfKnowledgeSnapshot): SelfKnowledgeAnsw
   return {
     kind: 'DEVICE_CONTROL',
     text: available.length
-      ? `I do not have unrestricted computer control. These exact scoped actions currently report available: ${available.map(item => item.displayName).join(', ')}. Every action still passes policy and permission; SEE, CLICK, TYPE, SUBMIT, CONFIGURE, and ADMIN remain separate authority classes.`
-      : 'No structured runtime evidence grants live computer control right now. Screen and owner-machine interaction still need a reviewed local provider, scoped owner permission, deterministic verification, and local acceptance. SEE does not grant CLICK, TYPE, SUBMIT, CONFIGURE, or ADMIN.',
+      ? `I do not have unrestricted computer control. These exact scoped actions currently report available: ${available.map(item => item.displayName).join(', ')}. Structured SEE, OPEN, verified PLACE, and managed FOCUS are separate from CLICK, TYPE, SUBMIT, CONFIGURE, and ADMIN.`
+      : 'No structured runtime evidence grants live computer control right now. Structured window SEE is available after local verification, but CLICK, TYPE, SUBMIT, CONFIGURE, and ADMIN remain separate.',
     capabilityIds: relevant.map(item => item.id),
     evidence: relevant.flatMap(item => item.evidence).slice(0, 16),
   };

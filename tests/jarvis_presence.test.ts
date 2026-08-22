@@ -134,7 +134,7 @@ test('attention copy stays owner-facing and desktop classes stay separate', () =
   assert.equal(inferDesktopAuthorityClass('click the first result'), 'CLICK');
   assert.equal(desktopAuthorityMaturity('OPEN').state, 'REAL');
   assert.equal(desktopAuthorityMaturity('CLICK').state, 'PREPARE_CONTRACT');
-  assert.equal(desktopAuthorityMaturity('SEE').state, 'PREPARE_CONTRACT');
+  assert.equal(desktopAuthorityMaturity('SEE').state, 'REAL');
   assert.equal(desktopAuthorityMaturity('TYPE').state, 'PREPARE_CONTRACT');
   assert.equal(desktopAuthorityMaturity('SUBMIT').state, 'PREPARE_CONTRACT');
 });

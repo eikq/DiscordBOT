@@ -18,7 +18,7 @@ import { parsePresenceVisualScene, presenceVisualFixture, type PresenceVisualSce
 export type PresenceCapabilityNode = {
   id: string;
   label: string;
-  kind: 'app' | 'step';
+  kind: 'app' | 'step' | 'monitor';
   state: LiveOpsStep['state'] | 'active';
 };
 
@@ -42,6 +42,7 @@ export type PresenceVisualInput = {
   cctvAsked?: boolean;
   mediaAsked?: boolean;
   desktopAsked?: boolean;
+  placementUnverified?: boolean;
   attentionCount?: number;
   stepsDone?: number;
   stepsTotal?: number;
@@ -81,9 +82,18 @@ export function latestResearchStage(events: Array<{
 
 export function applicationLabelFromAsk(lastAsk?: string): string | null {
   if (!lastAsk) return null;
-  const match = lastAsk.match(/\bopen\s+([a-z0-9][a-z0-9 .+-]{1,40})/i);
+  const match = lastAsk.match(/\b(?:open|focus|move|bring)\s+(?:it|that|the\s+)?([a-z0-9][a-z0-9 .+-]{1,40})/i);
   const label = match?.[1]?.trim();
+  if (label && /^(it|that|the|back|to|on)$/i.test(label)) return null;
   return label || null;
+}
+
+export function monitorLabelFromAsk(lastAsk?: string, placementUnverified?: boolean): string | null {
+  if (placementUnverified) return 'PLACEMENT UNVERIFIED';
+  if (!lastAsk) return null;
+  const match = lastAsk.match(/\b(notebook|right|left|primary|main|internal|laptop)\s+(?:monitor|display|screen)\b/i)
+    || lastAsk.match(/\b(?:monitor|display|screen)\b/i);
+  return match?.[1] ? `${match[1]} monitor` : match ? 'target monitor' : null;
 }
 
 export function composePresenceVisual(input: PresenceVisualInput): PresenceVisualModel {
@@ -137,10 +147,25 @@ export function composePresenceVisual(input: PresenceVisualInput): PresenceVisua
 
   const planSteps = fixture?.planSteps ?? input.planSteps ?? [];
   const appLabel = fixture?.applicationLabel ?? applicationLabelFromAsk(input.lastAsk);
+  const monitorLabel = monitorLabelFromAsk(input.lastAsk, input.placementUnverified);
+  const desktopPhase = phase === 'PLANNING' || phase === 'EXECUTING' || phase === 'VERIFYING';
   const capabilityNodes: PresenceCapabilityNode[] = [
     ...planSteps.map(step => ({ id: step.id, label: step.title, kind: 'step' as const, state: step.state })),
-    ...(appLabel && (phase === 'PLANNING' || phase === 'EXECUTING' || phase === 'VERIFYING')
-      ? [{ id: `app:${appLabel}`, label: appLabel, kind: 'app' as const, state: phase === 'VERIFYING' ? 'done' as const : 'active' as const }]
+    ...(appLabel && desktopPhase
+      ? [{
+        id: `app:${appLabel}`,
+        label: appLabel,
+        kind: 'app' as const,
+        state: input.placementUnverified ? 'failed' as const : phase === 'VERIFYING' ? 'done' as const : 'active' as const,
+      }]
+      : []),
+    ...(monitorLabel && desktopPhase
+      ? [{
+        id: `monitor:${monitorLabel}`,
+        label: monitorLabel,
+        kind: 'monitor' as const,
+        state: input.placementUnverified ? 'failed' as const : phase === 'VERIFYING' ? 'done' as const : 'active' as const,
+      }]
       : []),
   ];
 

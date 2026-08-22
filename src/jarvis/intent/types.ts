@@ -85,10 +85,11 @@ export type InteractionContext = {
     openState?: 'intended' | 'opened';
     processName?: string;
     windowHandle?: string;
+    managedWindowId?: string;
     openOperationId?: string;
     currentDisplayId?: string;
     previousDisplayId?: string;
-    placementScope?: 'process-window' | 'unknown';
+    placementScope?: 'managed-window' | 'process-window' | 'unknown';
   };
   lastDisplay?: DisplaySelector | null;
   previousDisplay?: DisplaySelector | null;

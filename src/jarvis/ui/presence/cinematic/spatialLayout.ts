@@ -101,3 +101,16 @@ export function applicationNodePose(label: string): SpatialNodePose {
     fade: 1,
   };
 }
+
+export function monitorNodePose(label: string): SpatialNodePose {
+  return {
+    id: `monitor:${label}`,
+    x: -3.6,
+    y: 0.35,
+    z: 0.55,
+    size: 0.16,
+    brightness: 0.9,
+    stream: true,
+    fade: 1,
+  };
+}

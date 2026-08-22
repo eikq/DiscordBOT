@@ -105,6 +105,31 @@ export function resolutionFromSemantic(
     });
   }
 
+  if (semantic.action === 'FOCUS') {
+    const resource = context?.lastOpenedResource;
+    if (resource?.windowHandle && (
+      semantic.references.includes('it')
+      || semantic.references.includes('that')
+      || !semantic.entity
+      || (semantic.entity && (
+        resource.label.toLocaleLowerCase().includes(semantic.entity.toLocaleLowerCase())
+        || semantic.entity.toLocaleLowerCase().includes(resource.label.toLocaleLowerCase())
+      ))
+      || (resource.url && semantic.entity && resource.url.toLocaleLowerCase().includes(semantic.entity.toLocaleLowerCase()))
+    )) {
+      return capability(DESKTOP_FOCUS_WINDOW, {
+        ...(resource.applicationId ? { applicationId: resource.applicationId } : {}),
+        ...(resource.url ? { url: resource.url } : {}),
+        ...(resource.managedWindowId ? { managedWindowId: resource.managedWindowId } : {}),
+        windowHandle: resource.windowHandle,
+        label: resource.label,
+      }, 'REFERENT_FOCUS', actionClass, {
+        contextSource: 'working-memory',
+        resolvedReferent: resource.windowHandle,
+      });
+    }
+  }
+
   if (semantic.action === 'PLACE' && (semantic.references.includes('it') || semantic.references.includes('that'))) {
     const resource = context?.lastOpenedResource;
     if (!resource || !referentStillValid(context, now)) return clarify('Which window do you mean by “it”?', 'AMBIGUOUS_REFERENT', actionClass);
@@ -260,6 +285,18 @@ export function resolutionFromSemantic(
     }
   }
   if (resolved.kind === 'website') {
+    if (semantic.action === 'FOCUS' && catalogHas(options.catalog, DESKTOP_FOCUS_WINDOW)) {
+      return capability(DESKTOP_FOCUS_WINDOW, {
+        url: resolved.url,
+        label: resolved.label,
+        ...(context?.lastOpenedResource?.url === resolved.url && context.lastOpenedResource.windowHandle
+          ? { windowHandle: context.lastOpenedResource.windowHandle, managedWindowId: context.lastOpenedResource.managedWindowId }
+          : {}),
+      }, 'SEMANTIC_FOCUS', actionClass, {
+        contextSource: 'working-memory',
+        resolvedReferent: resolved.label,
+      });
+    }
     if (thereDisplay && catalogHas(options.catalog, DESKTOP_OPEN_SCOPED_RESOURCE)) {
       return capability(DESKTOP_OPEN_SCOPED_RESOURCE, {
         kind: 'url',

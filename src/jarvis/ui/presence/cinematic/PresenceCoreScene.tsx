@@ -19,7 +19,7 @@ import {
   PARTICLE_FRAG,
   PARTICLE_VERT,
 } from './shaders';
-import { applicationNodePose, layoutPlanSteps, sourceSpatial } from './spatialLayout';
+import { applicationNodePose, layoutPlanSteps, monitorNodePose, sourceSpatial } from './spatialLayout';
 
 const VOID = '#020714';
 
@@ -588,9 +588,10 @@ function PlanDag({ steps }: { steps: LiveOpsStep[] }) {
   );
 }
 
-function ApplicationNode({ label, energyOut }: { label: string; energyOut: boolean }) {
+function ApplicationNode({ label, energyOut, failed }: { label: string; energyOut: boolean; failed?: boolean }) {
   const pose = applicationNodePose(label);
   const ref = useRef<THREE.Mesh>(null);
+  const color = failed ? '#ff6b7a' : '#6ef0c8';
   useFrame(({ clock }) => {
     if (!ref.current) return;
     const pulse = energyOut ? 1 + Math.sin(clock.elapsedTime * 4) * 0.08 : 1;
@@ -600,13 +601,38 @@ function ApplicationNode({ label, energyOut }: { label: string; energyOut: boole
     <group>
       <mesh ref={ref} position={[pose.x, pose.y, pose.z]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#6ef0c8" emissive="#6ef0c8" emissiveIntensity={0.85} metalness={0.4} roughness={0.3} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={failed ? 0.45 : 0.85} metalness={0.4} roughness={0.3} />
       </mesh>
       <line>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[new Float32Array([0, 0, 0, pose.x, pose.y, pose.z]), 3]} />
         </bufferGeometry>
-        <lineBasicMaterial color="#6ef0c8" transparent opacity={energyOut ? 0.7 : 0.28} />
+        <lineBasicMaterial color={color} transparent opacity={energyOut ? 0.7 : 0.28} />
+      </line>
+    </group>
+  );
+}
+
+function MonitorNode({ label, energyOut, failed }: { label: string; energyOut: boolean; failed?: boolean }) {
+  const pose = monitorNodePose(label);
+  const ref = useRef<THREE.Mesh>(null);
+  const color = failed ? '#ff6b7a' : '#5ee7ff';
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const pulse = energyOut ? 1 + Math.sin(clock.elapsedTime * 3.2) * 0.06 : 1;
+    ref.current.scale.setScalar(pose.size * 12 * pulse);
+  });
+  return (
+    <group>
+      <mesh ref={ref} position={[pose.x, pose.y, pose.z]}>
+        <boxGeometry args={[1.6, 1, 0.12]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={failed ? 0.4 : 0.7} metalness={0.35} roughness={0.35} />
+      </mesh>
+      <line>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[new Float32Array([0, 0, 0, pose.x, pose.y, pose.z]), 3]} />
+        </bufferGeometry>
+        <lineBasicMaterial color={color} transparent opacity={energyOut ? 0.65 : 0.24} />
       </line>
     </group>
   );
@@ -776,6 +802,7 @@ function CoreAssembly(props: PresenceCoreSceneProps) {
   });
 
   const app = props.capabilityNodes?.find(node => node.kind === 'app');
+  const monitor = props.capabilityNodes?.find(node => node.kind === 'monitor');
   const gyros = ([
     { radius: 1.72, tube: 0.03, tilt: [0.12, 0.05, 0] as [number, number, number], speed: [motion.gyroX, 0, 0] as [number, number, number], ticks: budget.tickMarks },
     { radius: 2.02, tube: 0.022, tilt: [0, 0, 0.08] as [number, number, number], speed: [0, motion.gyroY, 0] as [number, number, number], ticks: Math.floor(budget.tickMarks * 0.7) },
@@ -848,7 +875,8 @@ function CoreAssembly(props: PresenceCoreSceneProps) {
         onSelect={props.onSelectNode}
       />
       {props.phase === 'PLANNING' || props.phase === 'EXECUTING' || props.phase === 'VERIFYING' ? <PlanDag steps={props.steps ?? []} /> : null}
-      {app ? <ApplicationNode label={app.label} energyOut={motion.energy === 'out'} /> : null}
+      {app ? <ApplicationNode label={app.label} energyOut={motion.energy === 'out'} failed={app.state === 'failed'} /> : null}
+      {monitor ? <MonitorNode label={monitor.label} energyOut={motion.energy === 'out'} failed={monitor.state === 'failed'} /> : null}
       <NeuralCognition
         active={neuralCognitionActive(props.phase) && !locked}
         count={budget.neuralNodes}

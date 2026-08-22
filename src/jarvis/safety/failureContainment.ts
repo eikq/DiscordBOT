@@ -69,7 +69,10 @@ export class FailureContainment {
   }): ContainmentIncident | undefined {
     const destructive = input.preflight.effects.some(effect => effect.destructive);
     const actualTargets = structuredTargets(input.result.structured.affectedTargets);
-    const outsideScope = actualTargets.filter(target => !input.preflight.affectedTargets.includes(target));
+    const outsideScope = actualTargets.filter(target => (
+      !input.preflight.affectedTargets.includes(target)
+      && !isDiscoveredWindowRefinement(target, input.preflight.affectedTargets)
+    ));
     const failedAfterDestructive = destructive && input.result.status !== 'ok';
     const mutationOutcomeUnknown = input.preflight.effects.some(effect => effect.kind !== 'READ')
       && (input.result.status === 'timeout'
@@ -180,6 +183,17 @@ export class FailureContainment {
     fs.writeFileSync(temp, JSON.stringify({ version: 1, incidents: this.list() }, null, 2), { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(temp, this.persistPath);
   }
+}
+
+function isDiscoveredWindowRefinement(target: string, preflightTargets: string[]): boolean {
+  if (!target.startsWith('window:')) return false;
+  return preflightTargets.some(item => (
+    item.startsWith('http://')
+    || item.startsWith('https://')
+    || item.startsWith('application:')
+    || item.startsWith('window:')
+    || /^[0-9]{1,20}$/u.test(item)
+  ));
 }
 
 function structuredTargets(value: unknown): string[] {

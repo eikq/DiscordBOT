@@ -77,7 +77,7 @@ import {
   rememberOwnerAlias,
   rememberOwnerPreference,
 } from '../memory/ownerSemantics';
-import { applyOpenedResource } from '../memory/workingContext';
+import { applyOpenedResource, observedDisplaySelector } from '../memory/workingContext';
 import { mergeResearchIntoContext, sourcesFromResearch } from '../memory/activeContext';
 import { describeDisplays, fingerprintDisplay, serializeDisplayFingerprint } from '../desktop/displayIdentity';
 import { enumerateWindowsDisplays, inspectAllowlistedWindow, processNameForApplication, processNameForUrl, processNamesForUrl } from '../desktop/windowsDisplayHost';
@@ -1211,16 +1211,23 @@ export class JarvisLabRuntime {
 
   private rememberIntentReferents(sessionId: string, resolution: IntentResolution): void {
     const args = resolution.arguments ?? {};
-    if (!(resolution.capabilityId?.startsWith('desktop.open') || resolution.capabilityId === 'desktop.placeWindow')) return;
+    if (!(resolution.capabilityId?.startsWith('desktop.open') || resolution.capabilityId === 'desktop.placeWindow' || resolution.capabilityId === 'desktop.focusWindow')) return;
+    const existing = this.intents.get(sessionId)?.lastOpenedResource;
     this.intents.touch(sessionId, applyOpenedResource(this.intents.get(sessionId), {
-      kind: typeof args.url === 'string' ? 'url' : 'application',
-      applicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
-      url: typeof args.url === 'string' ? args.url : undefined,
-      label: String(args.label || args.applicationId || args.url || resolution.capabilityId || ''),
-      display: args.display && typeof args.display === 'object' ? args.display as InteractionContext['lastDisplay'] : undefined,
-      openState: resolution.capabilityId === 'desktop.placeWindow'
-        ? this.intents.get(sessionId)?.lastOpenedResource?.openState ?? 'intended'
+      kind: typeof args.url === 'string' ? 'url' : existing?.kind ?? 'application',
+      applicationId: typeof args.applicationId === 'string' ? args.applicationId : existing?.applicationId,
+      url: typeof args.url === 'string' ? args.url : existing?.url,
+      label: String(args.label || args.applicationId || args.url || existing?.label || resolution.capabilityId || ''),
+      display: args.display && typeof args.display === 'object' ? args.display as InteractionContext['lastDisplay'] : existing?.display,
+      openState: resolution.capabilityId === 'desktop.placeWindow' || resolution.capabilityId === 'desktop.focusWindow'
+        ? existing?.openState ?? 'intended'
         : 'intended',
+      windowHandle: typeof args.windowHandle === 'string' ? args.windowHandle : existing?.windowHandle,
+      managedWindowId: typeof args.managedWindowId === 'string' ? args.managedWindowId : existing?.managedWindowId,
+      processName: existing?.processName,
+      currentDisplayId: existing?.currentDisplayId,
+      previousDisplayId: existing?.previousDisplayId,
+      placementScope: existing?.placementScope,
     }));
   }
 
@@ -1248,7 +1255,17 @@ export class JarvisLabRuntime {
       String(item.capabilityId || item.name || '') === 'desktop.placeWindow'
       && item.status === 'completed'
     ));
-    const tracked = await this.inspectOpenedWindow(sessionId, args);
+    const action = output.result.actionResults.find(item => (
+      String(item.capabilityId || item.name || '').startsWith('desktop.')
+    ));
+    const structured = action?.structured && typeof action.structured === 'object'
+      ? action.structured as Record<string, unknown>
+      : {};
+    const displayVerified = structured.displayVerified === true || structured.placement === 'placed';
+    const tracked = await this.inspectOpenedWindow(sessionId, {
+      ...args,
+      windowHandle: typeof structured.windowHandle === 'string' ? structured.windowHandle : args.windowHandle,
+    });
     this.intents.touch(sessionId, {
       activeIntent: resolution.kind,
       lastCapabilityId: resolution.capabilityId ?? this.intents.get(sessionId)?.lastCapabilityId,
@@ -1260,15 +1277,18 @@ export class JarvisLabRuntime {
           applicationId: typeof args.applicationId === 'string' ? args.applicationId : undefined,
           url: typeof args.url === 'string' ? args.url : undefined,
           label: String(args.label || args.applicationId || args.url || resolution.capabilityId || ''),
-          display: args.display && typeof args.display === 'object' ? args.display as InteractionContext['lastDisplay'] : undefined,
+          display: displayVerified && args.display && typeof args.display === 'object'
+            ? args.display as InteractionContext['lastDisplay']
+            : this.intents.get(sessionId)?.lastDisplay,
           openState: opened || placed
             ? 'opened'
             : (output.pendingConfirmation ? 'intended' : this.intents.get(sessionId)?.lastOpenedResource?.openState ?? 'intended'),
           processName: tracked.processName,
-          windowHandle: tracked.windowHandle,
-          currentDisplayId: tracked.displayId,
-          placementScope: typeof args.url === 'string' ? 'process-window' : 'unknown',
-        })
+          windowHandle: typeof structured.windowHandle === 'string' ? structured.windowHandle : tracked.windowHandle,
+          managedWindowId: typeof structured.managedWindowId === 'string' ? structured.managedWindowId : this.intents.get(sessionId)?.lastOpenedResource?.managedWindowId,
+          currentDisplayId: displayVerified ? tracked.displayId : this.intents.get(sessionId)?.lastOpenedResource?.currentDisplayId,
+          placementScope: typeof structured.windowHandle === 'string' || tracked.windowHandle ? 'managed-window' : 'unknown',
+        }, { verified: displayVerified })
         : {}),
       recentResearchQuery: typeof args.query === 'string' && String(resolution.capabilityId || '').startsWith('research.')
         ? String(args.query)
@@ -1382,12 +1402,13 @@ export class JarvisLabRuntime {
     const incidents = [
       ...sharedTrustedOperatorRuntime().containment.listActive('desktop.placeWindow'),
       ...sharedTrustedOperatorRuntime().containment.listActive('desktop.openScopedResource'),
+      ...sharedTrustedOperatorRuntime().containment.listActive('desktop.focusWindow'),
     ];
     if (!incidents.length) return 'No placement or scoped-open containment is active.';
     const incident = incidents[0]!;
     const context = this.intents.get(sessionId);
     const processName = context?.lastOpenedResource?.processName
-      || (incident.affectedTargets.some(target => /^https?:/u.test(target)) ? 'msedge' : undefined);
+      || (incident.affectedTargets.some(target => /^https?:/u.test(target)) ? 'chrome' : undefined);
     const displays = await enumerateWindowsDisplays().catch(() => []);
     const candidates = context?.lastOpenedResource?.url
       ? processNamesForUrl(context.lastOpenedResource.url)
@@ -1609,13 +1630,35 @@ export class JarvisLabRuntime {
     const presentation = this.sessions.resolveTurn(sessionId);
     const presented = await this.engine.render(result, presentation, { sessionId });
     const speech = await this.maybeSpeak(presented.text, request.requestId, presented.voiceProfileId, speak);
-    if (invoked.status === 'ok' && invoked.capabilityId.startsWith('desktop.open')) {
-      const current = this.intents.get(sessionId)?.lastOpenedResource;
-      if (current) {
-        this.intents.touch(sessionId, {
-          lastOpenedResource: { ...current, openState: 'opened' },
-        });
-      }
+    if (invoked.capabilityId.startsWith('desktop.open') || invoked.capabilityId === 'desktop.placeWindow' || invoked.capabilityId === 'desktop.focusWindow') {
+      const structured = invoked.structured && typeof invoked.structured === 'object'
+        ? invoked.structured as Record<string, unknown>
+        : {};
+      const current = this.intents.get(sessionId);
+      const existing = current?.lastOpenedResource;
+      const displayVerified = invoked.status === 'ok'
+        && (structured.displayVerified === true || structured.placement === 'placed');
+      const observedDisplay = displayVerified
+        ? observedDisplaySelector(structured) || existing?.display || current?.lastDisplay
+        : existing?.display;
+      this.intents.touch(sessionId, applyOpenedResource(current, {
+        kind: existing?.kind || (typeof structured.url === 'string' ? 'url' : 'application'),
+        applicationId: existing?.applicationId,
+        url: existing?.url,
+        label: existing?.label || invoked.capabilityId,
+        display: observedDisplay,
+        openState: invoked.status === 'ok' && invoked.capabilityId.startsWith('desktop.open')
+          ? 'opened'
+          : existing?.openState ?? 'intended',
+        processName: existing?.processName,
+        windowHandle: typeof structured.windowHandle === 'string' ? structured.windowHandle : existing?.windowHandle,
+        managedWindowId: typeof structured.managedWindowId === 'string' ? structured.managedWindowId : existing?.managedWindowId,
+        currentDisplayId: displayVerified && typeof structured.displayId === 'string'
+          ? structured.displayId
+          : existing?.currentDisplayId,
+        previousDisplayId: existing?.previousDisplayId,
+        placementScope: typeof structured.windowHandle === 'string' || existing?.windowHandle ? 'managed-window' : existing?.placementScope,
+      }, { verified: displayVerified }));
     }
     return {
       request,

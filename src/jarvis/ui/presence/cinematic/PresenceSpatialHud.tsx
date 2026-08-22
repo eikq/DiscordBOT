@@ -63,7 +63,7 @@ export function PresenceSpatialHud(props: {
         <SimplePanel title="Media" lines={[props.mediaNote || 'Media appears only for an active allowlisted session.']} />
       ) : null}
       {slot.kind === 'desktop' ? (
-        <SimplePanel title="Desktop" lines={[props.desktopNote || 'OPEN is separately authorized from SEE, CLICK, TYPE, and SUBMIT.']} />
+        <SimplePanel title="Desktop" lines={[props.desktopNote || 'Structured SEE, OPEN, verified PLACE, and managed FOCUS stay separate from CLICK, TYPE, and SUBMIT.']} />
       ) : null}
       {slot.kind === 'attention' && props.phase === 'EMERGENCY_STOP' ? (
         <SimplePanel title="Emergency stop" lines={['Autonomous work is suspended.']} />

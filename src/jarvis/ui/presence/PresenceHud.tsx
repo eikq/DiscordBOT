@@ -118,7 +118,7 @@ export function PresenceHud(props: {
     return (
       <aside className="jp-hud jp-hud--desk" aria-label="Desktop operator">
         <header><span>Desktop</span></header>
-        <p>{props.desktopNote || 'OPEN is separately authorized from SEE, CLICK, TYPE, and SUBMIT.'}</p>
+        <p>{props.desktopNote || 'Structured SEE, OPEN, verified PLACE, and managed FOCUS stay separate from CLICK, TYPE, and SUBMIT.'}</p>
       </aside>
     );
   }

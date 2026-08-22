@@ -759,6 +759,9 @@ export default function JarvisPresencePage() {
   const effectiveQuality = resolveQualityLevel(qualityMode, 'high');
   const qualityTier = qualityMode === 'auto' ? autoTier : presenceTierFromLabLevel(effectiveQuality);
   const use3d = webglOk && !webglLost && qualityMode !== '2d';
+  const placementUnverified = /placement is unverified|PLACEMENT UNVERIFIED|ยังยืนยันตำแหน่ง/i.test(
+    `${response?.presented.text || ''} ${response?.workOutcome?.text || ''} ${(response?.result.actionResults || []).map(item => item.summary || '').join(' ')}`,
+  );
   const attention = collectPresenceAttention({
     emergencyActive: operator?.emergency.active,
     waitingPermission: commandCenter?.permission.waiting || Boolean(pendingConfirmation),
@@ -769,6 +772,7 @@ export default function JarvisPresencePage() {
     taskActive: commandCenter?.task?.active,
     taskObjective: commandCenter?.task?.objective,
     degraded: status?.ready === false,
+    placementUnverified,
   });
   const desktopClass = inferDesktopAuthorityClass(lastAsk);
   const researchLive = researchActiveFromRuntime({
@@ -812,6 +816,7 @@ export default function JarvisPresencePage() {
     cctvAsked: /cctv|camera|กล้อง/i.test(lastAsk),
     mediaAsked: /spotify|music|เพลง|youtube/i.test(lastAsk),
     desktopAsked: Boolean(desktopClass),
+    placementUnverified,
     attentionCount: attention.length,
     stepsDone: commandCenter?.task?.steps.filter(step => step.state === 'done').length,
     stepsTotal: commandCenter?.task?.steps.length,

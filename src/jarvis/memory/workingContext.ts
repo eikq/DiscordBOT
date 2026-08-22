@@ -1,6 +1,28 @@
+import type { DisplaySelector } from '../desktop/monitorTopology';
 import type { InteractionContext } from '../intent/types';
 
 export type LastOpenedResource = NonNullable<InteractionContext['lastOpenedResource']>;
+
+export function observedDisplaySelector(input: {
+  displayId?: unknown;
+  displayFingerprint?: unknown;
+}): DisplaySelector | undefined {
+  const displayId = typeof input.displayId === 'string' && input.displayId.trim()
+    ? input.displayId.trim()
+    : undefined;
+  const fingerprint = typeof input.displayFingerprint === 'string' && input.displayFingerprint.trim()
+    ? input.displayFingerprint.trim()
+    : undefined;
+  if (!displayId && !fingerprint) return undefined;
+  const stable = fingerprint && (fingerprint.startsWith('display.fp:') || fingerprint.startsWith('{'))
+    ? fingerprint
+    : undefined;
+  return {
+    raw: stable || displayId || fingerprint || '',
+    ...(displayId ? { name: displayId } : {}),
+    ...(stable ? { fingerprint: stable } : {}),
+  };
+}
 
 export const MEMORY_TURN_BUDGET = {
   activeTask: 1,
@@ -13,20 +35,31 @@ export const MEMORY_TURN_BUDGET = {
 export function applyOpenedResource(
   context: InteractionContext | null | undefined,
   resource: LastOpenedResource,
+  options: { verified?: boolean } = {},
 ): Pick<InteractionContext, 'lastOpenedResource' | 'lastDisplay' | 'previousDisplay' | 'lastApplicationId' | 'currentDisplay' | 'currentWebsite' | 'currentApplication' | 'currentWindow'> {
+  const verified = options.verified === true;
+  const nextDisplay = verified ? (resource.display ?? context?.lastDisplay) : context?.lastDisplay;
+  const previous = verified && resource.display && context?.lastDisplay && JSON.stringify(resource.display) !== JSON.stringify(context.lastDisplay)
+    ? context.lastDisplay
+    : context?.previousDisplay;
   return {
     lastOpenedResource: {
       ...resource,
-      placementScope: resource.placementScope || (resource.url ? 'process-window' : 'unknown'),
-      previousDisplayId: context?.lastOpenedResource?.currentDisplayId,
+      placementScope: resource.placementScope || (resource.windowHandle ? 'managed-window' : resource.url ? 'process-window' : 'unknown'),
+      previousDisplayId: verified
+        ? context?.lastOpenedResource?.currentDisplayId
+        : context?.lastOpenedResource?.previousDisplayId,
+      currentDisplayId: verified
+        ? resource.currentDisplayId ?? context?.lastOpenedResource?.currentDisplayId
+        : context?.lastOpenedResource?.currentDisplayId,
     },
-    previousDisplay: context?.lastDisplay,
-    lastDisplay: resource.display ?? context?.lastDisplay,
-    currentDisplay: resource.display ?? context?.currentDisplay,
+    previousDisplay: previous,
+    lastDisplay: nextDisplay,
+    currentDisplay: verified ? (resource.display ?? context?.currentDisplay) : context?.currentDisplay,
     lastApplicationId: resource.applicationId ?? context?.lastApplicationId,
     currentWebsite: resource.url ?? context?.currentWebsite,
     currentApplication: resource.applicationId ?? context?.currentApplication,
-    currentWindow: resource.windowHandle || resource.label,
+    currentWindow: resource.windowHandle || resource.managedWindowId || resource.label,
   };
 }
 
