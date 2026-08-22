@@ -1,5 +1,6 @@
 import type { LocalLlmProvider } from '../../bot/llm/LocalLlmProvider';
 import type { InferenceProvider } from './InferenceProvider';
+import { isQwen38CyberIdentity, qwen38CyberProfile } from './qwen38Cyber';
 import type {
   InferenceGenerateRequest,
   InferenceGenerateResult,
@@ -22,9 +23,9 @@ export class LocalLlmInferenceProvider implements InferenceProvider {
     const status = await this.provider.getRuntimeStatus();
     return {
       providerId: this.id,
-      available: status.enabled && status.reachable,
-      modelAvailable: status.modelAvailable,
-      detail: status.error,
+      available: status.health === 'MODEL_READY',
+      modelAvailable: status.modelAvailable === true && status.health === 'MODEL_READY',
+      detail: status.ownerMessage || status.error,
     };
   }
 
@@ -65,11 +66,18 @@ export function configuredLocalModelProfile(input: {
   displayName: string;
   runtime: ModelRuntime;
 }): ModelProfile {
+  if (isQwen38CyberIdentity(input.id) || isQwen38CyberIdentity(input.displayName)) {
+    return qwen38CyberProfile({
+      id: 'qwen38-cyber',
+      displayName: input.displayName.includes('Qwen') ? input.displayName : 'Qwen3.8 27B Cyber Abliterated',
+      runtime: input.runtime === 'unknown' ? 'openai-compatible' : input.runtime,
+    });
+  }
   return {
     id: input.id,
     displayName: input.displayName,
     runtime: input.runtime,
-    modalities: [],
+    modalities: ['text'],
     certificationState: 'NOT_TESTED',
   };
 }

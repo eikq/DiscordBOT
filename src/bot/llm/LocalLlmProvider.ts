@@ -1,7 +1,13 @@
 import dotenv from 'dotenv';
 import { ollamaMetricsFromChat, type LlmTurnMetrics } from './ollamaMetrics';
-
+import { ownerMessageForModelHealth, type ModelHealthStatus } from './modelHealth';
+import { openaiCompatibleHeaders, resolveLocalQwenApiKey } from './openaiCompatibleAuth';
+import { parseOpenAiToolCalls, visibleModelText } from './visibleModelText';
 dotenv.config({ quiet: true });
+
+/** Discord/Digital Me no-arg default. Jarvis callers pass 8086 / qwen38-cyber explicitly. */
+const DISCORD_LLM_BASE_URL = 'http://127.0.0.1:11434/v1';
+const DISCORD_LLM_MODEL = 'digital-me-qwen38:27b-ad-q4km';
 
 export interface StructuredGenerationRequest {
   systemPrompt?: string;
@@ -14,6 +20,7 @@ export interface StructuredGenerationRequest {
 export type TextGenerationResult = {
   text: string | null;
   metrics?: LlmTurnMetrics;
+  health?: ModelHealthStatus;
 };
 
 export type TextGenerationRequest = {
@@ -63,11 +70,14 @@ export type LocalLlmRuntimeStatus = {
   enabled: boolean;
   reachable: boolean;
   modelAvailable?: boolean;
+  health: ModelHealthStatus;
   version?: string;
   installedModels?: string[];
   loaded?: boolean;
   sizeVramBytes?: number;
   error?: string;
+  ownerMessage?: string;
+  authConfigured?: boolean;
 };
 
 export class LocalLlmProvider {
@@ -77,8 +87,8 @@ export class LocalLlmProvider {
   private timeoutMs: number;
 
   constructor(baseUrl?: string, modelName?: string) {
-    this.baseUrl = baseUrl || process.env.LLM_BASE_URL || 'http://127.0.0.1:11434/v1';
-    this.modelName = modelName || process.env.LLM_MODEL || 'digital-me-qwen38:27b-ad-q4km';
+    this.baseUrl = (baseUrl || process.env.LLM_BASE_URL || DISCORD_LLM_BASE_URL).replace(/\/$/, '');
+    this.modelName = modelName || process.env.LLM_MODEL || DISCORD_LLM_MODEL;
     this.timeoutMs = this.readPositiveInteger(process.env.LLM_TIMEOUT_MS, 60_000);
   }
 
@@ -95,7 +105,7 @@ export class LocalLlmProvider {
       const ollamaUrl = this.ollamaNativeUrl();
       const response = await fetch(ollamaUrl ? `${ollamaUrl}/api/chat` : `${this.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.requestHeaders(),
         body: JSON.stringify(ollamaUrl ? {
           model: this.modelName,
           messages,
@@ -109,20 +119,21 @@ export class LocalLlmProvider {
           messages,
           temperature: request.temperature ?? 0.2,
           max_tokens: request.maxTokens ?? 120,
-          reasoning_effort: 'none',
-          response_format: { type: 'json_object' }
+          ...this.optionalReasoningEffort('none'),
+          response_format: { type: 'json_object' },
         }),
-        signal: AbortSignal.timeout(this.timeoutMs)
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
 
       if (response.ok) {
-        const json = await response.json();
+        const json = await response.json() as Record<string, any>;
         const content = ollamaUrl ? json.message?.content : json.choices?.[0]?.message?.content;
-        if (content) {
+        const visible = visibleModelText(content, json.choices?.[0]?.message?.reasoning_content);
+        if (visible) {
           console.log(`[LocalLLM] Structured response in ${Date.now() - startedAt}ms.`);
-          return JSON.parse(content) as T;
+          return JSON.parse(visible) as T;
         }
-      } else {
+      } else if (response.status !== 401 && response.status !== 403) {
         this.markOffline();
       }
     } catch (err: any) {
@@ -138,7 +149,7 @@ export class LocalLlmProvider {
   }
 
   public async generateTextDetailed(request: TextGenerationRequest): Promise<TextGenerationResult> {
-    if (!this.canAttempt()) return { text: null };
+    if (!this.canAttempt()) return { text: null, health: 'MODEL_OFFLINE' };
     const startedAt = Date.now();
     const messages = [];
     if (request.systemPrompt) {
@@ -152,10 +163,13 @@ export class LocalLlmProvider {
       if (ollamaUrl && request.onDraft) {
         return await this.streamOllamaChat(ollamaUrl, messages, request, startedAt, promptChars);
       }
+      if (!ollamaUrl && request.onDraft) {
+        return await this.streamOpenAiChat(messages, request, startedAt, promptChars);
+      }
 
       const response = await fetch(ollamaUrl ? `${ollamaUrl}/api/chat` : `${this.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.requestHeaders(),
         body: JSON.stringify(ollamaUrl ? {
           model: this.modelName,
           messages,
@@ -169,30 +183,35 @@ export class LocalLlmProvider {
           temperature: request.temperature ?? 0.7,
           max_tokens: request.maxTokens ?? 60,
           presence_penalty: 1.1,
-          reasoning_effort: 'none',
+          ...this.optionalReasoningEffort('none'),
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
 
       if (response.ok) {
         const json = await response.json() as Record<string, any>;
-        const text = (ollamaUrl ? json.message?.content : json.choices?.[0]?.message?.content)?.trim() || null;
+        const message = ollamaUrl ? json.message : json.choices?.[0]?.message;
+        const text = visibleModelText(message?.content, message?.reasoning_content);
         if (text) {
           console.log(`[LocalLLM] Spoken response in ${Date.now() - startedAt}ms.`);
           const metrics = ollamaUrl
             ? ollamaMetricsFromChat(json, { promptChars, ttftMs: Date.now() - startedAt })
             : { promptChars };
-          return { text, metrics };
+          return { text, metrics, health: 'MODEL_READY' };
         }
-        return { text: null };
+        return { text: null, health: 'MODEL_READY' };
+      }
+      if (response.status === 401 || response.status === 403) {
+        return { text: null, health: 'AUTH_FAILED' };
       }
       this.markOffline();
+      return { text: null, health: 'MODEL_UNREACHABLE' };
     } catch (err: any) {
       console.warn(`[LocalLLM] Spoken request failed after ${Date.now() - startedAt}ms: ${err instanceof Error ? err.message : String(err)}`);
       this.markOffline();
     }
 
-    return { text: null };
+    return { text: null, health: 'MODEL_UNREACHABLE' };
   }
 
   public async generateWithTools(request: ToolGenerationRequest): Promise<ToolGenerationResult> {
@@ -211,7 +230,7 @@ export class LocalLlmProvider {
       for (let round = 0; round <= maxToolRounds; round++) {
         const response = await fetch(ollamaUrl ? `${ollamaUrl}/api/chat` : `${this.baseUrl}/chat/completions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.requestHeaders(),
           body: JSON.stringify(ollamaUrl ? {
             model: this.modelName,
             messages,
@@ -226,23 +245,23 @@ export class LocalLlmProvider {
             tools: request.tools,
             temperature: request.temperature ?? 0.2,
             max_tokens: request.maxTokens ?? 700,
-            reasoning_effort: process.env.LLM_RESEARCH_REASONING_EFFORT || 'medium',
+            ...this.optionalReasoningEffort(process.env.LLM_RESEARCH_REASONING_EFFORT || ''),
           }),
           signal: AbortSignal.timeout(this.readPositiveInteger(process.env.LLM_RESEARCH_TIMEOUT_MS, 120_000)),
         });
 
         if (!response.ok) {
           const details = (await response.text().catch(() => '')).trim().slice(0, 800);
-          this.markOffline();
+          if (response.status !== 401 && response.status !== 403) this.markOffline();
           throw new Error(`LLM tool request returned HTTP ${response.status}${details ? `: ${details}` : ''}`);
         }
 
-        const json = await response.json();
+        const json = await response.json() as Record<string, any>;
         const assistantMessage = ollamaUrl ? json.message : json.choices?.[0]?.message;
-        const toolCalls = this.parseToolCalls(assistantMessage?.tool_calls);
+        const toolCalls = parseOpenAiToolCalls(assistantMessage?.tool_calls);
         if (toolCalls.length === 0) {
-          const text = typeof assistantMessage?.content === 'string' ? assistantMessage.content.trim() : '';
-          return { text: text || null, calls, sources: [...sources] };
+          const text = visibleModelText(assistantMessage?.content, assistantMessage?.reasoning_content);
+          return { text, calls, sources: [...sources] };
         }
         if (round === maxToolRounds) {
           throw new Error(`LLM exceeded the ${maxToolRounds}-round tool limit.`);
@@ -275,13 +294,19 @@ export class LocalLlmProvider {
 
   public async getRuntimeStatus(): Promise<LocalLlmRuntimeStatus> {
     const ollamaUrl = this.ollamaNativeUrl();
+    const authConfigured = Boolean(resolveLocalQwenApiKey());
     const base: LocalLlmRuntimeStatus = {
       provider: ollamaUrl ? 'ollama' : 'openai-compatible',
       baseUrl: ollamaUrl || this.baseUrl,
       model: this.modelName,
       enabled: process.env.LLM_ENABLED !== 'false',
       reachable: false,
+      health: process.env.LLM_ENABLED === 'false' ? 'MODEL_OFFLINE' : 'MODEL_UNREACHABLE',
+      authConfigured,
     };
+    if (process.env.LLM_ENABLED === 'false') {
+      return { ...base, ownerMessage: ownerMessageForModelHealth('MODEL_OFFLINE') };
+    }
     try {
       if (ollamaUrl) {
         const [versionResponse, tagsResponse, psResponse] = await Promise.all([
@@ -297,31 +322,55 @@ export class LocalLlmProvider {
           : [];
         const loadedInfo = psResponse?.ok ? await psResponse.json() as { models?: Array<{ name?: string; model?: string; size_vram?: number }> } : undefined;
         const loadedEntry = (loadedInfo?.models || []).find(item => item.name === this.modelName || item.model === this.modelName);
+        const modelAvailable = this.hasConfiguredModel(installedModels);
+        const health: ModelHealthStatus = modelAvailable ? 'MODEL_READY' : 'MODEL_NOT_FOUND';
         return {
           ...base,
           reachable: true,
           version: typeof version.version === 'string' ? version.version : undefined,
           installedModels,
-          modelAvailable: this.hasConfiguredModel(installedModels),
+          modelAvailable,
+          health,
           loaded: Boolean(loadedEntry),
           ...(typeof loadedEntry?.size_vram === 'number' ? { sizeVramBytes: loadedEntry.size_vram } : {}),
+          ...(health === 'MODEL_READY' ? {} : { ownerMessage: ownerMessageForModelHealth(health) }),
         };
       }
 
-      const response = await fetch(`${this.baseUrl}/models`, { signal: AbortSignal.timeout(3_000) });
+      const response = await fetch(`${this.baseUrl}/models`, {
+        headers: this.requestHeaders(),
+        signal: AbortSignal.timeout(3_000),
+      });
+      if (response.status === 401 || response.status === 403) {
+        return {
+          ...base,
+          health: 'AUTH_FAILED',
+          error: `Model endpoint returned HTTP ${response.status}`,
+          ownerMessage: ownerMessageForModelHealth('AUTH_FAILED'),
+        };
+      }
       if (!response.ok) throw new Error(`Model endpoint returned HTTP ${response.status}`);
       const json = await response.json();
       const installedModels = Array.isArray(json.data)
         ? json.data.map((model: any) => String(model.id || '')).filter(Boolean)
         : [];
+      const modelAvailable = this.hasConfiguredModel(installedModels);
+      const health: ModelHealthStatus = modelAvailable ? 'MODEL_READY' : 'MODEL_NOT_FOUND';
       return {
         ...base,
         reachable: true,
         installedModels,
-        modelAvailable: this.hasConfiguredModel(installedModels),
+        modelAvailable,
+        health,
+        ...(health === 'MODEL_READY' ? {} : { ownerMessage: ownerMessageForModelHealth(health) }),
       };
     } catch (error) {
-      return { ...base, error: error instanceof Error ? error.message : String(error) };
+      return {
+        ...base,
+        health: 'MODEL_UNREACHABLE',
+        error: error instanceof Error ? error.message : String(error),
+        ownerMessage: ownerMessageForModelHealth('MODEL_UNREACHABLE'),
+      };
     }
   }
 
@@ -356,7 +405,7 @@ export class LocalLlmProvider {
   ): Promise<TextGenerationResult> {
     const response = await fetch(`${ollamaUrl}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.requestHeaders(),
       body: JSON.stringify({
         model: this.modelName,
         messages,
@@ -369,7 +418,7 @@ export class LocalLlmProvider {
     });
     if (!response.ok || !response.body) {
       this.markOffline();
-      return { text: null };
+      return { text: null, health: 'MODEL_UNREACHABLE' };
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -396,20 +445,89 @@ export class LocalLlmProvider {
         if (delta) {
           if (ttftMs === undefined) ttftMs = Date.now() - startedAt;
           accumulated += delta;
-          request.onDraft?.(delta, accumulated);
+          const visible = visibleModelText(accumulated) || accumulated;
+          request.onDraft?.(delta, visible);
         }
         if (payload.done) metricsPayload = payload;
       }
     }
-    const text = accumulated.trim() || null;
+    const text = visibleModelText(accumulated);
     if (text) {
       console.log(`[LocalLLM] Spoken response in ${Date.now() - startedAt}ms.`);
       return {
         text,
+        health: 'MODEL_READY',
         metrics: ollamaMetricsFromChat(metricsPayload || {}, { promptChars, ttftMs }),
       };
     }
-    return { text: null };
+    return { text: null, health: 'MODEL_READY' };
+  }
+
+  private async streamOpenAiChat(
+    messages: Array<{ role: string; content: string }>,
+    request: TextGenerationRequest,
+    startedAt: number,
+    promptChars: number,
+  ): Promise<TextGenerationResult> {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: this.requestHeaders(),
+      body: JSON.stringify({
+        model: this.modelName,
+        messages,
+        stream: true,
+        temperature: request.temperature ?? 0.7,
+        max_tokens: request.maxTokens ?? 60,
+        presence_penalty: 1.1,
+        ...this.optionalReasoningEffort('none'),
+      }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (response.status === 401 || response.status === 403) {
+      return { text: null, health: 'AUTH_FAILED' };
+    }
+    if (!response.ok || !response.body) {
+      this.markOffline();
+      return { text: null, health: 'MODEL_UNREACHABLE' };
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accumulated = '';
+    let ttftMs: number | undefined;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === 'data: [DONE]') continue;
+        const payloadLine = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+        if (!payloadLine || payloadLine === '[DONE]') continue;
+        let payload: Record<string, any>;
+        try {
+          payload = JSON.parse(payloadLine);
+        } catch {
+          continue;
+        }
+        const delta = payload.choices?.[0]?.delta;
+        const piece = typeof delta?.content === 'string' ? delta.content : '';
+        if (piece) {
+          if (ttftMs === undefined) ttftMs = Date.now() - startedAt;
+          accumulated += piece;
+          const visible = visibleModelText(accumulated) || accumulated;
+          request.onDraft?.(piece, visible);
+        }
+      }
+    }
+    const text = visibleModelText(accumulated);
+    if (text) {
+      console.log(`[LocalLLM] Spoken response in ${Date.now() - startedAt}ms.`);
+      return { text, health: 'MODEL_READY', metrics: { promptChars, ttftMs } };
+    }
+    return { text: null, health: 'MODEL_READY' };
   }
 
   private canAttempt(): boolean {
@@ -426,7 +544,29 @@ export class LocalLlmProvider {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
   }
 
+  private requestHeaders(): Record<string, string> {
+    return openaiCompatibleHeaders();
+  }
+
+  private optionalReasoningEffort(fallback: string): Record<string, string> {
+    const configured = process.env.LLM_REASONING_EFFORT?.trim() || fallback.trim();
+    if (!configured) return {};
+    return { reasoning_effort: configured };
+  }
+
   private ollamaNativeUrl(): string | null {
+    const runtime = process.env.LLM_RUNTIME?.trim().toLowerCase();
+    if (runtime === 'openai-compatible' || runtime === 'openai') return null;
+    if (runtime === 'ollama') {
+      const configured = process.env.LLM_NATIVE_URL?.trim();
+      if (configured) return configured.replace(/\/$/, '');
+      try {
+        const parsed = new URL(this.baseUrl);
+        return `${parsed.protocol}//${parsed.host}`;
+      } catch {
+        return 'http://127.0.0.1:11434';
+      }
+    }
     const configured = process.env.LLM_NATIVE_URL?.trim();
     if (configured) return configured.replace(/\/$/, '');
     try {
@@ -452,20 +592,6 @@ export class LocalLlmProvider {
     if (!value) return '10m';
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : value;
-  }
-
-  private parseToolCalls(value: unknown): LlmToolCall[] {
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((entry: any) => {
-      const name = typeof entry?.function?.name === 'string' ? entry.function.name.trim() : '';
-      if (!name) return [];
-      let args = entry.function.arguments;
-      if (typeof args === 'string') {
-        try { args = JSON.parse(args); } catch { args = {}; }
-      }
-      if (!args || typeof args !== 'object' || Array.isArray(args)) args = {};
-      return [{ id: typeof entry.id === 'string' ? entry.id : undefined, name, arguments: args }];
-    });
   }
 
   private hasConfiguredModel(installedModels: string[]): boolean {
