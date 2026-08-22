@@ -71,6 +71,8 @@ test('speech policy is deterministic and never grants authority', () => {
   assert.equal(classifySpeechEvent({ emergency: true }), 'emergency');
   assert.equal(parseSpeechModeCommand('Stay quiet while researching.'), 'quiet_research');
   assert.equal(parseSpeechControl('Stop talking')?.kind, 'stop');
+  assert.equal(parseSpeechControl('pause'), null);
+  assert.equal(parseSpeechControl('pause speaking')?.kind, 'pause');
   assert.equal(parseSpeechControl('พูดต่อ')?.kind, 'continue');
   assert.equal(speechControlChangesAuthority(), false);
   assert.match(shapeSpokenText('Cursor is open on monitor two'), /\.$/);

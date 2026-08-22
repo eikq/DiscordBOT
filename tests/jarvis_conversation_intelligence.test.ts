@@ -330,6 +330,7 @@ test('conversation state survives a store reload', () => {
 test('Presence forwards continue/status and unbound ทำเลย to Jarvis instead of swallowing them', () => {
   assert.equal(presenceShouldForwardToJarvis({ voiceFamily: 'WORK_CONTINUE', approval: { kind: 'not-approval' } }), true);
   assert.equal(presenceShouldForwardToJarvis({ voiceFamily: 'TASK_STATUS', approval: { kind: 'not-approval' } }), true);
+  assert.equal(presenceShouldForwardToJarvis({ voiceFamily: 'WAKE', approval: { kind: 'not-approval' } }), true);
   assert.equal(presenceShouldForwardToJarvis({ voiceFamily: 'UNKNOWN', approval: { kind: 'unbound' } }), true);
   assert.equal(presenceShouldForwardToJarvis({
     voiceFamily: 'PERMISSION_ALLOW',
@@ -342,6 +343,13 @@ test('file inspect does not bind preview, and history is not a preview request',
   const file = bindDiscourseToIntent(interpretDiscourse('เปิดดู App.jsx', state), state, 'เปิดดู App.jsx');
   assert.equal(file?.capabilityId, 'project.readFile');
   assert.equal(file?.arguments?.relativePath, 'src/App.jsx');
+  const cards = bindDiscourseToIntent(
+    interpretDiscourse('ส่วนไหนจัดการ project cards', state),
+    state,
+    'ส่วนไหนจัดการ project cards',
+  );
+  assert.equal(cards?.capabilityId, 'project.readFile');
+  assert.equal(cards?.arguments?.relativePath, 'src/App.jsx');
   const history = interpretDiscourse('เปิด history ให้ดู', state);
   assert.notEqual(history.act, 'PREVIEW');
 });
@@ -531,6 +539,7 @@ test('vague help is not treated as continue-current-work', () => {
 
 test('only a brief greeting is consumed; longer hello sentences still reach the model', () => {
   assert.equal(interpretDiscourse('สวัสดี Jarvis', emptyConversationState('jarvis-lab')).act, 'GREET');
+  assert.equal(interpretDiscourse('Jarvis', softwareState()).act, 'GREET');
   assert.equal(interpretDiscourse('hello from keyboard', emptyConversationState('jarvis-lab')).act, 'UNKNOWN');
 });
 
@@ -1274,7 +1283,7 @@ test('accepting a research pick without editing is hold, not another research ca
     const bound = bindDiscourseToIntent(discourse, state, phrase);
     assert.equal(bound?.reasonCode, 'HOLD_MUTATION', phrase);
     assert.equal(bound?.capabilityId, undefined, phrase);
-    assert.match(String(bound?.userMessage || ''), /ยังไม่แก้/i, phrase);
+    assert.match(String(bound?.userMessage || ''), /ยังไม่แก้เว็บ/i, phrase);
   }
 });
 
@@ -1369,6 +1378,37 @@ test('this-site edits bind the website even if a software app is active', () => 
   });
   assert.equal(next.activeProjectSlug, 'portfolio');
   assert.equal(next.activePlanId, 'plan_portfolio');
+});
+
+test('queue progress, pause, and no-problem hold stay conversational', () => {
+  const queued = softwareState({
+    lastDiscourse: 'QUEUE',
+    queue: [
+      { id: 'q1', text: 'เพิ่มหน้า Contact', status: 'running', act: 'MODIFY_PROJECT' },
+      { id: 'q2', text: 'รัน test', status: 'pending', act: 'TEST' },
+    ],
+  });
+  const progress = bindDiscourseToIntent(interpretDiscourse('ตอนนี้ถึงข้อไหน', queued), queued, 'ตอนนี้ถึงข้อไหน');
+  assert.equal(progress?.reasonCode, 'QUEUE_REVIEW');
+  assert.match(String(progress?.userMessage || ''), /Contact|test/i);
+  assert.doesNotMatch(String(progress?.userMessage || ''), /jarvis-lab|Edge-TTS/i);
+
+  const paused = interpretDiscourse('pause', queued);
+  assert.equal(paused.act, 'PAUSE');
+  const held = bindDiscourseToIntent(interpretDiscourse('ถ้าไม่มีปัญหาก็ไม่ต้องแก้อะไร', softwareState()), softwareState(), 'ถ้าไม่มีปัญหาก็ไม่ต้องแก้อะไร');
+  assert.equal(held?.reasonCode, 'HOLD_MUTATION');
+  assert.notEqual(held?.capabilityId, SOFTWARE_APPLY_BUILD);
+});
+
+test('ok-follow-that after a permission status is ack, not leftover execute', () => {
+  const state = softwareState({
+    lastDiscourse: 'STATUS_QUERY',
+    pendingChange: 'เพิ่มหน้า skills',
+  });
+  const discourse = interpretDiscourse('โอเคตามนั้น', state);
+  assert.equal(discourse.act, 'ACKNOWLEDGE');
+  const bound = bindDiscourseToIntent(discourse, state, 'โอเคตามนั้น');
+  assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD);
 });
 
 test('if-build-passed-then-preview does not rerun build when the last build already passed', () => {

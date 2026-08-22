@@ -33,8 +33,10 @@ export function defaultSpeechSession(): SpeechSessionState {
 
 export function parseSpeechControl(text: string): SpeechControl | null {
   const raw = text.trim();
-  if (/^(stop talking|be quiet|shut up|pause|หยุดพูด|เงียบก่อน)$/iu.test(raw) || /stop talking|be quiet|shut up|หยุดพูด|เงียบก่อน/iu.test(raw) && !/stop (?:this|the) (?:task|research)/iu.test(raw)) {
-    if (/pause|pause speaking/iu.test(raw) && !/stop talking|shut up|หยุดพูด/iu.test(raw)) return { kind: 'pause' };
+  if (/^pause (?:speaking|talking)$/iu.test(raw) || /pause speaking|pause talking/iu.test(raw)) {
+    return { kind: 'pause' };
+  }
+  if (/^(stop talking|be quiet|shut up|หยุดพูด|เงียบก่อน)$/iu.test(raw) || /stop talking|be quiet|shut up|หยุดพูด|เงียบก่อน/iu.test(raw) && !/stop (?:this|the) (?:task|research)/iu.test(raw)) {
     return { kind: 'stop' };
   }
   if (/continue speaking|พูดต่อ|resume speaking/iu.test(raw)) return { kind: 'continue' };

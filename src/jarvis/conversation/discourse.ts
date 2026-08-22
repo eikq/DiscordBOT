@@ -90,6 +90,13 @@ export function interpretDiscourse(
     };
   }
   if (isExecuteNow(raw)) {
+    if (
+      (state?.lastDiscourse === 'STATUS_QUERY' || state?.lastDiscourse === 'ACKNOWLEDGE')
+      && /ตามนั้น/iu.test(raw)
+      && !state?.pendingPlanReview
+    ) {
+      return act('ACKNOWLEDGE');
+    }
     if (state?.pendingChange) return act('EXECUTE_NOW');
     if (state?.pendingConditional?.thenActs?.length) return act('EXECUTE_NOW');
     if (hasActiveQueue(state)) return act('CONTINUE');
@@ -206,7 +213,7 @@ function hasActiveQueue(state: ConversationState | null | undefined): boolean {
 }
 
 function isGreeting(text: string): boolean {
-  return /^(สวัสดี|hello|hi|hey|หวัดดี|yo)(?:\s+jarvis)?[\s,.!?]*$/iu.test(text);
+  return /^(สวัสดี|hello|hi|hey|หวัดดี|yo|jarvis|จาร์วิส)(?:\s+jarvis)?[\s,.!?]*$/iu.test(text);
 }
 
 function isAck(text: string): boolean {
@@ -218,7 +225,7 @@ function isModelQuery(text: string): boolean {
 }
 
 function isPause(text: string): boolean {
-  return /^(เดี๋ยวก่อน|pause|พัก(?:ไว้)?(?:ก่อน)?|หยุดก่อน)$/iu.test(text)
+  return /^(เดี๋ยวก่อน|pause|paused?|พัก(?:ไว้)?(?:ก่อน)?|หยุดก่อน)$/iu.test(text)
     || /พักเว็บนี้ไว้ก่อน/iu.test(text);
 }
 
@@ -314,7 +321,7 @@ function isRerun(text: string): boolean {
 
 function isStatus(text: string): boolean {
   return /^(ผ่าน)$/u.test(text)
-    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
+    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|what projects|which project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
@@ -324,7 +331,7 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
   if (/ผ่านไหม|ผ่าน\?|^ผ่าน$/iu.test(text)) return 'verification';
   if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
   if (/เราแก้|มีโอกาสเกิดอีก|แก้ไปยังไง/iu.test(text)) return 'recovery';
-  if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก/iu.test(text)) return 'failure';
+  if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก|เช็กของจริง|มีปัญหาไหม/iu.test(text)) return 'failure';
   if (/มีงานอะไรค้าง|มีอะไรค้าง|what(?:'s| is) left/iu.test(text)) return 'pending';
   if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
   if (/มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|what projects/iu.test(text)) return 'inventory';
@@ -334,7 +341,7 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
   if (/ตอนนี้ตอบผมแบบไหน/iu.test(text)) return 'preference';
   if (/permission อะไร|ครอบคลุมอะไร/iu.test(text)) return 'permission';
   if (/ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้/iu.test(text)) return 'capability';
-  if (/ถึงไหนแล้ว|กำลังทำอะไร|ตอนนี้ทำถึงข้อไหน|queue (?:เมื่อกี้|เป็นยังไง)|how far/iu.test(text)) return 'progress';
+  if (/ถึงไหนแล้ว|กำลังทำอะไร|ตอนนี้(?:ทำ)?ถึงข้อไหน|queue (?:เมื่อกี้|เป็นยังไง)|how far/iu.test(text)) return 'progress';
   if (/มือถือเป็นไง|บนมือถือ|responsive เป็นไง|ดีขึ้นไหม|เช็กให้หน่อย|check (?:it|that|the site)/iu.test(text) && hasActiveSoftware(state)) {
     return 'project';
   }
@@ -345,7 +352,7 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
 
 function isInspect(text: string, state: ConversationState | null | undefined): boolean {
   if (/\.(jsx?|tsx?|css|json)\b/.test(text)) return true;
-  if (/function ไหน|ฟังก์ชันไหน|which function|ไฟล์ไหน.*(จัดการ|todo)|where (?:is|does)/iu.test(text)) return true;
+  if (/function ไหน|ฟังก์ชันไหน|ส่วนไหน|which (?:function|part)|ไฟล์ไหน.*(จัดการ|todo)|where (?:is|does)/iu.test(text)) return true;
   if (!hasActiveSoftware(state) && !/โปรเจกต์นี้|เว็บนี้/iu.test(text)) return false;
   return /มีหน้าอะไร|ไฟล์อะไรหลัก|package อะไร|ติดตั้งแล้วหรือยัง|ใช้จริงไหม|ไฟล์ไหนเปลี่ยน|เมื่อกี้แก้อะไร|what changed|which files? changed|เปิดดู .+\.(jsx?|tsx?|css|json)/iu.test(text);
 }
@@ -507,6 +514,17 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
   );
   const thenPreview = /preview|เปิดให้ดู|เปิดดู/iu.test(text);
   const thenFix = /แก้|fix|แก้ไข/iu.test(text) && /ปัญหา|error|fail|พัง/iu.test(text);
+  const holdIfHealthy = /ถ้าไม่มีปัญหา|if (?:there(?:'s| is) )?no (?:problem|issue)|ไม่มีปัญหาก็ไม่ต้องแก้/iu.test(text);
+  if (holdIfHealthy) {
+    return {
+      act: 'ACKNOWLEDGE',
+      change: 'HOLD_MUTATION',
+      constraint: text,
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+    };
+  }
   if (ifPass && /ทั้งหมด|all (?:of )?(?:them|it|tests?)/iu.test(text)) {
     return {
       act: 'CONDITIONAL',
@@ -646,7 +664,7 @@ function parseQueueOp(
     if (/queue เป็นยังไง|queue เมื่อกี้/iu.test(text)) return { kind: 'review' };
     return null;
   }
-  if (/ขอดู list|queue เป็นยังไง|ตอนนี้ทำถึงข้อไหน|show (?:the )?(?:queue|list)/iu.test(text)) {
+  if (/ขอดู list|queue เป็นยังไง|ตอนนี้(?:ทำ)?ถึงข้อไหน|show (?:the )?(?:queue|list)/iu.test(text)) {
     return { kind: 'review' };
   }
   if (/^(โอเคเริ่ม|เริ่มคิว|start (?:the )?queue)$/iu.test(text)) return { kind: 'start' };

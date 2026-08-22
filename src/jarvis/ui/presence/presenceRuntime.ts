@@ -447,7 +447,7 @@ export function presenceShouldForwardToJarvis(input: {
   if (input.approval.kind === 'allow' || input.approval.kind === 'deny' || input.approval.kind === 'ambiguous') {
     return false;
   }
-  if (input.voiceFamily === 'WORK_CONTINUE' || input.voiceFamily === 'TASK_STATUS') return true;
+  if (input.voiceFamily === 'WORK_CONTINUE' || input.voiceFamily === 'TASK_STATUS' || input.voiceFamily === 'WAKE') return true;
   return input.approval.kind === 'unbound';
 }
 

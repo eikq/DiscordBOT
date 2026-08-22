@@ -44,6 +44,7 @@ import {
   interpretPresenceShellCommand,
   isPresenceAmbientPath,
   presencePhaseLabel,
+  presenceShouldForwardToJarvis,
   resolvePresenceApproval,
 } from './presenceRuntime';
 import '../jarvis-lab.css';
@@ -617,10 +618,12 @@ export default function JarvisPresencePage() {
 
     if (isWakeUtterance(payloadText)) {
       setWakeAttention(true);
-      speakLocal("I'm here.");
-      if (!spokenText) setText('');
       window.setTimeout(() => setWakeAttention(false), 8000);
-      return;
+      if (!presenceShouldForwardToJarvis({ voiceFamily: 'WAKE', approval: { kind: 'not-approval' } })) {
+        speakLocal("I'm here.");
+        if (!spokenText) setText('');
+        return;
+      }
     }
     const speechControl = parseSpeechControl(payloadText);
     if (speechControl) {

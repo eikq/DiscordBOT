@@ -34,7 +34,7 @@ export function bindDiscourseToIntent(
       return talk('สวัสดีครับ', discourse.act);
     case 'ACKNOWLEDGE':
       if (discourse.change === 'HOLD_MUTATION') {
-        return talk('รับทราบครับ ยังไม่แก้เว็บตามที่เลือกไว้', 'HOLD_MUTATION');
+        return talk('ยังไม่แก้เว็บตามที่เลือกไว้ครับ', 'HOLD_MUTATION');
       }
       return talk('รับทราบครับ', discourse.act);
     case 'PAUSE':
@@ -361,7 +361,7 @@ function inspect(state: ConversationState, text: string): IntentResolution {
     const file = /ใช้จริงไหม/iu.test(text) ? (state.referents.this_file || 'src/App.jsx') : 'package.json';
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_PACKAGE');
   }
-  if (/function ไหน|ฟังก์ชันไหน|which function|ไฟล์ไหน.*(จัดการ|todo)/iu.test(text)) {
+  if (/function ไหน|ฟังก์ชันไหน|ส่วนไหน|which (?:function|part)|ไฟล์ไหน.*(จัดการ|todo)/iu.test(text)) {
     const file = state.referents.this_file || 'src/App.jsx';
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_SYMBOL');
   }
