@@ -177,11 +177,20 @@ test('path traversal, arbitrary shell, and unregistered scripts are rejected', (
 
 test('typed npm install stays project-scoped and scripts must be registered', () => {
   const install = typedArgv({ kind: 'npm-install', workspace: '/tmp/project' });
-  assert.equal(install[1], 'install');
+  assert.equal(install.at(-1), 'install');
   assert.equal(install.includes('-g'), false);
   assert.equal(install.includes('exec'), false);
+  assert.equal(install.some(item => item.endsWith('.cmd') || item === 'cmd.exe' || item === 'powershell'), false);
+  if (process.platform === 'win32') {
+    assert.equal(install[0], process.execPath);
+    assert.match(install[1] || '', /npm-cli\.js$/u);
+  } else {
+    assert.equal(install[0], 'npm');
+  }
   const run = typedArgv({ kind: 'npm-run', workspace: '/tmp/project', script: 'test' });
-  assert.deepEqual(run.slice(1, 3), ['run', 'test']);
+  const runAt = run.indexOf('run');
+  assert.ok(runAt >= 0);
+  assert.equal(run[runAt + 1], 'test');
   assert.throws(() => typedArgv({ kind: 'npm-run', workspace: '/tmp/project', script: 'postinstall' }));
 });
 

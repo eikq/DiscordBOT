@@ -69,7 +69,7 @@ export async function executeApprovedBuild(
   result.install = install.evidence;
   emit('ARTIFACT_UPDATED', install.summary, { stage: 'INSTALL', evidence: install.evidence }, 'EXECUTING');
   if (install.failed) {
-    return failStage(plan, result, 'INSTALL', install.evidence!, emit);
+    return failStage(plan, result, 'INSTALL', install.evidence, emit);
   }
 
   const build = await maybeRun(deps, {
@@ -82,7 +82,7 @@ export async function executeApprovedBuild(
   result.build = build.evidence;
   emit('ARTIFACT_UPDATED', build.summary, { stage: 'BUILD', evidence: build.evidence }, 'EXECUTING');
   if (build.failed) {
-    return failStage(plan, result, 'BUILD', build.evidence!, emit);
+    return failStage(plan, result, 'BUILD', build.evidence, emit);
   }
 
   emit('VERIFY_STARTED', 'running project tests', { stage: 'TEST' }, 'VERIFYING');
@@ -104,7 +104,7 @@ export async function executeApprovedBuild(
     evidence: tests.evidence,
   }, 'VERIFYING');
   if (tests.failed) {
-    return failStage(plan, result, 'TEST', tests.evidence!, emit);
+    return failStage(plan, result, 'TEST', tests.evidence, emit);
   }
 
   if (deps.devServers && !skipLiveCommandsInTests()) {
@@ -162,7 +162,20 @@ async function maybeRun(
     };
   }
   if (!deps.runner) {
-    return { failed: true, summary: `typed ${input.kind} runner is not attached` };
+    return {
+      evidence: {
+        commandType: input.kind === 'install' ? 'npm-install' : input.kind === 'test' ? 'node-test' : 'npm-run',
+        argv: ['typed-runner'],
+        workspace: resultWorkspaceFallback(deps),
+        exitCode: null,
+        durationMs: 0,
+        stdoutSummary: '',
+        stderrSummary: `typed ${input.kind} runner is not attached`,
+        passed: false,
+      },
+      failed: true,
+      summary: `typed ${input.kind} runner is not attached`,
+    };
   }
   try {
     const evidence = await input.run();
@@ -177,23 +190,51 @@ async function maybeRun(
           : `${input.kind} exit ${evidence.exitCode}`,
     };
   } catch (error) {
-    return { failed: true, summary: error instanceof Error ? error.message : String(error) };
+    const summary = error instanceof Error ? error.message : String(error);
+    return {
+      evidence: {
+        commandType: input.kind === 'install' ? 'npm-install' : input.kind === 'test' ? 'node-test' : 'npm-run',
+        argv: ['typed-runner'],
+        workspace: resultWorkspaceFallback(deps),
+        exitCode: null,
+        durationMs: 0,
+        stdoutSummary: '',
+        stderrSummary: summary,
+        passed: false,
+      },
+      failed: true,
+      summary,
+    };
   }
+}
+
+function resultWorkspaceFallback(deps: ApprovedBuildRuntime): string {
+  return deps.workspace.sandboxRoot;
 }
 
 function failStage(
   plan: BuildPlan,
   result: ApprovedBuildResult,
   stage: string,
-  evidence: ProjectCommandEvidence,
+  evidence: ProjectCommandEvidence | undefined,
   emit: (type: JarvisOperationEventType, summary: string, payload?: Record<string, unknown>, visualState?: string) => void,
 ): ApprovedBuildResult {
-  const correction = correctionProposalFromFailure({ evidence, workspace: result.workspace });
-  emit('PLAN_STAGE_FAILED', correction.summary, { stage, evidence, correction }, 'WARNING');
+  const safeEvidence: ProjectCommandEvidence = evidence ?? {
+    commandType: stage === 'INSTALL' ? 'npm-install' : stage === 'TEST' ? 'node-test' : 'npm-run',
+    argv: ['typed-runner'],
+    workspace: result.workspace,
+    exitCode: null,
+    durationMs: 0,
+    stdoutSummary: '',
+    stderrSummary: `${stage} failed without command evidence`,
+    passed: false,
+  };
+  const correction = correctionProposalFromFailure({ evidence: safeEvidence, workspace: result.workspace });
+  emit('PLAN_STAGE_FAILED', correction.summary, { stage, evidence: safeEvidence, correction }, 'WARNING');
   return {
     ...result,
     failedStage: stage,
-    failureClass: classifyProjectFailure(evidence),
+    failureClass: classifyProjectFailure(safeEvidence),
     correction,
     plan: {
       ...plan,

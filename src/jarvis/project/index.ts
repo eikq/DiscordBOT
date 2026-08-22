@@ -23,6 +23,7 @@ export {
   createFakeCommandRunner,
   createProjectCommandRunner,
   looksLikeShellMetachar,
+  npmInvocationPrefix,
   skipLiveCommandsInTests,
   typedArgv,
 } from './commands';

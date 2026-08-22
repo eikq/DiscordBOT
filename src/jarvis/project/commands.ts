@@ -67,8 +67,19 @@ async function runTypedCommand(request: ProjectCommandRequest, now: () => number
   };
 }
 
+export function npmInvocationPrefix(): string[] {
+  if (process.platform !== 'win32') return ['npm'];
+  // Node on Windows cannot spawn npm.cmd with shell:false (EINVAL). Stay
+  // shell-free by invoking npm-cli.js through the current node.exe.
+  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  if (!fs.existsSync(npmCli)) {
+    throw new ProjectPathError('NPM_CLI_MISSING', 'npm CLI was not found beside node.');
+  }
+  return [process.execPath, npmCli];
+}
+
 export function typedArgv(request: ProjectCommandRequest): string[] {
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const npm = npmInvocationPrefix();
   if (request.kind === 'npm-install' || request.kind === 'npm-ci') {
     const mode: ProjectInstallMode = request.kind === 'npm-ci' ? 'ci' : 'install';
     if (!ALLOWED_INSTALL_MODES.includes(mode)) {
@@ -77,7 +88,7 @@ export function typedArgv(request: ProjectCommandRequest): string[] {
     if (request.extraArgs?.length) {
       throw new ProjectPathError('ARBITRARY_SHELL_REJECTED', 'Package install does not accept extra arguments.');
     }
-    return [npm, mode];
+    return [...npm, mode];
   }
   if (request.kind === 'npm-run') {
     const script = request.script || '';
@@ -88,7 +99,7 @@ export function typedArgv(request: ProjectCommandRequest): string[] {
     if (extra.some(arg => looksLikeShellMetachar(arg))) {
       throw new ProjectPathError('ARBITRARY_SHELL_REJECTED', 'Script extra arguments cannot contain a shell.');
     }
-    return extra.length ? [npm, 'run', script, '--', ...extra] : [npm, 'run', script];
+    return extra.length ? [...npm, 'run', script, '--', ...extra] : [...npm, 'run', script];
   }
   if (request.kind === 'node-test') {
     const relative = request.script || 'tests/smoke.test.mjs';
@@ -153,7 +164,11 @@ function spawnCaptured(input: {
     }, input.timeoutMs);
     child.on('error', error => {
       clearTimeout(timer);
-      reject(error);
+      resolve({
+        exitCode: null,
+        stdout,
+        stderr: appendLimited(stderr, error instanceof Error ? error.message : String(error)),
+      });
     });
     child.on('close', code => {
       clearTimeout(timer);
