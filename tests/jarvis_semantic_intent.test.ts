@@ -349,8 +349,8 @@ test('30 existing voice families still classify the 28-item cues', () => {
 });
 
 test('website placement uses trusted browser process and does not re-open', () => {
-  assert.equal(processNameForUrl('https://www.roblox.com'), 'msedge');
-  assert.equal(processNameForUrl('https://www.youtube.com'), 'msedge');
+  assert.equal(processNameForUrl('https://www.roblox.com'), 'chrome');
+  assert.equal(processNameForUrl('https://www.youtube.com'), 'chrome');
   assert.equal(processNameForUrl('javascript:alert(1)'), null);
   const decision = new PermissionPolicy().evaluate({
     capabilityId: DESKTOP_PLACE_WINDOW,
