@@ -3,7 +3,39 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — persistent permission + typed software builder runtime
+## This turn — live software builder acceptance
+
+Branch: `local/jarvis-persistent-permission-builder-runtime-v1-2026-08-22`
+started at HEAD `bb8ad56861fac10fddd966568ba5fefe6269f841`. Did not
+modify `main`. Did not push. Not a new architecture phase.
+
+Live Presence: `http://127.0.0.1:3012/jarvis` session `jarvis-lab`.
+`JARVIS_STANDALONE=1` `JARVIS_LIVE_NPM=1`. llama.cpp stayed on
+`http://127.0.0.1:8086/v1` model `qwen38-cyber` (`MODEL_READY`).
+
+Canonical live goal “สร้างเว็บ todo แบบ modern ให้ผม”:
+
+- `goalId=BUILD_WEBSITE`
+- `planId=plan_d10f1b4c-6d05-46b4-a526-41ecbff3106e`
+- `slug=todo-modern`
+- workspace `data/jarvis/builds/todo-modern/`
+- proposal `ap-17efcac7-e4f5-484d-ad10-6e550b1e41e7`
+- lease `lease_b36148ce192d3ed4` THIS_GOAL, revision 2 before and after restart
+- SSE `PERMISSION_SNAPSHOT` token hash stable across refresh
+- Owner UI grant history: `[อนุญาตงานนี้]` `source=ui_action`
+
+Same-branch live fix: Windows `spawn EINVAL` on `npm.cmd` with `shell:false`.
+Typed runner now invokes `node.exe` + `npm-cli.js` (still no shell, no
+`npm exec`). Failed install produced `spawn EINVAL`; after the fix,
+`npm install` exit 0 (65 packages / 12s), `npm run build` exit 0,
+`npm run test` exit 0 (`smoke ok`), preview `http://127.0.0.1:4173`
+HTTP 200 title `Todo App`, listen `127.0.0.1` only. Restart emitted
+`LEASE_REVALIDATED` for the same lease id. `project.stopDevServer`
+stopped `dev_1a028b9829b_4173` with no new permission prompt.
+
+CLICK / TYPE / SUBMIT remain unavailable.
+
+## Previous — persistent permission + typed software builder runtime
 
 Branch: `local/jarvis-persistent-permission-builder-runtime-v1-2026-08-22`
 from exact source HEAD `7f7f55b3fcb4d4aeffeef9636a4a972387b45006`
