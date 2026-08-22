@@ -18,7 +18,7 @@ import type { IntentResolution } from '../intent/types';
 import type { ConversationState, DiscourseAct, DiscourseInterpretation, OfferedOption } from './types';
 import { uniqueSlugOrClarify, restoreProject, projectForOwnerText } from './referents';
 import { interpretDiscourse } from './discourse';
-import { sanitizedRecent, isPermissionPrompt, extractComparisonOptions, pickRecommendedOption } from './view';
+import { sanitizedRecent, isPermissionPrompt, isReportableFailure, extractComparisonOptions, pickRecommendedOption } from './view';
 
 export function bindDiscourseToIntent(
   discourse: DiscourseInterpretation,
@@ -431,7 +431,7 @@ function bindConditional(state: ConversationState, discourse: DiscourseInterpret
     return talk('จำไว้ครับ ถ้าขั้นตอนไหน fail จะหยุดแล้วบอกสาเหตุ ไม่ทำขั้นถัดไป', 'CONDITIONAL_STOP_ON_FAIL');
   }
   if (thenActs.includes('MODIFY_PROJECT')) {
-    const problem = (last && last.ok === false) || Boolean(state.lastError);
+    const problem = (last && last.ok === false) || isReportableFailure(state.lastError?.summary);
     if (!problem) return talk('ยังไม่เจอปัญหาที่ต้องแก้ครับ', 'CONDITIONAL_HELD');
     return applyChange(state, discourse.change || '', discourse);
   }
@@ -642,7 +642,7 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
     return talk(`${last.kind} ล่าสุด${last.slug ? ` ของ ${last.slug}` : ''} ${verdict}${last.summary ? ` · ${last.summary}` : ''}`, 'STATUS_QUERY');
   }
   if (focus === 'failure') {
-    if (state.lastError && !isPermissionPrompt(state.lastError.summary)) {
+    if (isReportableFailure(state.lastError?.summary) && state.lastError) {
       return talk(state.lastError.summary, 'STATUS_QUERY');
     }
     if (state.recentVerification?.ok === false) {
@@ -657,7 +657,7 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
         'RECOVERY_PLAN',
       );
     }
-    const cause = state.lastError && !isPermissionPrompt(state.lastError.summary)
+    const cause = isReportableFailure(state.lastError?.summary) && state.lastError
       ? state.lastError.summary
       : state.recentVerification?.ok === false
         ? `${state.recentVerification.kind}: ${state.recentVerification.summary || 'ยังไม่ผ่าน'}`
@@ -803,7 +803,7 @@ function dailySummaryLine(state: ConversationState): string {
     state.activePreview?.url ? `preview ${state.activePreview.url}` : '',
   ].filter(Boolean);
   const pending = pendingWorkBits(state);
-  const failed = state.lastError && !isPermissionPrompt(state.lastError.summary)
+  const failed = isReportableFailure(state.lastError?.summary) && state.lastError
     ? state.lastError.summary
     : state.recentVerification?.ok === false
       ? `${state.recentVerification.kind} ยังไม่ผ่าน`

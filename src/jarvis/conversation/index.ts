@@ -29,6 +29,7 @@ export {
   compactRecent,
   isOperationalNoise,
   isPermissionPrompt,
+  isReportableFailure,
   sanitizedRecent,
   compactResearchSpeak,
   compactOwnerSpeak,

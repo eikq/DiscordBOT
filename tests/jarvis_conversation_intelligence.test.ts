@@ -1120,6 +1120,17 @@ test('missing recent errors are not invented, and cancel clears a pending rewrit
   );
   assert.match(String(none?.userMessage), /ยังไม่มี failure/);
 
+  const noise = softwareState({
+    lastError: { summary: 'A scoped open needs an application or URL.', at: 9 },
+  });
+  const realCheck = bindDiscourseToIntent(
+    interpretDiscourse('โอเค ตอนนี้เช็กของจริงว่ามีปัญหาไหม', noise),
+    noise,
+    'โอเค ตอนนี้เช็กของจริงว่ามีปัญหาไหม',
+  );
+  assert.match(String(realCheck?.userMessage || ''), /ยังไม่มี failure/);
+  assert.doesNotMatch(String(realCheck?.userMessage || ''), /scoped open/i);
+
   const pending = softwareState({ pendingChange: 'เพิ่ม animation แต่ไม่เอาหน้า contact', lastDiscourse: 'MODIFY_PROJECT' });
   const cancel = interpretDiscourse('เมื่อกี้ cancel ก่อน', pending);
   assert.equal(cancel.act, 'CANCEL');

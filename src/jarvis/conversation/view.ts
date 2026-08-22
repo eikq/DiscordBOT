@@ -28,6 +28,10 @@ export function isPermissionPrompt(summary: string | undefined): boolean {
   return /ต้องขอสิทธิ์|กดอนุญาต|Waiting THIS_GOAL|รออนุญาต/i.test(summary);
 }
 
+export function isReportableFailure(summary: string | undefined): boolean {
+  return Boolean(summary) && !isPermissionPrompt(summary) && !isOperationalNoise(summary);
+}
+
 export function compactRecent(summary: string): string {
   const clean = summary.replace(/\s+/g, ' ').trim();
   return clean.length > 88 ? `${clean.slice(0, 85)}…` : clean;

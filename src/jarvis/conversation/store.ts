@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { emptyConversationState, type ConversationState, type ProjectRecord } from './types';
-import { isPermissionPrompt } from './view';
+import { isReportableFailure } from './view';
 
 export type ConversationHydration = {
   sessionId: string;
@@ -50,9 +50,9 @@ export class ConversationStateStore {
     const preserveTopic = current.activeTopic === 'research'
       || current.activeTopic === 'chat'
       || current.activeTopic === 'queue';
-    const lastError = isPermissionPrompt(current.lastError?.summary)
-      ? undefined
-      : current.lastError;
+    const lastError = isReportableFailure(current.lastError?.summary)
+      ? current.lastError
+      : undefined;
     return this.put({
       ...current,
       projects,
