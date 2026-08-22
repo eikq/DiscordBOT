@@ -21,6 +21,7 @@ import type { ConversationState } from '../src/jarvis/conversation';
 import { DESKTOP_OPEN_SCOPED_RESOURCE } from '../src/jarvis/capabilities/actions/constants';
 import { PROJECT_BUILD, PROJECT_READ_FILE, PROJECT_RUN_TESTS, PROJECT_START_DEV_SERVER, PROJECT_STOP_DEV_SERVER } from '../src/jarvis/project/constants';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../src/jarvis/build/constants';
+import { RESEARCH_CURRENT } from '../src/jarvis/research/constants';
 import { resolveUserIntent } from '../src/jarvis/intent';
 import { compactCapabilityCatalog } from '../src/jarvis/intent/catalog';
 import { presenceShouldForwardToJarvis } from '../src/jarvis/ui/presence/presenceRuntime';
@@ -925,4 +926,53 @@ test('research speak stays a synthesis, not a URL dump', () => {
   assert.match(spoken, /Framer Motion/);
   assert.doesNotMatch(spoken, /https:\/\//);
   assert.ok(spoken.length < dump.length);
+});
+
+test('a numbered mission list is a queue even if the last line is preview', () => {
+  const list = [
+    'เพิ่มหน้า Blog',
+    'เพิ่ม search project',
+    'ปรับ footer',
+    'รัน test',
+    'build',
+    'เปิด preview',
+  ].join('\n');
+  const discourse = interpretDiscourse(list, softwareState());
+  assert.equal(discourse.act, 'QUEUE');
+  assert.equal(discourse.queueItems?.length, 6);
+  const bound = bindDiscourseToIntent(discourse, softwareState(), list);
+  assert.equal(bound?.reasonCode, 'QUEUE_CAPTURED');
+  assert.match(String(bound?.userMessage), /รับคิว 6/);
+});
+
+test('scope-to-this-project is a permission bound, not official-source research', () => {
+  const state = softwareState({ lastResearchQuery: 'framer vs gsap'.repeat(40) });
+  const scoped = bindDiscourseToIntent(
+    interpretDiscourse('งั้นเอาเฉพาะ project นี้', state),
+    state,
+    'งั้นเอาเฉพาะ project นี้',
+  );
+  assert.equal(scoped?.reasonCode, 'PERMISSION_SCOPED');
+  assert.equal(scoped?.capabilityId, undefined);
+});
+
+test('research recommendations ignore leftover project-inventory options', () => {
+  const state = softwareState({
+    lastDiscourse: 'RESEARCH',
+    activeTopic: 'research',
+    lastResearchQuery: 'portfolio best practice 2026',
+    offeredOptions: [
+      { index: 1, label: 'Todo App (todo-modern)' },
+      { index: 2, label: 'Todo App (todo)' },
+      { index: 3, label: 'Portfolio (jarvis-portfolio-modern)' },
+    ],
+  });
+  const picked = bindDiscourseToIntent(
+    interpretDiscourse('เลือก 3 อย่างที่คุ้มสุด', state),
+    state,
+    'เลือก 3 อย่างที่คุ้มสุด',
+  );
+  assert.notEqual(picked?.reasonCode, 'RESEARCH_RECOMMEND');
+  assert.equal(picked?.capabilityId, RESEARCH_CURRENT);
+  assert.ok(String(picked?.arguments?.query || '').length <= 200);
 });

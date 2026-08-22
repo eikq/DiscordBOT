@@ -15,7 +15,7 @@ import {
 import { DESKTOP_OPEN_SCOPED_RESOURCE, JARVIS_RUNTIME_STATUS } from '../capabilities/actions/constants';
 import { RESEARCH_CURRENT } from '../research/constants';
 import type { IntentResolution } from '../intent/types';
-import type { ConversationState, DiscourseAct, DiscourseInterpretation } from './types';
+import type { ConversationState, DiscourseAct, DiscourseInterpretation, OfferedOption } from './types';
 import { uniqueSlugOrClarify, restoreProject } from './referents';
 import { interpretDiscourse } from './discourse';
 import { sanitizedRecent, isPermissionPrompt, extractComparisonOptions, pickRecommendedOption } from './view';
@@ -55,7 +55,7 @@ export function bindDiscourseToIntent(
     case 'NEGATE':
       return talk('จำข้อจำกัดนั้นไว้แล้วครับ ยังไม่แก้ไฟล์จนกว่าจะให้ทำ', 'CONSTRAINT_NOTED');
     case 'STATUS_QUERY':
-      return bindStatus(state, discourse);
+      return bindStatus(state, discourse, text);
     case 'SWITCH_TOPIC':
       return talk('ได้ครับ เรื่องอะไร?', 'SWITCH_TOPIC');
     case 'RESTORE_TOPIC':
@@ -350,9 +350,11 @@ function selectOrdinal(state: ConversationState, discourse: DiscourseInterpretat
     .filter((item): item is number => Number.isFinite(item) && item > 0);
   const ordinal = ordinals[0];
   if (!ordinal) return clarify('อันไหนที่หมายถึงครับ?', 'ORDINAL_MISSING');
-  if (state.offeredOptions.length) {
+  const pool = usableChoiceOptions(state);
+  const source = pool.length ? pool : state.offeredOptions;
+  if (source.length) {
     const picked = ordinals
-      .map(index => state.offeredOptions.find(item => item.index === index) || state.offeredOptions[index - 1])
+      .map(index => source.find(item => item.index === index) || source[index - 1])
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
     if (!picked.length) return clarify('ไม่มีตัวเลือกนั้นครับ', 'ORDINAL_UNKNOWN');
     const labels = picked.map(item => item.label);
@@ -566,7 +568,7 @@ function rememberedLine(state: ConversationState): string {
   return bits.length ? bits.join(' · ') : 'ยังไม่มี memory ที่เลือกจำไว้ครับ';
 }
 
-function bindStatus(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution {
+function bindStatus(state: ConversationState, discourse: DiscourseInterpretation, text = ''): IntentResolution {
   const focus = discourse.statusFocus || 'progress';
   if (focus === 'readiness') {
     return capability(JARVIS_RUNTIME_STATUS, {}, 'CONVERSATION_READINESS');
@@ -619,13 +621,26 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
     if (discourse.change === 'QWEN_CANNOT_GRANT') {
       return talk('Qwen เพิ่มสิทธิ์เองไม่ได้ครับ ต้องเป็น owner อนุญาตตามคำขอที่ค้างอยู่เท่านั้น', 'QWEN_CANNOT_GRANT');
     }
+    if (discourse.change === 'SCOPE_PROJECT') {
+      const project = state.projects.find(item => item.slug === state.activeProjectSlug);
+      return talk(
+        `จำกัดสิทธิ์ไว้ที่ ${project?.label || 'โปรเจกต์ที่เปิดอยู่'} ครับ ไม่ขยายออกนอก sandbox นี้`,
+        'PERMISSION_SCOPED',
+      );
+    }
     if (state.pendingPermission) {
       return talk(`มีคำขอสิทธิ์ค้างอยู่ proposal ${state.pendingPermission.proposalId} ขอบเขต THIS_GOAL ของโปรเจกต์นี้`, 'STATUS_QUERY');
     }
-    const project = state.projects.find(item => item.slug === state.activeProjectSlug);
+    const named = state.projects.find(item => {
+      const hay = `${item.label} ${item.slug} ${item.kind}`;
+      return /portfolio|เว็บ/iu.test(text) && /portfolio|website|เว็บ/iu.test(hay)
+        || (item.slug && text.toLocaleLowerCase().includes(item.slug.toLocaleLowerCase()))
+        || (item.label && text.toLocaleLowerCase().includes(item.label.toLocaleLowerCase()));
+    });
+    const project = named || state.projects.find(item => item.slug === state.activeProjectSlug);
     return talk(
       project
-        ? `ตอนนี้สิทธิ์อยู่ที่โปรเจกต์ ${project.label} สำหรับ plan/test/build/preview ใน sandbox นี้ ไม่ครอบคลุมทั้งเครื่อง`
+        ? `สิทธิ์ของ ${project.label} จำกัดที่ plan/test/build/preview ใน sandbox นี้ ไม่ครอบคลุมทั้งเครื่อง`
         : 'ตอนนี้ไม่มีคำขอสิทธิ์ค้าง และไม่มีสิทธิ์ทั้งเครื่อง',
       'STATUS_QUERY',
     );
@@ -766,11 +781,11 @@ function researchQuery(
   discourse: DiscourseInterpretation,
 ): string {
   const next = (discourse.researchQuery || text).trim();
-  if (extractComparisonOptions(next).length >= 2) return next.slice(0, 240);
+  if (extractComparisonOptions(next).length >= 2) return next.slice(0, 200);
   const stem = state.lastResearchQuery
     || (extractComparisonOptions(state.lastOwnerIntent).length ? state.lastOwnerIntent : '');
   if (stem && stem !== next) {
-    return `${stem} | ${next}`.replace(/\s+/g, ' ').trim().slice(0, 240);
+    return `${stem} | ${next}`.replace(/\s+/g, ' ').trim().slice(0, 200);
   }
   return next.slice(0, 200);
 }
@@ -780,9 +795,7 @@ function recommendResearch(
   text: string,
   discourse: DiscourseInterpretation,
 ): IntentResolution {
-  const options = state.offeredOptions.length
-    ? state.offeredOptions
-    : extractComparisonOptions(state.lastResearchQuery || state.lastOwnerIntent);
+  const options = usableChoiceOptions(state);
   const wantCount = Number((text.match(/เลือก\s*(\d+)\s*อย่าง/u) || [])[1] || 0);
   if (wantCount >= 2 && options.length >= wantCount) {
     const picked = options.slice(0, wantCount);
@@ -794,7 +807,7 @@ function recommendResearch(
   if (wantCount >= 2 && state.lastResearchQuery) {
     return capability(
       RESEARCH_CURRENT,
-      { query: `${state.lastResearchQuery} list ${wantCount} concise numbered recommendations for this portfolio`.slice(0, 240) },
+      { query: `${state.lastResearchQuery} list ${wantCount} concise numbered recommendations for this portfolio`.slice(0, 200) },
       'CONVERSATION_RESEARCH_RECOMMEND',
     );
   }
@@ -808,11 +821,21 @@ function recommendResearch(
   if (state.lastResearchQuery) {
     return capability(
       RESEARCH_CURRENT,
-      { query: `${state.lastResearchQuery} recommend one lightweight option for a portfolio website`.slice(0, 240) },
+      { query: `${state.lastResearchQuery} recommend one lightweight option for a portfolio website`.slice(0, 200) },
       'CONVERSATION_RESEARCH_RECOMMEND',
     );
   }
   return capability(RESEARCH_CURRENT, { query: researchQuery(state, text, discourse) }, 'CONVERSATION_RESEARCH');
+}
+
+function usableChoiceOptions(state: ConversationState): OfferedOption[] {
+  const options = state.offeredOptions.filter(item => !looksLikeInventoryOption(item.label));
+  if (options.length) return options;
+  return extractComparisonOptions(state.lastResearchQuery || state.lastOwnerIntent);
+}
+
+function looksLikeInventoryOption(label: string): boolean {
+  return /\([a-z0-9-]+\)(?:\s*·\s*active)?$/iu.test(label.trim()) || / · active$/iu.test(label);
 }
 
 export function nextActsForConditional(discourse: DiscourseInterpretation | DiscourseAct): DiscourseAct[] {

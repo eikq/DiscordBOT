@@ -898,7 +898,7 @@ export class JarvisLabRuntime {
     await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     const speech = await this.maybeSpeak(output.presented.text, output.request.requestId, output.presented.voiceProfileId, input.speak);
-    const finalPayload = {
+    return emitFinal({
       ...adjusted,
       coreState: 'complete' as const,
       presentation: await this.presentationStatus(prepared.sessionId),
@@ -909,10 +909,7 @@ export class JarvisLabRuntime {
       affectStyle: this.workCenter()?.affect.style(),
       ...(prepared.pendingGoal ? { pendingGoal: prepared.pendingGoal } : {}),
       ...(speech ? { speech } : {}),
-    };
-    emit({ type: 'final', payload: finalPayload });
-    if (speech) emit({ type: 'speech', payload: speech });
-    return this.finalizeVisibleTurn(sessionId, finalPayload);
+    });
   }
 
   public async cancelSpeech(turnId: string): Promise<void> {

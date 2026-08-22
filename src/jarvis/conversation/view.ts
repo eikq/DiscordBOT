@@ -102,12 +102,18 @@ export function optionsFromReply(text: string): OfferedOption[] {
     if (!match) return [];
     const index = Number(match[1] || match[2] || 0);
     if (!index) return [];
-    return [{ index, label: match[3]!.trim() }];
+    const label = match[3]!.trim();
+    if (looksLikeInventoryLabel(label)) return [];
+    return [{ index, label }];
   });
   if (numbered.length) return numbered.slice(0, 8);
   const comparison = extractComparisonOptions(text);
   if (comparison.length) return comparison;
   return extractListedOptions(text);
+}
+
+function looksLikeInventoryLabel(label: string): boolean {
+  return /\([a-z0-9-]+\)(?:\s*·\s*active)?$/iu.test(label.trim()) || / · active$/iu.test(label);
 }
 
 function extractListedOptions(text: string): OfferedOption[] {

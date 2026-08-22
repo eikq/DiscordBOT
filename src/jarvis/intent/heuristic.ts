@@ -308,9 +308,9 @@ function resolveFollowUp(
 ): IntentResolution | null {
   if (!context) return null;
   const raw = text.trim();
-  if (context.recentResearchQuery && /เอาเฉพาะ|ทางการ|official|nvidia โดยตรง/iu.test(raw) && catalogHas(catalog, RESEARCH_CURRENT)) {
+  if (context.recentResearchQuery && /เอาเฉพาะ\s*(?:แหล่ง|source|official)|ทางการ|official docs|nvidia โดยตรง/iu.test(raw) && catalogHas(catalog, RESEARCH_CURRENT)) {
     return capability(RESEARCH_CURRENT, {
-      query: context.recentResearchQuery,
+      query: String(context.recentResearchQuery || '').slice(0, 200),
       officialOnly: true,
       freshness: 'latest',
       reuseLast: true,
@@ -318,7 +318,7 @@ function resolveFollowUp(
   }
   if (context.lastCapabilityId?.startsWith('research.') && /show me the sources|ขอดูแหล่งข้อมูล|summarize what you found|สรุปสั้น|keep researching|ค้นต่อ/iu.test(raw) && catalogHas(catalog, RESEARCH_CURRENT)) {
     return capability(RESEARCH_CURRENT, {
-      query: context.recentResearchQuery || raw,
+      query: String(context.recentResearchQuery || raw).slice(0, 200),
       reuseLast: true,
     }, 'CONTEXT_RESEARCH_FOLLOWUP', 'HIGH', true, 'context');
   }
@@ -327,7 +327,7 @@ function resolveFollowUp(
   }
   if (context.lastCapabilityId?.startsWith('research.') && /เก่าแค่ไหน|ล่าสุดเมื่อ|how recent/iu.test(raw) && catalogHas(catalog, RESEARCH_CURRENT)) {
     return capability(RESEARCH_CURRENT, {
-      query: context.recentResearchQuery || raw,
+      query: String(context.recentResearchQuery || raw).slice(0, 200),
       freshness: 'latest',
       reuseLast: true,
     }, 'CONTEXT_RESEARCH_FRESHNESS', 'HIGH', true, 'context');

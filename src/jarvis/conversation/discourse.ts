@@ -49,6 +49,9 @@ export function interpretDiscourse(
   if (isUnscopedAuthority(raw)) {
     return { ...act('STATUS_QUERY'), statusFocus: 'permission', change: 'REFUSE_GLOBAL' };
   }
+  if (isProjectScopedGrant(raw)) {
+    return { ...act('STATUS_QUERY'), statusFocus: 'permission', change: 'SCOPE_PROJECT' };
+  }
   if (isSelfGrantQuery(raw)) {
     return { ...act('STATUS_QUERY'), statusFocus: 'permission', change: 'QWEN_CANNOT_GRANT' };
   }
@@ -83,6 +86,11 @@ export function interpretDiscourse(
   const chain = parseOperationChain(raw);
   if (chain) return chain;
 
+  const queueItems = parseQueue(raw);
+  if (queueItems) {
+    return { act: 'QUEUE', queueItems, confidence: 'HIGH', requiresClarification: false, source: 'discourse' };
+  }
+
   if (isStopPreview(raw)) return act('STOP_PREVIEW');
   if (isRestartPreview(raw)) return act('RESTART_PREVIEW');
   if (isPreview(raw, state)) return act('PREVIEW');
@@ -106,11 +114,6 @@ export function interpretDiscourse(
     return { ...act('CORRECT'), change: raw };
   }
   if (isPlanRequest(raw) && !hasActiveQueue(state)) return act('PLAN_REQUEST');
-
-  const queueItems = parseQueue(raw);
-  if (queueItems) {
-    return { act: 'QUEUE', queueItems, confidence: 'HIGH', requiresClarification: false, source: 'discourse' };
-  }
 
   if (isDestructiveAmbiguous(raw)) {
     return {
@@ -405,6 +408,10 @@ function isMostlyOrdinal(text: string): boolean {
 
 function isUnscopedAuthority(text: string): boolean {
   return /ทุกไฟล์ในเครื่อง|all files on (?:this |the )?(?:machine|computer)|unrestricted (?:filesystem|file access)|แก้ได้ทั้งเครื่อง/iu.test(text);
+}
+
+function isProjectScopedGrant(text: string): boolean {
+  return /เอาเฉพาะ\s*(?:project|โปรเจกต์)\s*นี้|เฉพาะโปรเจกต์นี้|only this project/iu.test(text);
 }
 
 function isSelfGrantQuery(text: string): boolean {
