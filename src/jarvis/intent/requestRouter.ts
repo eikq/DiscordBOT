@@ -1,3 +1,4 @@
+import { shouldAvoidGenericRefusal } from '../policy/permissionFirst';
 import { classifyActionability } from './classify';
 import type { ActionabilityClass, IntentKind } from './types';
 
@@ -27,7 +28,7 @@ const GREETING = /^(สวัสดี|hello|hi|hey|yo|หวัดดี)(\s|$|
 const HOW_ARE_YOU = /how are you|เป็นไง|สบายดีไหม|what's up|whats up/iu;
 const ACK = /^(ok|okay|thanks|thank you|ครับ|ค่ะ|ได้|รับทราบ|👍+)$/iu;
 const EXPLAIN = /อธิบาย|explain|คืออะไร|what is|what's|how does|how do\b/iu;
-const RESEARCH = /\bresearch\b|ค้นคว้า|เอกสารล่าสุด|latest .+ (doc|documentation|docs|paper)|look up the latest|official (docs|documentation)/iu;
+const RESEARCH = /\bresearch\b|ค้นคว้า|หาข้อมูล|เอกสารล่าสุด|latest .+ (doc|documentation|docs|paper)|look up the latest|official (docs|documentation)/iu;
 const WORK = /\binspect\b|\bfix\b|\bimplement\b|\bpatch\b|\brefactor\b|แก้บั[กค]|หาไฟล์แล้วแก้|inspect these files/iu;
 const CAPABILITY_MUTATION = /change (this |the )?system setting|ตั้งค่า|toggle|configure|เปิดการตั้งค่า|change .+ setting/iu;
 const NOISE = /^[\s\p{P}\p{S}]*$/u;
@@ -101,6 +102,15 @@ export function routeJarvisRequest(input: {
       agentic: true,
       reason: 'capability_mutation',
       confidence: 0.84,
+    };
+  }
+  if (shouldAvoidGenericRefusal(text)) {
+    return {
+      route: 'CAPABILITY',
+      socialAction: 'SPEAK',
+      agentic: true,
+      reason: 'safe_capability_route',
+      confidence: 0.82,
     };
   }
   if (EXPLAIN.test(text)) {

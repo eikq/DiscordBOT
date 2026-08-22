@@ -3,7 +3,54 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Qwen runtime, conversation memory, permission-first build studio
+## This turn — live acceptance of qwen-memory-build-studio
+
+Branch: `local/jarvis-qwen-memory-build-studio-v1-2026-08-22`.
+Started at HEAD `94740198af05dc4d7c1b2484ab4adfdddb38a686`. Did not
+modify `main`. Did not push. Did not start a new feature phase.
+
+Live Presence: `http://127.0.0.1:3011/jarvis` session `jarvis-lab`.
+llama.cpp stayed on `http://127.0.0.1:8086/v1` model `qwen38-cyber`.
+Port 3000 was left alone.
+
+Verification after live fixes: `npx tsc --noEmit` PASS; focused
+studio/presence/intent tests PASS; `npm run test:cloud` **704 / 704**
+PASS (was 703); `npm run build` PASS (same Vite/`import.meta` warning).
+
+Live-acceptance fixes on this same branch (not a redesign):
+
+- Presence Build/Plan hydrates from persisted plans + `/api/jarvis/events`
+  even when the tab is hidden; HUD z-index sits above WebGL.
+- `software.applyBuild` no longer sends `slug` (schema allowlist is
+  `brief|planId|goalId`). Confirm copy still names
+  `data/jarvis/builds/<slug>/`.
+- Write-code / `รัน test` route to `software.applyBuild` (`ASK_PERMISSION`)
+  instead of generic conversation. `หาข้อมูล` / documentation uses
+  `research.current` (`EXECUTE`).
+
+LIVE evidence (session `jarvis-lab`):
+
+- MODEL: `GET /api/jarvis/status` `llm.health=MODEL_READY`,
+  `model=qwen38-cyber`, provider openai-compatible. No `reasoning_content`
+  in visible turns or Obsidian.
+- HISTORY: SQLite one completed row per visible turn; restart kept the
+  conversation. 26 turns after J.
+- MEMORY: `owner.pref.reply_style` =
+  `ชอบให้ตอบสั้น ตรง และไม่อธิบายยาวเกินจำเป็น` in SQLite +
+  `data/jarvis/obsidian/Memory/Owner.md`.
+- BUILD: plan `plan_04d722f5-ba88-4351-9d7c-3d8bba355023` COMPLETED
+  under `data/jarvis/builds/jarvis-portfolio-modern/` only after grant.
+  Same-goal approval kept that planId. J1 created a second review plan
+  `plan_d347908e-…` (Todo App) which was not granted.
+- PERMISSION: THIS_GOAL proposal, WRITE_PROJECT + RUN_PROJECT_COMMANDS,
+  no CLICK/TYPE/SUBMIT/UNRESTRICTED_SHELL/ADMIN/GLOBAL_FILESYSTEM.
+  Overlay from HTTP-ask is session-local (`PARTIAL` vs in-page confirm).
+- REFUSAL: J1 EXECUTE planBuild; J2/J3 ASK_PERMISSION applyBuild;
+  J4 EXECUTE research.current. No generic REFUSE.
+
+CLICK / TYPE / SUBMIT remain `PREPARE_CONTRACT`.
+
+## Previous — Qwen runtime, conversation memory, permission-first build studio
 
 Branch: `local/jarvis-qwen-memory-build-studio-v1-2026-08-22` from exact
 perception HEAD `9c5605780124aaccf61d1f692b834bd5624ebcbb`.
@@ -41,12 +88,6 @@ Architecture (see `docs/JARVIS_QWEN_MEMORY_BUILD_STUDIO.md`):
   `data/jarvis/builds/<slug>/`. No unrestricted shell.
 - `/jarvis` Presence adds Build/Plan surface, history HUD, Qwen status
   from real SSE events.
-
-Local LIVE: llama.cpp at `:8086` was **unreachable** on this host during
-acceptance (`Unable to connect to the remote server`). Do **not** mark
-Qwen inference, history UI restart, or build-from-voice as
-`LIVE_VERIFIED`. Persistence/planning/permission behavior is
-`UNIT_VERIFIED` / `OFFLINE_VERIFIED` only.
 
 CLICK / TYPE / SUBMIT remain `PREPARE_CONTRACT`.
 

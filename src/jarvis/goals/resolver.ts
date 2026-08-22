@@ -460,7 +460,7 @@ function extractWorkspaceQuery(text: string): string {
 }
 
 function isResearchIntent(text: string): boolean {
-  return /\bresearch\b|search the (?:web|internet)|look up|find current|current information|latest information|public sources?|official sources?|ค้นคว้า|ค้นเว็บ|ข้อมูลล่าสุด|ข่าวล่าสุด|หาข้อมูล.*(?:เว็บ|ล่าสุด)/iu.test(text);
+  return /\bresearch\b|search the (?:web|internet)|look up|find current|current information|latest information|public sources?|official sources?|ค้นคว้า|ค้นเว็บ|ค้นเอกสาร|ข้อมูลล่าสุด|ข่าวล่าสุด|หาข้อมูล/iu.test(text);
 }
 
 function extractResearchQuery(text: string): string {

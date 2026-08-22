@@ -14,7 +14,7 @@ export type PermissionFirstDecision = {
   reasonCode: string;
 };
 
-const FALSE_REFUSAL_CUES = /create (?:project )?files|write code|run (?:unit )?tests?|start (?:a )?dev server|research documentation|build a website|สร้างไฟล์|เขียนโค้ด|รันเทสต์|สตาร์ท dev|ค้นเอกสาร/iu;
+const FALSE_REFUSAL_CUES = /create (?:project )?files|write code|run (?:the |unit )?tests?|รัน\s*(?:unit\s*)?tests?|start (?:a )?dev server|research documentation|documentation|build a website|สร้างไฟล์|เขียนโค้ด|รันเทสต์|สตาร์ท dev|ค้นเอกสาร|หาข้อมูล/iu;
 
 export function permissionFirstFromCapability(input: {
   capabilityId?: string;

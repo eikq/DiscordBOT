@@ -1,4 +1,4 @@
-import type { VisualWorkflowNode } from '../../build/types';
+import type { BuildPlan, VisualWorkflowNode } from '../../build/types';
 
 export type PresenceBuildNodeState = 'pending' | 'active' | 'complete' | 'failed' | 'waiting-owner';
 
@@ -37,8 +37,11 @@ const NODES: Array<{ id: VisualWorkflowNode; label: string }> = [
 ];
 
 const EVENT_TO_NODE: Record<string, VisualWorkflowNode> = {
-  PLAN_CREATED: 'PLAN',
+  TASK_RECEIVED: 'UNDERSTAND',
+  UNDERSTANDING: 'UNDERSTAND',
+  PLANNING: 'PLAN',
   PLAN_UPDATED: 'PLAN',
+  PLAN_CREATED: 'REVIEW',
   PLAN_APPROVED: 'REVIEW',
   PERMISSION_REQUESTED: 'PERMISSION',
   PERMISSION_GRANTED: 'BUILD',
@@ -51,6 +54,17 @@ const EVENT_TO_NODE: Record<string, VisualWorkflowNode> = {
   PLAN_STAGE_FAILED: 'BUILD',
 };
 
+const PLAN_STATUS_TO_NODE: Record<string, VisualWorkflowNode> = {
+  DRAFT: 'PLAN',
+  READY_FOR_REVIEW: 'REVIEW',
+  APPROVED: 'PERMISSION',
+  WAITING_PERMISSION: 'PERMISSION',
+  EXECUTING: 'BUILD',
+  VERIFYING: 'TEST',
+  COMPLETED: 'DONE',
+  FAILED: 'BUILD',
+};
+
 export function isBuildOperationType(type: string): boolean {
   return Boolean(EVENT_TO_NODE[type]) || type === 'MEMORY_UPDATED' || type === 'MODEL_STATUS_CHANGED';
 }
@@ -61,21 +75,63 @@ export function buildSurfaceFromEvents(
   const relevant = events.filter(item => item.type && EVENT_TO_NODE[item.type]);
   if (!relevant.length) return null;
   const latest = relevant[relevant.length - 1]!;
-  const title = String(latest.payload?.title || latest.payload?.slug || 'Build');
-  const artifact = typeof latest.payload?.slug === 'string' ? `data/jarvis/builds/${latest.payload.slug}` : undefined;
-  const evidence = relevant.map(item => String(item.summary || item.type)).slice(-6);
-  const active = EVENT_TO_NODE[latest.type!] || 'PLAN';
-  const failed = latest.type === 'PLAN_STAGE_FAILED';
-  const done = latest.type === 'PLAN_STAGE_COMPLETED';
+  return surfaceFor({
+    title: String(latest.payload?.title || latest.payload?.slug || 'Build'),
+    slug: typeof latest.payload?.slug === 'string' ? latest.payload.slug : undefined,
+    evidence: relevant.map(item => String(item.summary || item.type)).slice(-6),
+    active: EVENT_TO_NODE[latest.type!] || 'PLAN',
+    failed: latest.type === 'PLAN_STAGE_FAILED',
+    done: latest.type === 'PLAN_STAGE_COMPLETED',
+  });
+}
+
+export function buildSurfaceFromPlan(plan?: Pick<BuildPlan, 'title' | 'slug' | 'status' | 'summary'> | null): PresenceBuildSurface | null {
+  if (!plan) return null;
+  return surfaceFor({
+    title: plan.title,
+    slug: plan.slug,
+    evidence: [plan.summary || plan.status],
+    active: PLAN_STATUS_TO_NODE[plan.status] || 'REVIEW',
+    failed: plan.status === 'FAILED',
+    done: plan.status === 'COMPLETED',
+  });
+}
+
+export function mergePresenceBuildSurface(
+  events: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>,
+  plans: Array<Pick<BuildPlan, 'title' | 'slug' | 'status' | 'summary' | 'updatedAt'>> = [],
+): PresenceBuildSurface | null {
+  return buildSurfaceFromEvents(events) || buildSurfaceFromPlan(plans[0]);
+}
+
+function surfaceFor(input: {
+  title: string;
+  slug?: string;
+  evidence: string[];
+  active: VisualWorkflowNode;
+  failed: boolean;
+  done: boolean;
+}): PresenceBuildSurface {
   const nodes = NODES.map(node => {
     const order = NODES.findIndex(item => item.id === node.id);
-    const activeOrder = NODES.findIndex(item => item.id === active);
+    const activeOrder = NODES.findIndex(item => item.id === input.active);
     let state: PresenceBuildNodeState = 'pending';
-    if (done || order < activeOrder) state = 'complete';
-    else if (order === activeOrder) state = failed ? 'failed' : node.id === 'REVIEW' || node.id === 'PERMISSION' ? 'waiting-owner' : 'active';
+    if (input.done || order < activeOrder) state = 'complete';
+    else if (order === activeOrder) {
+      state = input.failed
+        ? 'failed'
+        : node.id === 'REVIEW' || node.id === 'PERMISSION'
+          ? 'waiting-owner'
+          : 'active';
+    }
     return { ...node, state };
   });
-  return { title, artifact, evidence, nodes };
+  return {
+    title: input.title,
+    artifact: input.slug ? `data/jarvis/builds/${input.slug}` : undefined,
+    evidence: input.evidence,
+    nodes,
+  };
 }
 
 export function historyItemsFromTurns(turns: Array<{

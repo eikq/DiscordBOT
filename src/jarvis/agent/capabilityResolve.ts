@@ -23,7 +23,10 @@ export function inferCapabilityFromObjective(objective: string, host?: Capabilit
   if ((/สร้างเว็บ|ทำเว็บ|build (?:a |an )?(?:web|site|portfolio)|สร้างแอป|build (?:a |an )?(?:app|todo|dashboard)/iu.test(text)) && (has('software.planBuild'))) {
     return 'software.planBuild';
   }
-  if ((/research|ค้นเว็บ|search the web|official source/iu.test(text)) && has(RESEARCH_SEARCH)) {
+  if ((/เขียนโค้ด|write code|สร้างไฟล์|create (?:project )?files|รัน\s*(?:unit\s*)?tests?|run (?:the |unit )?tests?/iu.test(text)) && has('software.applyBuild')) {
+    return 'software.applyBuild';
+  }
+  if ((/research|ค้นเว็บ|search the web|official source|documentation|docs|ค้นเอกสาร|หาข้อมูล/iu.test(text)) && has(RESEARCH_SEARCH)) {
     return RESEARCH_SEARCH;
   }
   if ((/workspace|หาไฟล์|find symbol|local file|search (the )?repo|inspect these files|fix the issue/iu.test(text)) && has(WORKSPACE_SEARCH)) {

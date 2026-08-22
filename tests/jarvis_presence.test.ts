@@ -120,6 +120,8 @@ test('Yes and No bind to one exact pending permission, never a global grant', ()
   assert.equal(granted.target.kind, 'grant');
   assert.equal(granted.target.taskId, 'task-9');
   assert.equal(interpretPresenceOwnerReply('Research Qwen', grant).kind, 'not-approval');
+  const thaiGrant = interpretPresenceOwnerReply('อนุญาตงานนี้', confirm);
+  assert.equal(thaiGrant.kind, 'allow');
 });
 
 test('attention copy stays owner-facing and desktop classes stay separate', () => {

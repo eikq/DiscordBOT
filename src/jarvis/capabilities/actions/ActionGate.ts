@@ -619,7 +619,11 @@ class ActionGate implements ActionHost {
         ...(proposal.capabilityId === 'software.applyBuild' ? {
           permissionProposal: permissionProposalFromBuild({
             title: String(proposal.normalizedArguments.brief || proposal.displayName),
-            slug: String(proposal.normalizedArguments.planId || proposal.target || 'project').slice(0, 40),
+            slug: String(proposal.normalizedArguments.slug || proposal.normalizedArguments.brief || 'project')
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/gu, '-')
+              .replace(/^-+|-+$/gu, '')
+              .slice(0, 40) || 'project',
             capabilityId: proposal.capabilityId,
             planId: typeof proposal.normalizedArguments.planId === 'string' ? proposal.normalizedArguments.planId : undefined,
             goalId: typeof proposal.normalizedArguments.goalId === 'string' ? proposal.normalizedArguments.goalId : undefined,
@@ -1182,7 +1186,7 @@ function describeProposal(
     return {
       displayName: String(input.brief || 'Build project'),
       summary: 'ขอสิทธิ์สร้าง/แก้ไฟล์และรัน build/test ในโฟลเดอร์โปรเจกต์นี้จนกว่างานนี้จะจบ',
-      target: String(input.planId || 'data/jarvis/builds'),
+      target: String(input.slug ? `data/jarvis/builds/${input.slug}` : input.planId || 'data/jarvis/builds'),
       risk: 'CONFIRM_REQUIRED',
     };
   }

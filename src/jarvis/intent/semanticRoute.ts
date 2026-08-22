@@ -6,6 +6,7 @@ import {
   DESKTOP_OPEN_TRUSTED_URL,
   DESKTOP_PLACE_WINDOW,
 } from '../capabilities/actions/constants';
+import { SOFTWARE_APPLY_BUILD } from '../build/constants';
 import { RESEARCH_CURRENT } from '../research/constants';
 import { resolveResource } from '../resources/resolver';
 import { resolveRegisteredWorkspace } from '../resources/workspaceAuthority';
@@ -50,6 +51,9 @@ export function resolutionFromSemantic(
   const actionClass = classifyActionability(text);
   if (semantic.action === 'BUILD_WEBSITE' || semantic.action === 'BUILD_SOFTWARE' || semantic.action === 'APPROVE_PLAN') {
     return null;
+  }
+  if (semantic.action === 'APPLY_BUILD' && catalogHas(options.catalog, SOFTWARE_APPLY_BUILD)) {
+    return capability(SOFTWARE_APPLY_BUILD, { brief: text }, 'SEMANTIC_APPLY_BUILD', actionClass);
   }
   if (semantic.action === 'CLICK' || semantic.action === 'TYPE' || semantic.action === 'SUBMIT') {
     return {

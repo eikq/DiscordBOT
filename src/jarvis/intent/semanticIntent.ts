@@ -22,6 +22,7 @@ export const SEMANTIC_ACTIONS = [
   'CLEAR_CONTAINMENT',
   'BUILD_WEBSITE',
   'BUILD_SOFTWARE',
+  'APPLY_BUILD',
   'APPROVE_PLAN',
   'CLICK',
   'TYPE',
@@ -112,6 +113,8 @@ export function interpretSemanticIntent(
   if (preference) return { ...base, ...preference, confidence: 'HIGH' };
   const build = matchBuild(raw);
   if (build) return { ...base, ...build, confidence: 'HIGH' };
+  const apply = matchApplyBuild(raw);
+  if (apply) return { ...base, ...apply, confidence: 'HIGH' };
   const approve = matchApprovePlan(raw);
   if (approve) return { ...base, ...approve, confidence: 'HIGH' };
 
@@ -170,7 +173,7 @@ export function interpretSemanticIntent(
     };
   }
 
-  if (/\b(research|look into|find (?:the )?(?:latest|official)|รีเสิร์ช|หาข้อมูล|ค้น)\b/iu.test(raw)) {
+  if (/\bresearch\b|\blook into\b|\bfind (?:the )?(?:latest|official)\b|รีเสิร์ช|หาข้อมูล|ค้น(?:เว็บ|เอกสาร|ข้อมูล)/iu.test(raw)) {
     const topic = leftoverEntity(raw);
     if (topic && !/^(this|that|it|อันนี้|อันนั้น)$/iu.test(topic)) {
       return {
@@ -383,6 +386,14 @@ function matchBuild(text: string): Partial<SemanticIntent> | null {
     return { action: 'BUILD_SOFTWARE', objectType: 'UNKNOWN', entity: leftoverEntity(text) };
   }
   return null;
+}
+
+function matchApplyBuild(text: string): Partial<SemanticIntent> | null {
+  if (/วางแผน/.test(text) && /สร้างเว็บ|สร้างแอป|todo|portfolio|website/iu.test(text)) return null;
+  if (!/เขียนโค้ด|write code|สร้างไฟล์|create (?:project )?files|รัน\s*(?:unit\s*)?tests?|run (?:the |unit )?tests?/iu.test(text)) {
+    return null;
+  }
+  return { action: 'APPLY_BUILD', objectType: 'PROJECT', entity: leftoverEntity(text) };
 }
 
 function matchApprovePlan(text: string): Partial<SemanticIntent> | null {

@@ -15,7 +15,7 @@ import type { PersonalAiRuntimeStatus } from '../operating/JarvisPages';
 import { PresenceApproval } from './PresenceApproval';
 import { PresenceBuildPlan } from './PresenceBuildPlan';
 import { PresenceHistory } from './PresenceHistory';
-import { buildSurfaceFromEvents, historyItemsFromTurns, isBuildOperationType, type PresenceBuildSurface, type PresenceHistoryItem } from './buildSurface';
+import { historyItemsFromTurns, isBuildOperationType, mergePresenceBuildSurface, type PresenceBuildSurface, type PresenceHistoryItem } from './buildSurface';
 import { PresenceCoreFallback } from './cinematic/PresenceCoreFallback';
 import { PresenceSpatialHud } from './cinematic/PresenceSpatialHud';
 import { pushActivityItem, visibleActivityItems, type PresenceActivityItem } from './cinematic/activityFeed';
@@ -147,9 +147,28 @@ export default function JarvisPresencePage() {
   const inspectMode = useMemo(() => inspectDragEnabled(window.location.search), []);
 
   const refreshStatus = useCallback(() => readJson<RuntimeStatus>('/api/jarvis/status').then(setStatus), []);
-  const refreshHistory = useCallback(() => readJson<{ turns?: Array<{ id: string; role: string; visibleText: string; timestamp: number; status?: string; goalId?: string; planId?: string }> }>('/api/jarvis/history?sessionId=jarvis-lab')
-    .then(payload => setHistoryItems(historyItemsFromTurns(payload.turns || [])))
+  const refreshHistory = useCallback(() => readJson<{
+    turns?: Array<{ id: string; role: string; visibleText: string; timestamp: number; status?: string; goalId?: string; planId?: string }>;
+    plans?: Array<{ title: string; slug: string; status: string; summary: string; updatedAt: number; goalId?: string; id?: string }>;
+  }>('/api/jarvis/history?sessionId=jarvis-lab')
+    .then(payload => {
+      setHistoryItems(historyItemsFromTurns(payload.turns || []));
+      return payload;
+    })
     .catch(() => undefined), []);
+  const refreshBuild = useCallback(async () => {
+    const [ops, history] = await Promise.all([
+      readJson<{ events?: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }> }>('/api/jarvis/events').catch(() => ({ events: [] })),
+      readJson<{ plans?: Array<{ title: string; slug: string; status: string; summary: string; updatedAt: number }> }>('/api/jarvis/history?sessionId=jarvis-lab').catch(() => ({ plans: [] })),
+    ]);
+    const events = (ops.events || []).filter(item => item.type).map(item => ({
+      type: String(item.type),
+      summary: item.summary,
+      payload: item.payload,
+    }));
+    buildEvents.current = events.slice(-24);
+    setBuildSurface(mergePresenceBuildSurface(buildEvents.current, history.plans || []));
+  }, []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
   const refreshCommandCenter = useCallback(() => readJson<CommandCenterClientSnapshot>('/api/jarvis/command-center').then(setCommandCenter).catch(() => undefined), []);
   const refreshOperator = useCallback(() => readJson<TrustedOperatorSnapshot>('/api/jarvis/operator').then(setOperator).catch(() => undefined), []);
@@ -163,6 +182,7 @@ export default function JarvisPresencePage() {
   useEffect(() => {
     void refreshStatus().catch(err => setError(safeError(err)));
     void refreshHistory();
+    void refreshBuild();
     void refreshSystem();
     void refreshCommandCenter();
     void refreshOperator();
@@ -170,6 +190,14 @@ export default function JarvisPresencePage() {
     void refreshResearch();
     try { setQualityMode(parseQualityMode(window.localStorage.getItem(QUALITY_STORAGE_KEY))); } catch { /* optional */ }
   }, []);
+
+  useEffect(() => {
+    const hydrate = window.setInterval(() => {
+      void refreshBuild();
+      void refreshHistory();
+    }, 5_000);
+    return () => window.clearInterval(hydrate);
+  }, [refreshBuild, refreshHistory]);
 
   useEffect(() => {
     if (documentHidden) return;
@@ -198,7 +226,6 @@ export default function JarvisPresencePage() {
   }, []);
 
   useEffect(() => {
-    if (documentHidden) return;
     const source = new EventSource('/api/jarvis/events?stream=1');
     source.onmessage = event => {
       void refreshCommandCenter();
@@ -211,7 +238,7 @@ export default function JarvisPresencePage() {
         if (isResearchOperationType(payload.type) || stage) void refreshResearch();
         if (isBuildOperationType(payload.type) && payload.type !== 'MEMORY_UPDATED' && payload.type !== 'MODEL_STATUS_CHANGED') {
           buildEvents.current = [...buildEvents.current, typed].slice(-24);
-          setBuildSurface(buildSurfaceFromEvents(buildEvents.current));
+          setBuildSurface(mergePresenceBuildSurface(buildEvents.current));
         }
         if (payload.type === 'MEMORY_UPDATED' || payload.type === 'PLAN_CREATED' || payload.type === 'PLAN_APPROVED') {
           void refreshHistory();
@@ -221,7 +248,7 @@ export default function JarvisPresencePage() {
       }
     };
     return () => source.close();
-  }, [documentHidden, refreshCommandCenter, refreshResearch, refreshHistory]);
+  }, [refreshCommandCenter, refreshResearch, refreshHistory]);
 
   useEffect(() => () => {
     unsubMic.current?.();
@@ -388,6 +415,7 @@ export default function JarvisPresencePage() {
       void refreshCommandCenter();
       void refreshOperator();
       void refreshHistory();
+      void refreshBuild();
     } catch (err) {
       setError(safeError(err));
     } finally {
@@ -669,6 +697,7 @@ export default function JarvisPresencePage() {
       void refreshReminders();
       void refreshCommandCenter();
       void refreshHistory();
+      void refreshBuild();
     } catch (err) {
       setDraft(null);
       setSpeechState('idle');

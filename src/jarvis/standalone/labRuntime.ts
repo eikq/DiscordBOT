@@ -1716,16 +1716,28 @@ export class JarvisLabRuntime {
 
   public conversationHistory(input: { sessionId?: string; query?: string; limit?: number } = {}) {
     const history = this.historyStore();
-    if (!history) return { sessions: [], turns: [] };
+    if (!history) return { sessions: [], turns: [], plans: [] };
     if (input.query) {
-      return { sessions: history.listSessions(input.limit || 20), turns: history.searchVisible(input.query, input.limit || 20) };
+      return {
+        sessions: history.listSessions(input.limit || 20),
+        turns: history.searchVisible(input.query, input.limit || 20),
+        plans: this.plans?.list(12) || [],
+      };
     }
     const sessionId = input.sessionId?.trim();
     if (sessionId) {
-      return { sessions: [history.getSession(sessionId)].filter(Boolean), turns: history.listTurns(sessionId) };
+      return {
+        sessions: [history.getSession(sessionId)].filter(Boolean),
+        turns: history.listTurns(sessionId),
+        plans: (this.plans?.list(12) || []).filter(item => item.sessionId === sessionId),
+      };
     }
     const sessions = history.listSessions(input.limit || 20);
-    return { sessions, turns: sessions.flatMap(item => history.listTurns(item.id, 12)) };
+    return {
+      sessions,
+      turns: sessions.flatMap(item => history.listTurns(item.id, 12)),
+      plans: this.plans?.list(12) || [],
+    };
   }
 
   private historyStore(): ConversationHistoryStore | undefined {
@@ -1753,12 +1765,26 @@ export class JarvisLabRuntime {
     this.activeJarvisTurnId = jarvis.id;
   }
 
-  private finalizeVisibleTurn<T extends { presented?: { text?: string } }>(sessionId: string, output: T): T {
+  private finalizeVisibleTurn<T extends { presented?: { text?: string }; result?: { memoryRefs?: Array<{ canonicalId?: string }>; actionResults?: Array<{ proposalId?: string }> }; pendingConfirmation?: { proposalId?: string } }>(sessionId: string, output: T): T {
     const visible = String(output.presented?.text || '').trim();
     const history = this.historyStore();
     if (history && this.activeJarvisTurnId) {
-      if (visible) history.completeTurn(this.activeJarvisTurnId, visible);
-      else history.markIncomplete(this.activeJarvisTurnId);
+      if (visible) {
+        const plan = this.plans?.latestForSession(sessionId);
+        const memoryRefs = (output.result?.memoryRefs || []).map(item => item.canonicalId).filter((id): id is string => Boolean(id));
+        const operationRefs = [
+          output.pendingConfirmation?.proposalId,
+          ...(output.result?.actionResults || []).map(item => item.proposalId),
+        ].filter((id): id is string => Boolean(id));
+        history.completeTurn(this.activeJarvisTurnId, visible, {
+          goalId: plan?.goalId,
+          planId: plan?.id,
+          memoryRefs,
+          operationRefs,
+        });
+      } else {
+        history.markIncomplete(this.activeJarvisTurnId);
+      }
     }
     this.activeJarvisTurnId = undefined;
     this.projectMemoryView(sessionId);

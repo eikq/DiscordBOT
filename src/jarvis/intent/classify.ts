@@ -4,7 +4,7 @@ const TALK_ABOUT = /คืออะไร|ใช้ทำอะไร|ทำไ�
 const EXEC_REQUEST = /รัน|execute|\brun\b|launch|start\s+(?:powershell|cmd|pwsh)|เปิด\s*(?:powershell|cmd|pwsh|cmd\.exe)/iu;
 const ALWAYS_FORBIDDEN = /ignore permissions|bypass (the )?policy|bypass confirmation|winget|chocolatey|\bchoco\b|shutdown|reboot|ลบ.*system32|kill process|stop process|ms-settings:|restart all windows services|system service manager|add .+\s+to (the )?registry/iu;
 const CURRENT_INFO = /ราคา|ข่าว|ล่าสุด|วันนี้|เท่าไร|เท่าไหร่|current|latest|price|news|find out|look into|look up|search the web|หาอะไร|ช่วยหา|ลองดู|เช็ค|เช็ก|ค้น|ดูข่าว|หาไฟล์|ดูไฟล์|เอกสาร|อยู่ตรงไหน|อยู่ไฟล์ไหน|สรุปเอกสาร|ดู code|ดูโค้ด/iu;
-const ACTION_CUES = /เปิด|เข้า|ปิด|เริ่ม|รีสตาร์ต|รีสตาร์ท|เตือน|จัดการ|แก้|ช่วยดู|ช่วยเปิด|ช่วยหา|ตั้งค่า|launch|open|start|stop|restart|remind|check|handle|สร้างเว็บ|สร้างแอป|ทำเว็บ|build|create (?:a )?(?:web|app|site)/iu;
+const ACTION_CUES = /เปิด|เข้า|ปิด|เริ่ม|รีสตาร์ต|รีสตาร์ท|เตือน|จัดการ|แก้|ช่วยดู|ช่วยเปิด|ช่วยหา|ตั้งค่า|launch|open|start|stop|restart|remind|check|handle|สร้างเว็บ|สร้างแอป|ทำเว็บ|build|create (?:a )?(?:web|app|site)|เขียนโค้ด|write code|รัน\s*(?:unit\s*)?tests?|run (?:the |unit )?tests?/iu;
 const GREETING = /^(สวัสดี|hello|hi|hey|yo)\b/iu;
 const AMBIGUOUS_ONLY = /^(ช่วยทำหน่อย|ช่วยด้วย|ทำหน่อย|help me|can you help|เปิดอันนั้น|รีสตาร์ตมัน|หาอันนี้ให้หน่อย|จัดการให้หน่อย)$/iu;
 

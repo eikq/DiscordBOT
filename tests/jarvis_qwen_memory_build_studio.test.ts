@@ -30,11 +30,18 @@ import {
   permissionProposalFromBuild,
   qwen38CyberProfile,
   resolveOwnerGoal,
+  resolveUserIntent,
+  routeJarvisRequest,
   sandboxExists,
+  shouldAvoidGenericRefusal,
   spokenPlanSummary,
   validateActionInput,
 } from '../src/jarvis';
 import { inferCapabilityFromObjective } from '../src/jarvis/agent/capabilityResolve';
+import { compactCapabilityCatalog } from '../src/jarvis/intent/catalog';
+import { interpretSemanticIntent } from '../src/jarvis/intent/semanticIntent';
+import { routeSemanticIntent } from '../src/jarvis/intent/semanticRoute';
+import { RESEARCH_CURRENT } from '../src/jarvis/research/constants';
 import { BuildPlanStore } from '../src/jarvis/build/planStore';
 import { registerSoftwareCapabilities } from '../src/jarvis/build/capabilities';
 import { CapabilityRegistry } from '../src/jarvis/capabilities/CapabilityRegistry';
@@ -45,7 +52,7 @@ import { extractDurableOwnerMemory } from '../src/jarvis/memory/durableExtract';
 import { defaultObsidianVaultPath, projectObsidianVault } from '../src/jarvis/memory/obsidianProjection';
 import { rememberOwnerPreference } from '../src/jarvis/memory/ownerSemantics';
 import { JarvisMemoryRetrieval } from '../src/jarvis/memory/retrieval';
-import { buildSurfaceFromEvents, hidesReasoning, historyItemsFromTurns } from '../src/jarvis/ui/presence/buildSurface';
+import { buildSurfaceFromEvents, buildSurfaceFromPlan, hidesReasoning, historyItemsFromTurns } from '../src/jarvis/ui/presence/buildSurface';
 
 function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -400,6 +407,9 @@ test('natural Thai/English build requests plan first and keep the same goal afte
     const software = await resolveOwnerGoal('Build a todo app', { host });
     assert.equal(software.goalId, 'BUILD_SOFTWARE');
     assert.equal(inferCapabilityFromObjective('สร้างเว็บ portfolio', host), SOFTWARE_PLAN_BUILD);
+    assert.equal(inferCapabilityFromObjective('ช่วยเขียนโค้ดสำหรับโปรเจกต์นี้', host), SOFTWARE_APPLY_BUILD);
+    assert.equal(inferCapabilityFromObjective('รัน test ให้หน่อย', host), SOFTWARE_APPLY_BUILD);
+    assert.equal(inferCapabilityFromObjective('รัน test ให้หน่อย', host), SOFTWARE_APPLY_BUILD);
     const planned = await host.invoke({
       id: SOFTWARE_PLAN_BUILD,
       input: { brief: 'Jarvis สร้างเว็บ portfolio ให้ผม', goalId: website.goalId },
@@ -428,7 +438,46 @@ test('natural Thai/English build requests plan first and keep the same goal afte
   }
 });
 
+test('ordinary write/test/docs requests take a safe capability route instead of generic refusal', async () => {
+  const catalog = compactCapabilityCatalog();
+  assert.equal(interpretSemanticIntent('วางแผนสร้างเว็บ todo ให้หน่อย').action, 'BUILD_WEBSITE');
+  assert.equal(interpretSemanticIntent('ช่วยเขียนโค้ดสำหรับโปรเจกต์นี้').action, 'APPLY_BUILD');
+  assert.equal(interpretSemanticIntent('รัน test ให้หน่อย').action, 'APPLY_BUILD');
+  assert.equal(interpretSemanticIntent('รัน test ให้หน่อย').action, 'APPLY_BUILD');
+  assert.equal(interpretSemanticIntent('หาข้อมูล documentation เรื่อง React ให้หน่อย').action, 'RESEARCH');
+  assert.equal(routeSemanticIntent('ช่วยเขียนโค้ดสำหรับโปรเจกต์นี้', { catalog })?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.equal(routeSemanticIntent('รัน test ให้หน่อย', { catalog })?.capabilityId, SOFTWARE_APPLY_BUILD);
+  const docs = await resolveUserIntent('หาข้อมูล documentation เรื่อง React ให้หน่อย');
+  assert.equal(docs.kind, 'CAPABILITY');
+  assert.equal(docs.capabilityId, RESEARCH_CURRENT);
+  const write = await resolveUserIntent('ช่วยเขียนโค้ดสำหรับโปรเจกต์นี้');
+  assert.equal(write.kind, 'CAPABILITY');
+  assert.equal(write.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.notEqual(write.kind, 'CONVERSATION');
+  assert.equal(shouldAvoidGenericRefusal('ช่วยเขียนโค้ดสำหรับโปรเจกต์นี้'), true);
+  assert.equal(shouldAvoidGenericRefusal('รัน test ให้หน่อย'), true);
+  assert.equal(shouldAvoidGenericRefusal('หาข้อมูล documentation เรื่อง React ให้หน่อย'), true);
+  assert.equal(routeJarvisRequest({ text: 'ช่วยเขียนโค้ดสำหรับโปรเจกต์นี้' }).route, 'CAPABILITY');
+  assert.equal(routeJarvisRequest({ text: 'หาข้อมูล documentation เรื่อง React ให้หน่อย' }).route, 'RESEARCH');
+  const outcomes = ['EXECUTE', 'ASK_PERMISSION', 'NEED_INPUT', 'NEED_CAPABILITY'];
+  assert.equal(outcomes.includes(permissionFirstFromCapability({ status: 'rejected', reasonCode: 'PLAN_NOT_APPROVED' }).outcome), true);
+});
+
 test('Presence plan/history surfaces render operational evidence without fake progress or CoT', () => {
+  const waiting = buildSurfaceFromEvents([
+    { type: 'UNDERSTANDING', summary: 'reading the request', payload: { title: 'Portfolio' } },
+    { type: 'PLAN_CREATED', summary: 'reading requirements', payload: { title: 'Portfolio', slug: 'portfolio' } },
+  ]);
+  assert.equal(waiting?.nodes.find(item => item.id === 'UNDERSTAND')?.state, 'complete');
+  assert.equal(waiting?.nodes.find(item => item.id === 'PLAN')?.state, 'complete');
+  assert.equal(waiting?.nodes.find(item => item.id === 'REVIEW')?.state, 'waiting-owner');
+  const persisted = buildSurfaceFromPlan({
+    title: 'Portfolio',
+    slug: 'portfolio',
+    status: 'READY_FOR_REVIEW',
+    summary: 'Plan is not execution permission.',
+  });
+  assert.equal(persisted?.nodes.find(item => item.id === 'REVIEW')?.state, 'waiting-owner');
   const surface = buildSurfaceFromEvents([
     { type: 'PLAN_CREATED', summary: 'reading requirements', payload: { title: 'Shoe Store', slug: 'shoe-store' } },
     { type: 'PLAN_APPROVED', summary: 'plan approved', payload: { title: 'Shoe Store' } },
@@ -442,10 +491,11 @@ test('Presence plan/history surfaces render operational evidence without fake pr
   assert.equal(hidesReasoning('Visible answer'), true);
   assert.equal(hidesReasoning('<think>nope</think>'), false);
   const items = historyItemsFromTurns([
-    { id: '1', role: 'OWNER', visibleText: 'สร้างเว็บ', timestamp: 1, status: 'completed' },
+    { id: '1', role: 'OWNER', visibleText: 'สร้างเว็บ', timestamp: 1, status: 'completed', goalId: 'BUILD_WEBSITE', planId: 'plan_1' },
     { id: '2', role: 'JARVIS', visibleText: '<think>hidden</think>', timestamp: 2, status: 'completed' },
   ]);
   assert.equal(items.length, 1);
+  assert.equal(items[0]?.goalId, 'BUILD_WEBSITE');
   const approval = fs.readFileSync(path.join(process.cwd(), 'src', 'jarvis', 'ui', 'presence', 'PresenceApproval.tsx'), 'utf8');
   assert.match(approval, /อนุญาตงานนี้/);
   assert.match(approval, /ครั้งเดียว/);
@@ -455,4 +505,8 @@ test('Presence plan/history surfaces render operational evidence without fake pr
   assert.match(page, /PresenceBuildPlan/);
   assert.match(page, /PresenceHistory/);
   assert.match(page, /QWEN OFFLINE/);
+  assert.match(page, /refreshBuild/);
+  assert.match(page, /mergePresenceBuildSurface/);
+  const runtime = fs.readFileSync(path.join(process.cwd(), 'src', 'jarvis', 'ui', 'presence', 'presenceRuntime.ts'), 'utf8');
+  assert.match(runtime, /อนุญาตงานนี้/);
 });

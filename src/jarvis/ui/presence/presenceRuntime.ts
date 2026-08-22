@@ -72,7 +72,7 @@ export type PresenceOwnerReply =
 export const DESKTOP_AUTHORITY_CLASSES = ['SEE', 'OPEN', 'PLACE', 'FOCUS', 'CLICK', 'TYPE', 'SUBMIT'] as const;
 export type DesktopAuthorityClass = (typeof DESKTOP_AUTHORITY_CLASSES)[number];
 
-const CONFIRM = /^(yes|y|ok|okay|allow|allow once|proceed|do it|go ahead|approved|ได้|ตกลง|อนุญาต|อนุญาตครั้งนี้|เปิดได้|เอาเลย|ใช่|ทำเลย|ดำเนินการ|โอเค ทำต่อ)$/iu;
+const CONFIRM = /^(yes|y|ok|okay|allow|allow once|proceed|do it|go ahead|approved|ได้|ตกลง|อนุญาต|อนุญาตครั้งนี้|อนุญาตงานนี้|เปิดได้|เอาเลย|ใช่|ทำเลย|ดำเนินการ|โอเค ทำต่อ)$/iu;
 const DENY = /^(no|n|deny|cancel|cancel it|stop|don'?t|dont|never mind|ไม่|ไม่อนุญาต|ยกเลิก|ปฏิเสธ)$/iu;
 
 export function stripJarvisAddress(text: string): string {
