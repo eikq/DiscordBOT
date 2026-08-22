@@ -5,7 +5,7 @@
  */
 
 import type { ConversationState, DiscourseAct, DiscourseInterpretation } from './types';
-import { mentionedProject } from './referents';
+import { isLeftoverWaitingPlan, mentionedProject } from './referents';
 
 const ADDRESS = /^\s*((?:hey\s+)?jarvis[,.!?]*\s*|จาร์วิส[,.!?]*\s*)+/iu;
 
@@ -22,7 +22,7 @@ export function interpretDiscourse(
 
   const ordinals = parseOrdinals(raw, state);
   const ordinal = ordinals[0] ?? parseOrdinal(raw, state);
-  if (ordinal !== undefined && isMostlyOrdinal(raw)) {
+  if (ordinal !== undefined && (isMostlyOrdinal(raw) || isSelectingOfferedOption(raw, state))) {
     if (!state?.offeredOptions.length && !state?.projects.length && state?.lastDiscourse !== 'RESEARCH') {
       return {
         act: 'SELECT_ORDINAL',
@@ -156,6 +156,9 @@ export function interpretDiscourse(
   }
   if (isResearchRecommend(raw, state)) {
     return { ...act('RESEARCH'), researchQuery: raw, change: raw, recommend: true };
+  }
+  if (isResearchRecall(raw, state)) {
+    return { ...act('RESEARCH'), researchQuery: raw, change: 'RECALL' };
   }
   if (isResearchFollowUp(raw, state) || isResearch(raw)) {
     return { ...act('RESEARCH'), researchQuery: raw, change: raw };
@@ -309,6 +312,9 @@ function isPreview(text: string, state: ConversationState | null | undefined): b
   if (/อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return false;
   if (/เปิดให้ดู|เปิดดู|show me(?: the site)?|open (?:the |its )?preview|เปิด preview|preview ของมัน|preview(?: หน่อย)?$/iu.test(text)) return true;
   if (/^preview$/iu.test(text)) return true;
+  if (hasActiveSoftware(state) && /เปิด/.test(text) && /(?:ที่เพิ่ง|ตัวที่รัน|build)/iu.test(text) && /ดู|preview/iu.test(text)) {
+    return true;
+  }
   if (hasActiveSoftware(state) && /เปิด(?:ของ)?(?:อันนี้|มัน)|open (?:it|this|that)/iu.test(text) && !/chrome|youtube|notepad|cursor|vscode/iu.test(text)) {
     return true;
   }
@@ -327,19 +333,20 @@ function isBuild(text: string, state: ConversationState | null | undefined): boo
 }
 
 function isRerun(text: string): boolean {
-  return /รันใหม่|run\b.{0,16}\bagain|rerun|อีกที/iu.test(text) && !/\b(test|build|preview)\b/iu.test(text);
+  return /รันใหม่|run\b.{0,16}\bagain|rerun|อีกที|เช็กของล่าสุดซ้ำ|check (?:the )?last .{0,16}again/iu.test(text)
+    && !/\b(test|build|preview)\b/iu.test(text);
 }
 
 function isStatus(text: string): boolean {
   return /^(ผ่าน)$/u.test(text)
-    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|preview ใช้งาน|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง|โอเคไหม/iu.test(text)
+    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|preview ใช้งาน|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง|โอเคไหม|ผลเป็นไง|ผลล่าสุด/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|what projects|which project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
 function classifyStatusFocus(text: string, state: ConversationState | null | undefined): import('./types').StatusFocus {
   if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|จำได้ไหม|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
   if (/พร้อมทำงาน|พร้อมไหม|are you ready|ready to work/iu.test(text)) return 'readiness';
-  if (/ผ่านไหม|ผ่าน\?|^ผ่าน$|โอเคไหม/iu.test(text)) return 'verification';
+  if (/ผ่านไหม|ผ่าน\?|^ผ่าน$|โอเคไหม|ผลเป็นไง|ผลล่าสุด/iu.test(text)) return 'verification';
   if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
   if (/เราแก้|มีโอกาสเกิดอีก|แก้ไปยังไง/iu.test(text)) return 'recovery';
   if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก|เช็กของจริง|มีปัญหาไหม/iu.test(text)) return 'failure';
@@ -386,7 +393,7 @@ function isCorrect(text: string): boolean {
 }
 
 function isPlanRequest(text: string): boolean {
-  return /วางแผน|ขอดูแบบสั้น|ลองวางแผน|คิดมาให้หน่อย|ขอดู list|เพิ่มอะไรดี|what should we add|what to add|บอกแผนสั้น|ก่อนแก้บอกแผน|plan first|short plan/iu.test(text);
+  return /วางแผน|ขอดูแบบสั้น|ลองวางแผน|คิดมาให้หน่อย|ขอดู list|เพิ่มอะไรดี|what should we add|what to add|บอกแผนสั้น|ก่อนแก้บอกแผน|plan first|short plan|แผนเปลี่ยนจากเดิม|แผนต่างจาก|ต่างจากแผนเดิม|plan (?:changed|differ)/iu.test(text);
 }
 
 function isSwitchTopic(text: string): boolean {
@@ -431,14 +438,21 @@ function isResearch(text: string): boolean {
 }
 
 function isResearchRecommend(text: string, state: ConversationState | null | undefined): boolean {
-  if (state?.lastDiscourse !== 'RESEARCH' && state?.activeTopic !== 'research') return false;
+  if (state?.lastDiscourse !== 'RESEARCH' && state?.activeTopic !== 'research' && !state?.lastResearchQuery) return false;
   if (/ใส่ในแผน|เพิ่มหน้า|แก้ไฟล์|ติดตั้ง|กลับไปทำเว็บ/iu.test(text)) return false;
-  return /เลือกมาอันเดียว|เลือกมาอัน(?:นึง|หนึ่ง)?|recommend (?:just )?one|pick one|which one should I (?:use|pick)|เลือก\s*\d+\s*อย่าง|อันไหนเอามาใช้/iu.test(text);
+  return /เลือกมาอันเดียว|เลือกมาอัน(?:นึง|หนึ่ง)?|recommend (?:just )?one|pick one|which one should I (?:use|pick)|เลือก\s*\d+\s*อย่าง|อันไหนเอามาใช้|เลือกจุดที่คุ้ม|คุ้มสุดมาหนึ่งจุด/iu.test(text);
+}
+
+function isResearchRecall(text: string, state: ConversationState | null | undefined): boolean {
+  if (!state?.lastResearchQuery && !state?.selectedOption) return false;
+  if (isAcceptAndHold(text) || isExecuteNow(text) || isTest(text) || isBuild(text, state) || isPreview(text, state)) return false;
+  if (/เพิ่มหน้า|แก้ไฟล์|ติดตั้ง|เขียนโค้ด|apply (?:it|that) now/iu.test(text)) return false;
+  return /ย้อนกลับไปเรื่อง|เรื่องที่(?:นาย|คุณ)?แนะนำ|ตัวที่นายแนะนำ|ที่แนะนำชื่อ|ชื่ออะไรนะ|เมื่อกี้แนะนำ|ใช้ตัวนั้นกับเว็บ|ได้ตรงไหนบ้าง/iu.test(text);
 }
 
 function isResearchFollowUp(text: string, state: ConversationState | null | undefined): boolean {
   if (state?.lastDiscourse !== 'RESEARCH' && state?.activeTopic !== 'research') return false;
-  if (isAcceptAndHold(text)) return false;
+  if (isAcceptAndHold(text) || isResearchRecall(text, state)) return false;
   if (/ใส่ในแผน|เพิ่มหน้า|แก้ไฟล์|ติดตั้ง|กลับไปทำเว็บ|preview|รัน test/iu.test(text)) return false;
   if (isResearchRecommend(text, state)) return false;
   return /เบากว่า|สวยกว่า|เหมาะ|อันไหน|animation|framer|gsap|library|official docs|docs ด้วย|ทำไม/iu.test(text)
@@ -447,6 +461,7 @@ function isResearchFollowUp(text: string, state: ConversationState | null | unde
 
 function isAccumulate(text: string, state: ConversationState | null | undefined): boolean {
   if (!state?.pendingPlanReview) return false;
+  if (isLeftoverWaitingPlan(state) && !/แผนใหม่|แผนรอรีวิว/iu.test(text)) return false;
   if (isNewProject(text, state) || isApprovePlan(text) || isExecuteNow(text)) return false;
   if (isStatus(text) || isTest(text) || isBuild(text, state) || isPreview(text, state) || isRerun(text)) return false;
   if (isNegate(text) || isInspect(text, state) || isMemoryQuery(text) || isMemoryStore(text) || isPlanRequest(text)) return false;
@@ -482,7 +497,7 @@ function parseOrdinals(text: string, state?: ConversationState | null): number[]
     ...[...text.matchAll(/(?:ข้อ|อันที่|option)\s*(\d+)/giu)].map(item => Number(item[1])),
     ...[...text.matchAll(/(?:กับ|and|,)\s*(?:ข้อ\s*)?(\d+)/giu)].map(item => Number(item[1])),
   ].filter(item => Number.isFinite(item) && item > 0);
-  if (found.length >= 2) return [...new Set(found)].slice(0, 6);
+  if (found.length) return [...new Set(found)].slice(0, 6);
   const one = parseOrdinal(text, state);
   return one ? [one] : [];
 }
@@ -491,9 +506,9 @@ function parseOrdinal(text: string, state?: ConversationState | null): number | 
   if (/อันนั้น|ใช้อันนั้น|เอาอันนั้น|use that(?: one)?/iu.test(text)) {
     return state?.selectedOption?.index || state?.offeredOptions[0]?.index || 1;
   }
-  if (/อันแรก|the first|ข้อ\s*1\b|ข้อ 1|option 1|ข้อหนึ่ง/iu.test(text)) return 1;
-  if (/อันสอง|อันที่สอง|the second|ข้อ\s*2\b|ข้อ 2|option 2/iu.test(text)) return 2;
-  if (/อันสาม|the third|ข้อ\s*3\b|ข้อ 3|option 3/iu.test(text)) return 3;
+  if (/อันแรก|the first|ข้อ\s*1\b|ข้อ 1|option 1|ข้อหนึ่ง|ข้อแรก/iu.test(text)) return 1;
+  if (/อันสอง|อันที่สอง|ข้อสอง|ข้อที่สอง|the second|ข้อ\s*2\b|ข้อ 2|option 2/iu.test(text)) return 2;
+  if (/อันสาม|ข้อสาม|ข้อที่สาม|the third|ข้อ\s*3\b|ข้อ 3|option 3/iu.test(text)) return 3;
   const numbered = text.match(/(?:ข้อ|อันที่|option)\s*(\d+)/iu);
   if (numbered) return Number(numbered[1]);
   return undefined;
@@ -504,6 +519,12 @@ function isMostlyOrdinal(text: string): boolean {
     || /เอาอันที่(?:สอง|สาม|\d+)|เอาข้อ\s*\d+|เอาอันแรก|ใช้อันนั้น|ใช้อันแรก/iu.test(text)
     || /ข้อ\s*\d+\s*คืออะไร/iu.test(text)
     || /เอาข้อ\s*\d+(?:\s*(?:กับ|and|,)\s*(?:ข้อ\s*)?\d+)+/iu.test(text);
+}
+
+function isSelectingOfferedOption(text: string, state: ConversationState | null | undefined): boolean {
+  if (!state?.offeredOptions.length && !state?.lastResearchQuery && !state?.selectedOption) return false;
+  if (isTest(text) || isBuild(text, state) || isPreview(text, state) || isStatus(text)) return false;
+  return /เอา(?:ตัว|อัน)?นั้น|น่าสนใจ|เมื่อกี้แนะนำ/iu.test(text);
 }
 
 function isUnscopedAuthority(text: string): boolean {
@@ -522,14 +543,29 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
   if (!/ถ้า/.test(text) && !/\bif\b/iu.test(text)) return null;
   const acts = chainActs(text);
   if (acts.length >= 2) return chainInterpretation(text, acts);
-  const ifPass = /ถ้าผ่าน|if (?:it |they |that |the tests? |tests? )?pass/iu.test(text);
+  const ifPass = /ถ้า.{0,12}ผ่าน|if (?:it |they |that |the tests? |tests? )?pass/iu.test(text);
   const ifBuildPass = /ถ้า\s*build\s*ผ่าน|if (?:the )?build pass/iu.test(text);
   const thenBuild = (
     /(?:ก็|แล้ว|then)\s+build|build ต่อ/iu.test(text)
     || (/\bbuild\b/iu.test(text) && !ifBuildPass)
   );
-  const thenPreview = /preview|เปิดให้ดู|เปิดดู/iu.test(text);
+  const thenPreview = /preview|เปิดให้ดู|เปิดดู|เปิดตัวที่รัน|เปิดของที่เพิ่ง/iu.test(text);
   const thenFix = /แก้|fix|แก้ไข/iu.test(text) && /ปัญหา|error|fail|พัง/iu.test(text);
+  const continueIfHealthy = /ถ้าไม่พัง|if (?:it )?(?:doesn'?t|does not) (?:break|fail|crash)|ถ้าไม่ fail/iu.test(text)
+    && /ไปขั้นต่อไป|ทำต่อ|continue|next step|เอง/iu.test(text);
+  if (continueIfHealthy) {
+    const prior = state?.pendingConditional;
+    return {
+      act: 'CONDITIONAL',
+      ifKind: prior?.ifKind || (state?.recentVerification?.kind === 'build' ? 'build' : 'test'),
+      thenAct: prior?.thenAct || 'CONTINUE',
+      thenActs: prior?.thenActs?.length ? prior.thenActs : ['CONTINUE'],
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+      change: 'CONTINUE_IF_HEALTHY',
+    };
+  }
   const holdIfHealthy = /ถ้าไม่มีปัญหา|if (?:there(?:'s| is) )?no (?:problem|issue)|ไม่มีปัญหาก็ไม่ต้องแก้/iu.test(text);
   if (holdIfHealthy) {
     return {
@@ -645,7 +681,7 @@ function chainActs(text: string): DiscourseAct[] {
   }
   if (/\btests?\b/iu.test(lower) || /รัน test/iu.test(text)) acts.push('TEST');
   if (/\bbuild\b/iu.test(lower)) acts.push('BUILD');
-  if ((/preview/iu.test(lower) || /เปิดให้ดู|เปิดดู/iu.test(text)) && acts.length) acts.push('PREVIEW');
+  if ((/preview/iu.test(lower) || /เปิดให้ดู|เปิดดู|เปิดตัวที่รัน|เปิดของที่เพิ่ง/iu.test(text)) && acts.length) acts.push('PREVIEW');
   return acts;
 }
 

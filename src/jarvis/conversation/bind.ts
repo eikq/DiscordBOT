@@ -16,7 +16,7 @@ import { DESKTOP_OPEN_SCOPED_RESOURCE, JARVIS_RUNTIME_STATUS } from '../capabili
 import { RESEARCH_CURRENT } from '../research/constants';
 import type { IntentResolution } from '../intent/types';
 import type { ConversationState, DiscourseAct, DiscourseInterpretation, OfferedOption } from './types';
-import { uniqueSlugOrClarify, restoreProject, projectForOwnerText } from './referents';
+import { uniqueSlugOrClarify, restoreProject, projectForOwnerText, activeProject, isLeftoverWaitingPlan } from './referents';
 import { interpretDiscourse } from './discourse';
 import { sanitizedRecent, isPermissionPrompt, isReportableFailure, extractComparisonOptions, pickRecommendedOption } from './view';
 
@@ -101,6 +101,7 @@ export function bindDiscourseToIntent(
     case 'CONDITIONAL':
       return bindConditional(state, discourse);
     case 'RESEARCH':
+      if (discourse.change === 'RECALL') return recallResearch(state, text);
       if (discourse.recommend) return recommendResearch(state, text, discourse);
       return capability(RESEARCH_CURRENT, { query: researchQuery(state, text, discourse) }, 'CONVERSATION_RESEARCH');
     case 'QUEUE':
@@ -118,6 +119,9 @@ export function rewriteWrongRoute(
   text: string,
 ): IntentResolution {
   const id = resolution.capabilityId || '';
+  if (id === DESKTOP_OPEN_SCOPED_RESOURCE && looksLikeResearchApply(text, state)) {
+    return recallResearch(state, text);
+  }
   if (id === DESKTOP_OPEN_SCOPED_RESOURCE && looksLikeMemoryRecall(text)) {
     const recalled = bindDiscourseToIntent({
       act: 'MEMORY_QUERY',
@@ -163,12 +167,19 @@ export function rewriteWrongRoute(
 export function looksLikeProjectFollowUp(text: string, state: ConversationState): boolean {
   if (!state.activeProjectSlug && !state.activePlanId && !state.pendingPlanReview) return false;
   if (looksLikeMemoryRecall(text)) return false;
-  return /เปิดให้ดู|เปิดดู|preview|เพิ่มปุ่ม|dark mode|animation|navbar|hover|เว็บนี้|โปรเจกต์นี้|\b(it|this|that)\b|มัน|อันนี้|รันใหม่|build ใหม่|\badd\b|\bchange\b|\bmake\b|ขาวหมด|blank|console|สมมติ/iu.test(text)
+  return /เปิดให้ดู|เปิดดู|preview|เพิ่มปุ่ม|dark mode|animation|navbar|hover|เว็บนี้|เว็บเรา|โปรเจกต์นี้|\b(it|this|that)\b|มัน|อันนี้|รันใหม่|build ใหม่|\badd\b|\bchange\b|\bmake\b|ขาวหมด|blank|console|สมมติ/iu.test(text)
     && !/chrome|youtube|notepad|spotify|cursor|vscode/iu.test(text);
 }
 
 function looksLikeMemoryRecall(text: string): boolean {
   return /สีเว็บ|สีที่เราคุย|สีที่ผมเลือก|สีของเว็บ|เราคุยอะไร|เราคุยกัน|จำอะไรเกี่ยวกับ|เมื่อกี้เราคุย/iu.test(text);
+}
+
+function looksLikeResearchApply(text: string, state: ConversationState): boolean {
+  return Boolean(
+    (state.lastResearchQuery || state.selectedOption)
+    && /ใช้ตัวนั้น|ได้ตรงไหน|ย้อนกลับไปเรื่อง|ตัวที่นายแนะนำ|ที่แนะนำชื่อ/iu.test(text),
+  );
 }
 
 function continueWork(
@@ -185,7 +196,12 @@ function continueWork(
     }
     return talk('งานนี้รออนุญาตอยู่ครับ กดอนุญาตงานนี้ได้เลย', 'WAITING_PERMISSION');
   }
-  if (state.pendingPlanReview && discourse.act !== 'MODIFY_PROJECT' && discourse.act !== 'EXECUTE_NOW') {
+  if (
+    state.pendingPlanReview
+    && !isLeftoverWaitingPlan(state)
+    && discourse.act !== 'MODIFY_PROJECT'
+    && discourse.act !== 'EXECUTE_NOW'
+  ) {
     return approve(state);
   }
   if (discourse.act === 'EXECUTE_NOW' && state.pendingChange) {
@@ -227,7 +243,11 @@ function continueWork(
       }
     }
   }
-  if (state.activePlanId && (state.lastJarvisAction === SOFTWARE_PLAN_BUILD || state.pendingPlanReview)) {
+  if (
+    state.activePlanId
+    && (state.lastJarvisAction === SOFTWARE_PLAN_BUILD || state.pendingPlanReview)
+    && !isLeftoverWaitingPlan(state)
+  ) {
     return approve(state);
   }
   if (state.activeProjectSlug) {
@@ -266,15 +286,21 @@ function applyChange(
 ): IntentResolution {
   const project = projectForOwnerText(state, text);
   return capability(SOFTWARE_APPLY_BUILD, {
-    planId: project?.planId || state.activePlanId,
+    planId: project?.planId || currentPlanId(state),
     goalId: project?.goalId || state.activeGoalId,
     brief: changeBrief(state, text, discourse),
     merge: true,
   }, 'CONVERSATION_MODIFY');
 }
 
+function currentPlanId(state: ConversationState): string | undefined {
+  return activeProject(state)?.planId || state.activePlanId;
+}
+
 function approve(state: ConversationState): IntentResolution {
-  const planId = state.pendingPlanReview?.planId || state.activePlanId;
+  const planId = isLeftoverWaitingPlan(state)
+    ? currentPlanId(state)
+    : (state.pendingPlanReview?.planId || currentPlanId(state));
   if (!planId) return clarify('ยังไม่มีแผนที่รออนุมัติครับ', 'NO_PLAN');
   return capability(SOFTWARE_APPLY_BUILD, {
     planId,
@@ -284,7 +310,9 @@ function approve(state: ConversationState): IntentResolution {
 }
 
 function accumulate(state: ConversationState, brief: string): IntentResolution {
-  const planId = state.pendingPlanReview?.planId || state.activePlanId;
+  const planId = isLeftoverWaitingPlan(state)
+    ? currentPlanId(state)
+    : (state.pendingPlanReview?.planId || currentPlanId(state));
   if (!planId) return capability(SOFTWARE_PLAN_BUILD, { brief }, 'CONVERSATION_PLAN');
   return capability(SOFTWARE_PLAN_BUILD, { brief, planId, merge: true }, 'CONVERSATION_MERGE_PLAN');
 }
@@ -302,8 +330,20 @@ function planRequest(state: ConversationState, text: string): IntentResolution {
       'PLAN_SUMMARY',
     );
   }
+  if (/แผนเปลี่ยนจากเดิม|แผนต่างจาก|ต่างจากแผนเดิม|plan (?:changed|differ)/iu.test(text)) {
+    const project = activeProject(state);
+    const leftover = isLeftoverWaitingPlan(state);
+    return talk(
+      leftover
+        ? `แผนหลักยังเป็นของ ${project?.label || 'โปรเจกต์ปัจจุบัน'} ครับ แผนรอรีวิวที่ค้างอยู่ยังไม่ได้แทนที่งานนี้`
+        : `แผนหลักยังเป็นของ ${project?.label || 'โปรเจกต์ปัจจุบัน'} ครับ ยังไม่มีแผนใหม่ที่นำมาใช้แทน`,
+      'PLAN_DIFF',
+    );
+  }
   if (state.pendingPlanReview || state.activePlanId) {
-    const title = state.pendingPlanReview?.title || 'แผนปัจจุบัน';
+    const title = isLeftoverWaitingPlan(state)
+      ? (activeProject(state)?.label || 'แผนปัจจุบัน')
+      : (state.pendingPlanReview?.title || 'แผนปัจจุบัน');
     if (/สั้น/iu.test(text)) {
       return talk(`สรุปสั้นๆ: ${title} ยังเป็นแผนเดิมครับ อนุมัติได้เลยหรือจะเพิ่มอะไร`, 'PLAN_SUMMARY');
     }
@@ -395,7 +435,7 @@ function selectOrdinal(state: ConversationState, discourse: DiscourseInterpretat
     .filter((item): item is number => Number.isFinite(item) && item > 0);
   const ordinal = ordinals[0];
   if (!ordinal) return clarify('อันไหนที่หมายถึงครับ?', 'ORDINAL_MISSING');
-  const pool = usableChoiceOptions(state);
+  const pool = usableChoiceOptions(state, discourse.change || '');
   const source = pool.length ? pool : state.offeredOptions;
   if (source.length) {
     const picked = ordinals
@@ -427,6 +467,26 @@ function selectOrdinal(state: ConversationState, discourse: DiscourseInterpretat
 function bindConditional(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution {
   const last = state.recentVerification;
   const thenActs = nextActsForConditional(discourse);
+  if (discourse.change === 'CONTINUE_IF_HEALTHY' || discourse.thenAct === 'CONTINUE') {
+    if (last?.ok === false) {
+      return talk('ขั้นตอนล่าสุดยังไม่ผ่าน เลยยังไม่ไปต่อครับ', 'CONDITIONAL_HELD');
+    }
+    const stored = (state.pendingConditional?.thenActs || []).filter(item => item !== 'CONTINUE' && item !== 'PAUSE');
+    if (stored.length) {
+      return bindConditional(state, {
+        ...discourse,
+        act: 'CONDITIONAL',
+        change: discourse.change === 'CONTINUE_IF_HEALTHY' ? 'GO' : discourse.change,
+        thenAct: stored[stored.length - 1],
+        thenActs: stored,
+        ifKind: state.pendingConditional?.ifKind || discourse.ifKind,
+      });
+    }
+    if (state.queue.some(item => item.status === 'pending' || item.status === 'running')) {
+      return continueWork(state, discourse.change || '', { ...discourse, act: 'CONTINUE' });
+    }
+    return talk('ขั้นตอนล่าสุดไม่พังครับ พร้อมไปขั้นถัดไปเมื่อมีงานค้าง', 'CONDITIONAL_READY');
+  }
   if (discourse.change === 'STOP_ON_FAIL' || thenActs.includes('PAUSE') || discourse.thenAct === 'PAUSE') {
     return talk('จำไว้ครับ ถ้าขั้นตอนไหน fail จะหยุดแล้วบอกสาเหตุ ไม่ทำขั้นถัดไป', 'CONDITIONAL_STOP_ON_FAIL');
   }
@@ -782,7 +842,9 @@ function pendingWorkBits(state: ConversationState): string[] {
   const queue = state.queue.filter(item => item.status === 'pending' || item.status === 'running');
   return [
     state.pendingPermission ? 'รออนุญาตงานนี้' : '',
-    state.pendingPlanReview ? `แผนรอรีวิว: ${state.pendingPlanReview.title || state.pendingPlanReview.planId}` : '',
+    state.pendingPlanReview
+      ? `${isLeftoverWaitingPlan(state) ? 'แผนรอรีวิวที่ไม่ใช่งานปัจจุบัน' : 'แผนรอรีวิว'}: ${state.pendingPlanReview.title || state.pendingPlanReview.planId}`
+      : '',
     queue.length ? `คิว ${queue.map(item => item.text).join(' · ')}` : '',
     state.activeGoalId ? `เป้าหมาย ${state.activeGoalId}` : '',
     project ? `โปรเจกต์ ${project.label}` : state.activeProjectSlug ? `โปรเจกต์ ${state.activeProjectSlug}` : '',
@@ -925,12 +987,32 @@ function researchQuery(
   return next.slice(0, 200);
 }
 
+function recallResearch(state: ConversationState, text: string): IntentResolution {
+  const label = state.selectedOption?.label
+    || extractComparisonOptions(state.lastResearchQuery)[0]?.label
+    || state.lastResearchQuery
+    || 'ตัวที่แนะนำไว้';
+  const project = activeProject(state)?.label || state.activeProjectSlug || 'เว็บนี้';
+  if (/ชื่ออะไร|what (?:was|is) (?:it )?called|เรียกว่าอะไร/iu.test(text)) {
+    return talk(`ตัวที่แนะนำไว้คือ ${label} ครับ`, 'RESEARCH_RECALL');
+  }
+  if (/ตรงไหน|where (?:can|could)|ใช้ตัวนั้นกับเว็บ/iu.test(text)) {
+    return talk(`ใช้ ${label} กับ ${project} ได้ครับ ยังไม่ได้ลงในไฟล์ไหน`, 'RESEARCH_APPLY_HINT');
+  }
+  return talk(
+    state.lastResearchQuery
+      ? `เรื่องที่คุยไว้: ${state.lastResearchQuery}`
+      : `เรื่องที่แนะนำไว้คือ ${label} ครับ`,
+    'RESEARCH_RECALL',
+  );
+}
+
 function recommendResearch(
   state: ConversationState,
   text: string,
   discourse: DiscourseInterpretation,
 ): IntentResolution {
-  const options = usableChoiceOptions(state);
+  const options = usableChoiceOptions(state, text);
   const wantCount = Number((text.match(/เลือก\s*(\d+)\s*อย่าง/u) || [])[1] || 0);
   if (wantCount >= 2 && options.length >= wantCount) {
     const picked = options.slice(0, wantCount);
@@ -963,11 +1045,12 @@ function recommendResearch(
   return capability(RESEARCH_CURRENT, { query: researchQuery(state, text, discourse) }, 'CONVERSATION_RESEARCH');
 }
 
-function usableChoiceOptions(state: ConversationState): OfferedOption[] {
+function usableChoiceOptions(state: ConversationState, text = ''): OfferedOption[] {
   const research = extractComparisonOptions(state.lastResearchQuery || state.lastOwnerIntent);
-  if ((state.activeTopic === 'research' || state.lastDiscourse === 'RESEARCH') && research.length) {
-    return research;
-  }
+  const askingResearch = state.activeTopic === 'research'
+    || state.lastDiscourse === 'RESEARCH'
+    || /แนะนำ|เทียบ|framer|gsap|library|animation/iu.test(text);
+  if (askingResearch && research.length) return research;
   const options = state.offeredOptions.filter(item => !looksLikeInventoryOption(item.label));
   if (options.length) return options;
   return research;

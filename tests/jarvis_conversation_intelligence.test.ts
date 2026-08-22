@@ -1481,3 +1481,102 @@ test('if-build-passed-then-preview does not rerun build when the last build alre
   assert.notEqual(bound?.capabilityId, PROJECT_BUILD);
   assert.equal((bound?.extraCalls || []).length, 0);
 });
+
+test('leftover plans do not steal research recall, in-sentence ordinals, or healthy continue', () => {
+  const leftover = softwareState({
+    pendingPlanReview: { planId: 'plan_leftover', goalId: 'BUILD_WEBSITE', title: 'Leftover hero options' },
+    lastResearchQuery: 'Framer Motion vs GSAP for this portfolio',
+    selectedOption: { index: 1, label: 'Framer Motion' },
+    lastDiscourse: 'PREVIEW',
+    activeTopic: 'software',
+    offeredOptions: [
+      { index: 1, label: 'Hero stats' },
+      { index: 2, label: 'Featured project section' },
+    ],
+    recentVerification: { kind: 'test', ok: true, summary: 'Tests passed for portfolio', at: 9, slug: 'portfolio' },
+  });
+
+  const ordinalText = 'อันที่เมื่อกี้แนะนำข้อสองน่าสนใจ เอาตัวนั้น';
+  const ordinal = interpretDiscourse(ordinalText, leftover);
+  assert.equal(ordinal.act, 'SELECT_ORDINAL');
+  assert.equal(ordinal.ordinal, 2);
+  const picked = bindDiscourseToIntent(ordinal, leftover, ordinalText);
+  assert.match(String(picked?.userMessage || ''), /GSAP/i);
+  assert.doesNotMatch(String(picked?.userMessage || ''), /Hero stats|Featured project/i);
+
+  const recallText = 'ย้อนกลับไปเรื่อง animation เมื่อกี้';
+  const recall = interpretDiscourse(recallText, leftover);
+  assert.equal(recall.act, 'RESEARCH');
+  assert.equal(recall.change, 'RECALL');
+  const recalled = bindDiscourseToIntent(recall, leftover, recallText);
+  assert.equal(recalled?.reasonCode, 'RESEARCH_RECALL');
+  assert.match(String(recalled?.userMessage || ''), /Framer|GSAP|animation/i);
+  assert.notEqual(recalled?.capabilityId, SOFTWARE_APPLY_BUILD);
+
+  const nameText = 'ตัวที่นายแนะนำชื่ออะไรนะ';
+  const named = bindDiscourseToIntent(interpretDiscourse(nameText, leftover), leftover, nameText);
+  assert.equal(named?.reasonCode, 'RESEARCH_RECALL');
+  assert.match(String(named?.userMessage || ''), /Framer Motion/i);
+  assert.notEqual(named?.capabilityId, SOFTWARE_APPLY_BUILD);
+
+  const whereText = 'ใช้ตัวนั้นกับเว็บเราได้ตรงไหนบ้าง';
+  const where = bindDiscourseToIntent(interpretDiscourse(whereText, leftover), leftover, whereText);
+  assert.equal(where?.reasonCode, 'RESEARCH_APPLY_HINT');
+  assert.notEqual(where?.capabilityId, DESKTOP_OPEN_SCOPED_RESOURCE);
+  assert.notEqual(where?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.match(String(where?.userMessage || ''), /Framer|Portfolio/i);
+
+  const rewritten = rewriteWrongRoute({
+    kind: 'CAPABILITY',
+    capabilityId: DESKTOP_OPEN_SCOPED_RESOURCE,
+    arguments: {},
+    confidence: 'HIGH',
+    reasonCode: 'SEMANTIC_SCOPED_WEB',
+    consumed: true,
+    source: 'semantic',
+    actionClass: 'ACTIONABLE',
+  }, leftover, whereText);
+  assert.notEqual(rewritten.capabilityId, DESKTOP_OPEN_SCOPED_RESOURCE);
+
+  const pickText = 'เลือกจุดที่คุ้มสุดมาหนึ่งจุด';
+  const pick = interpretDiscourse(pickText, leftover);
+  assert.equal(pick.act, 'RESEARCH');
+  assert.equal(pick.recommend, true);
+
+  const diffText = 'ตอนนี้แผนเปลี่ยนจากเดิมยังไง';
+  const diff = interpretDiscourse(diffText, leftover);
+  assert.equal(diff.act, 'PLAN_REQUEST');
+  const diffBound = bindDiscourseToIntent(diff, leftover, diffText);
+  assert.equal(diffBound?.reasonCode, 'PLAN_DIFF');
+  assert.notEqual(diffBound?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.match(String(diffBound?.userMessage || ''), /Portfolio|แผนหลัก/i);
+
+  const healthyText = 'ถ้าไม่พังก็ไปขั้นต่อไปเอง';
+  const healthy = interpretDiscourse(healthyText, leftover);
+  assert.equal(healthy.act, 'CONDITIONAL');
+  assert.equal(healthy.change, 'CONTINUE_IF_HEALTHY');
+  const healthyBound = bindDiscourseToIntent(healthy, leftover, healthyText);
+  assert.equal(healthyBound?.reasonCode, 'CONDITIONAL_READY');
+  assert.notEqual(healthyBound?.capabilityId, SOFTWARE_APPLY_BUILD);
+
+  const stolen = applyTurnToConversation(leftover, {
+    ownerText: recallText,
+    discourse: recall,
+    resolution: recalled!,
+    pendingPlanReview: { planId: 'plan_leftover', goalId: 'BUILD_WEBSITE', title: 'Leftover hero options' },
+    project: { slug: 'portfolio', label: 'Portfolio', kind: 'website', goalId: 'BUILD_WEBSITE', planId: 'plan_leftover' },
+  });
+  assert.equal(stolen.activePlanId, 'plan_portfolio');
+  assert.equal(stolen.projects.find(item => item.slug === 'portfolio')?.planId, 'plan_portfolio');
+  assert.notEqual(stolen.pendingPlanReview?.planId, 'plan_leftover');
+
+  const resumeText = 'มาทำ portfolio ของเราต่อกัน';
+  const restored = applyTurnToConversation(leftover, {
+    ownerText: resumeText,
+    discourse: interpretDiscourse(resumeText, leftover),
+    resolution: bindDiscourseToIntent(interpretDiscourse(resumeText, leftover), leftover, resumeText)!,
+  });
+  assert.equal(restored.activeProjectSlug, 'portfolio');
+  assert.equal(restored.activePlanId, 'plan_portfolio');
+  assert.equal(restored.pendingPlanReview, undefined);
+});

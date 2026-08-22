@@ -1,6 +1,6 @@
 import type { IntentResolution } from '../intent/types';
 import type { ConversationState, DiscourseAct, DiscourseInterpretation, ProjectRecord, QueueItem } from './types';
-import { activeProject, restoreProject, projectForOwnerText } from './referents';
+import { activeProject, restoreProject, projectForOwnerText, isLeftoverWaitingPlan } from './referents';
 import { optionsFromReply, isOperationalNoise, isPermissionPrompt, extractComparisonOptions, pickRecommendedOption } from './view';
 import { interpretDiscourse } from './discourse';
 
@@ -25,7 +25,18 @@ export function applyTurnToConversation(
   if (input.pendingPermission === null) next.pendingPermission = undefined;
   else if (input.pendingPermission) next.pendingPermission = input.pendingPermission;
   if (input.pendingPlanReview === null) next.pendingPlanReview = undefined;
-  else if (input.pendingPlanReview) next.pendingPlanReview = input.pendingPlanReview;
+  else if (input.pendingPlanReview) {
+    const probe = { ...next, pendingPlanReview: input.pendingPlanReview };
+    const leftoverIncoming = isLeftoverWaitingPlan(probe)
+      && !['NEW_PROJECT', 'APPROVE_PLAN', 'ACCUMULATE_REQUIREMENTS', 'PLAN_REQUEST'].includes(input.discourse.act);
+    if (leftoverIncoming) {
+      if (next.pendingPlanReview?.planId === input.pendingPlanReview.planId) {
+        next.pendingPlanReview = undefined;
+      }
+    } else {
+      next.pendingPlanReview = input.pendingPlanReview;
+    }
+  }
 
   if (input.discourse.act === 'PAUSE') {
     next.paused = true;
@@ -101,6 +112,9 @@ export function applyTurnToConversation(
       next.referents.this_project = project.slug;
       next.referents.this_site = project.slug;
       next.referents.this_app = project.slug;
+      if (next.pendingPlanReview && next.pendingPlanReview.planId !== project.planId) {
+        next.pendingPlanReview = undefined;
+      }
     }
   }
   if (input.discourse.act === 'SELECT_ORDINAL' && input.discourse.ordinal) {
@@ -166,9 +180,16 @@ export function applyTurnToConversation(
   }
   if (input.project?.slug) {
     const existing = next.projects.findIndex(item => item.slug === input.project!.slug);
+    const existingPlan = existing >= 0 ? next.projects[existing]!.planId : undefined;
+    const incomingPlan = input.project.planId;
+    const adoptIncomingPlan = !existingPlan
+      || !incomingPlan
+      || incomingPlan === existingPlan
+      || ['NEW_PROJECT', 'APPROVE_PLAN', 'ACCUMULATE_REQUIREMENTS', 'PLAN_REQUEST'].includes(input.discourse.act);
     const record: ProjectRecord = {
       ...(existing >= 0 ? next.projects[existing]! : { slug: input.project.slug, label: input.project.label || input.project.slug, kind: input.project.kind || 'website' }),
       ...input.project,
+      planId: adoptIncomingPlan ? (incomingPlan || existingPlan) : existingPlan,
     };
     if (existing >= 0) next.projects[existing] = record;
     else next.projects.push(record);
@@ -209,7 +230,13 @@ export function applyTurnToConversation(
     ? String(input.resolution.arguments.relativePath)
     : undefined;
   if (slug) next.activeProjectSlug = slug;
-  if (planId) next.activePlanId = planId;
+  if (planId) {
+    const projectPlan = activeProject(next)?.planId;
+    const adoptPlan = !projectPlan
+      || planId === projectPlan
+      || ['NEW_PROJECT', 'APPROVE_PLAN', 'ACCUMULATE_REQUIREMENTS', 'PLAN_REQUEST'].includes(input.discourse.act);
+    if (adoptPlan) next.activePlanId = planId;
+  }
   if (relativePath) next.referents.this_file = relativePath;
   if (/เว็บนี้|this site|this website|ให้เว็บนี้/iu.test(input.ownerText) && !/\b(?:todo|แอป|แอพ)\b/iu.test(input.ownerText)) {
     const site = projectForOwnerText(next, input.ownerText);

@@ -5,6 +5,14 @@ export function activeProject(state: ConversationState | null | undefined): Proj
   return state.projects.find(item => item.slug === state.activeProjectSlug) || state.projects[0];
 }
 
+export function isLeftoverWaitingPlan(state: ConversationState | null | undefined): boolean {
+  const pending = state?.pendingPlanReview;
+  if (!pending?.planId) return false;
+  const project = activeProject(state);
+  if (!project?.planId) return false;
+  return pending.planId !== project.planId;
+}
+
 export function projectByOrdinal(state: ConversationState, ordinal: number): ProjectRecord | undefined {
   const index = ordinal - 1;
   if (index < 0 || index >= state.projects.length) return undefined;
