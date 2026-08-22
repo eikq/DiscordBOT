@@ -45,7 +45,7 @@ export class ConversationStateStore {
   public hydrate(input: ConversationHydration): ConversationState {
     const current = this.get(input.sessionId);
     const slug = input.activeProjectSlug || current.activeProjectSlug || input.projects?.[0]?.slug || current.projects[0]?.slug;
-    const stackedPlan = [...(current.topicStack || [])].reverse().find(frame => (
+    const stackedPlan = (current.topicStack || []).find(frame => (
       frame.projectSlug === slug && frame.planId
     ))?.planId;
     const leftoverDraft = Boolean(

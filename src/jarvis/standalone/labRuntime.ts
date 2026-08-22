@@ -2204,7 +2204,7 @@ export class JarvisLabRuntime {
         planId: plan.id,
         workspace: `data/jarvis/builds/${plan.slug}`,
       }));
-    const stackedPlan = [...(current.topicStack || [])].reverse().find(frame => (
+    const stackedPlan = (current.topicStack || []).find(frame => (
       frame.projectSlug === (current.activeProjectSlug || slug) && frame.planId
     ))?.planId;
     const matchingPlan = latest && latest.id === (current.activePlanId || latest.id) ? latest : latest;

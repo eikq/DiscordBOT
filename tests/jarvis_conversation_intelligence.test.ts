@@ -332,7 +332,10 @@ test('hydrate does not let a leftover draft replace the stacked site plan', () =
   const file = path.join(dir, 'conversation-state.json');
   const store = new ConversationStateStore(file, () => 12);
   store.put(softwareState({
-    topicStack: [{ topic: 'software', projectSlug: 'portfolio', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio', label: 'Portfolio' }],
+    topicStack: [
+      { topic: 'software', projectSlug: 'portfolio', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio', label: 'Portfolio' },
+      { topic: 'software', projectSlug: 'portfolio', goalId: 'BUILD_WEBSITE', planId: 'plan_leftover', label: 'Portfolio' },
+    ],
     activePlanId: 'plan_leftover',
     projects: [{ slug: 'portfolio', label: 'Portfolio', kind: 'website', planId: 'plan_leftover', goalId: 'BUILD_WEBSITE' }],
   }));
