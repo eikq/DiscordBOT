@@ -3,7 +3,72 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Context runtime completion
+## This turn — Desktop perception and verified managed windows
+
+Branch: `local/jarvis-desktop-perception-v1-2026-08-22` from exact
+context-runtime HEAD `081dc82d8acbf358b91dd0095d8457fe8772695e`.
+Remote checkpoint already on
+`origin/local/jarvis-context-runtime-completion-2026-08-21` @ `081dc82`.
+Did not modify `main`. Did not force-push.
+
+Verification: `npx tsc --noEmit` PASS; focused desktop+semantic+context
+PASS; `npm run test:cloud` **695 / 695** PASS (was 671);
+`npm run build` PASS (same Vite/`import.meta` warnings as before).
+
+Standalone live URL: `http://127.0.0.1:3010` (port 3000 left alone).
+
+Architecture:
+
+- Read-only `DesktopPerceptionProvider` / `WindowsDesktopPerception`
+  enumerates displays, top-level windows, foreground, bounds, process,
+  and overlap. No continuous screenshot capture. Cached host remains
+  `jarvis-desktop-host-v3` (no per-action `Add-Type`).
+- `WindowSnapshot` keeps only Windows-observable fields.
+- `ManagedWindowRecord` binds a window Jarvis itself opened after
+  pre/post discovery. Ambiguous identity returns
+  `WINDOW_IDENTITY_AMBIGUOUS` and does not guess.
+- Browser OPEN uses allowlisted Chrome/Edge with `--new-window`.
+  Existing owner browser windows are not taken over when no new handle
+  appears.
+- PLACE requires a managed handle for Chrome/Edge. Success is
+  `overlap >= 0.55` or (center inside and `overlap >= 0.35`).
+  `previousDisplay` updates only after verified placement.
+- FOCUS operates only a known managed handle. `SW_RESTORE` is used
+  only when the window is iconic; otherwise `SW_SHOW`.
+- Confirm `finishActionTurn` writes observed `displayId` /
+  `displayFingerprint` into working context. `window:` result targets
+  are a scope refinement, not `EFFECT_SCOPE_MISMATCH`.
+- CLICK / TYPE / SUBMIT / screen-visual understanding stay
+  `PREPARE_CONTRACT`.
+
+Live A–I on this host (2 displays; cachedHost true):
+
+| ID | Result | Honesty |
+|---|---|---|
+| A | **LIVE_VERIFIED** | DISPLAY1 notebook 1920×1200 at -3840,-6 `MONITOR\BOE0D5B\…\0002`; DISPLAY5 right/primary 1920×1080 at 0,0 `MONITOR\MSI3DA6\…\0004` |
+| B | **LIVE_VERIFIED** | “notebook monitor” → BOE `display.fp` key `a4b2e67c0056` |
+| C | **LIVE_VERIFIED** | Open Roblox → dedicated `1508918` “Home - Roblox”, notebook, overlap ~0.99. HANDLER_COMPLETE + WINDOW_VERIFIED + DISPLAY_VERIFIED. RESOURCE_URL_UNVERIFIED. Owner Chrome `133304` bounds unchanged |
+| D | **LIVE_VERIFIED** | Same handle `1508918` moved to DISPLAY5, overlap ~0.98. Owner `133304` unchanged |
+| E | **LIVE_VERIFIED** | Same handle `1508918` back on notebook, overlap ~0.99. `previousDisplay` used the verified right monitor |
+| F | **LIVE_VERIFIED** | Distinct YouTube managed window `986218` on notebook. Roblox `1508918` untouched. Owner `133304` untouched |
+| G | **HANDLER_COMPLETE / not LIVE_VERIFIED** | First pass: handle `1508918` identified, `FOCUS_UNVERIFIED`; `SW_RESTORE` shrank that window onto DISPLAY5. Retest after iconic-only restore: handler said FOCUS_VERIFIED for `2361430`, later snapshot could not find that handle. Do not claim foreground LIVE_VERIFIED |
+| H | **WINDOW_VERIFIED / RESOURCE_URL_UNVERIFIED** | Live Qwen research completed (`docs.qwencloud.com`). Two official sources stayed `AMBIGUOUS_SOURCE`. “Open the QwenCloud source.” → dedicated `2427940` titled “Model releases - QwenCloud”. URL not independently read from Chrome |
+| I | **WINDOW_VERIFIED / folder UNVERIFIED** | “Jarvis project” remembered as registered id, no raw path. Cursor window `1902488` title only `Cursor`. Application-level only |
+
+Owner Chrome `133304` was not the placement target in C–F. A later
+Roblox re-open changed its bounds transiently (Chrome window manager,
+not `placeWindow`).
+
+Four first-pass `EFFECT_SCOPE_MISMATCH` incidents (open/place/focus
+reporting `window:{handle}`) were cleared one-by-one via inspect →
+“clear this scope”. No global clear. Containment now treats discovered
+`window:` handles as refinements of an in-scope URL/app.
+
+Remaining before scoped CLICK/TYPE: reliable FOCUS read-back without
+restoring/moving the window; independently readable URL/tab identity;
+Cursor workspace-folder proof; no first-window fallback regressions.
+
+## Previous — Context runtime completion
 
 Branch: `local/jarvis-context-runtime-completion-2026-08-21` from semantic
 checkpoint HEAD `18b40601433c8fbe14c2f0419a141ad02e057cb2`.
