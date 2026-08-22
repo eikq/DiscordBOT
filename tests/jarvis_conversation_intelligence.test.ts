@@ -889,6 +889,9 @@ test('memory recap answers working context instead of dumping every preference',
   }
   const recap = bindDiscourseToIntent(interpretDiscourse('เมื่อกี้เราคุยอะไรกันมาบ้าง', state), state, 'เมื่อกี้เราคุยอะไรกันมาบ้าง');
   assert.match(String(recap?.userMessage || ''), /Portfolio|dark mode|ล่าสุด/i);
+  const demoRecap = bindDiscourseToIntent(interpretDiscourse('เมื่อกี้เราทำอะไรไปบ้าง', state), state, 'เมื่อกี้เราทำอะไรไปบ้าง');
+  assert.equal(interpretDiscourse('เมื่อกี้เราทำอะไรไปบ้าง', state).statusFocus, 'recent');
+  assert.match(String(demoRecap?.userMessage || ''), /Portfolio|dark mode|ล่าสุด/i);
   const history = bindDiscourseToIntent(interpretDiscourse('เปิด history ให้ดู', state), state, 'เปิด history ให้ดู');
   assert.equal(history?.reasonCode, 'OPEN_HISTORY');
   assert.notEqual(history?.kind, 'UNSUPPORTED');

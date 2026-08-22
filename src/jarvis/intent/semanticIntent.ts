@@ -360,7 +360,7 @@ function matchForgetAlias(text: string): Partial<SemanticIntent> | null {
 }
 
 function matchAskMemory(text: string): Partial<SemanticIntent> | null {
-  if (!/what do you remember|what do you call|which screen|จำอะไร|จอโน้ตบุ๊กคือจอไหน|ผมชอบให้ตอบ|how do i like|reply style|ตอบแบบไหน/iu.test(text)) return null;
+  if (!/what do you remember|what do you call|which screen|จำอะไร|จอโน้ตบุ๊กคือจอไหน|ผมชอบให้ตอบ|how do i like|reply style|ตอบแบบไหน|ผมชอบ UI|ชอบ UI แบบไหน|what (?:ui|style) do i (?:like|prefer)/iu.test(text)) return null;
   return {
     action: 'ASK_MEMORY',
     objectType: /monitor|screen|จอ/iu.test(text) ? 'DISPLAY' : /project|โปรเจกต์/iu.test(text) ? 'PROJECT' : 'UNKNOWN',

@@ -172,7 +172,7 @@ export function looksLikeProjectFollowUp(text: string, state: ConversationState)
 }
 
 function looksLikeMemoryRecall(text: string): boolean {
-  return /สีเว็บ|สีที่เราคุย|สีที่ผมเลือก|สีของเว็บ|เราคุยอะไร|เราคุยกัน|จำอะไรเกี่ยวกับ|เมื่อกี้เราคุย/iu.test(text);
+  return /สีเว็บ|สีที่เราคุย|สีที่ผมเลือก|สีของเว็บ|เราคุยอะไร|เราคุยกัน|จำอะไรเกี่ยวกับ|เมื่อกี้เราคุย|เมื่อกี้เราทำอะไร/iu.test(text);
 }
 
 function looksLikeResearchApply(text: string, state: ConversationState): boolean {
@@ -683,7 +683,7 @@ function bindMemoryQuery(state: ConversationState, text: string): IntentResoluti
       'CONVERSATION_MEMORY',
     );
   }
-  if (/เราคุยอะไร|เราคุยกัน|เมื่อกี้เราคุย/iu.test(text)) {
+  if (/เราคุยอะไร|เราคุยกัน|เมื่อกี้เราคุย|เมื่อกี้เราทำอะไร/iu.test(text)) {
     return talk(recentWorkLine(state), 'CONVERSATION_MEMORY');
   }
   return talk(rememberedLine(state), 'CONVERSATION_MEMORY');

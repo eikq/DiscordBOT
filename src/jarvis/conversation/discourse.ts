@@ -339,12 +339,12 @@ function isRerun(text: string): boolean {
 
 function isStatus(text: string): boolean {
   return /^(ผ่าน)$/u.test(text)
-    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|preview ใช้งาน|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง|โอเคไหม|ผลเป็นไง|ผลล่าสุด/iu.test(text)
+    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้(?:ทำ)?ถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|preview ใช้งาน|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|เมื่อกี้เราทำอะไร|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|เช็กของจริง|มีปัญหาไหม|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง|โอเคไหม|ผลเป็นไง|ผลล่าสุด/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|what projects|which project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
 function classifyStatusFocus(text: string, state: ConversationState | null | undefined): import('./types').StatusFocus {
-  if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|จำได้ไหม|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
+  if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|เมื่อกี้เราทำอะไร|จำได้ไหม|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
   if (/พร้อมทำงาน|พร้อมไหม|are you ready|ready to work/iu.test(text)) return 'readiness';
   if (/ผ่านไหม|ผ่าน\?|^ผ่าน$|โอเคไหม|ผลเป็นไง|ผลล่าสุด/iu.test(text)) return 'verification';
   if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
@@ -381,7 +381,7 @@ function isMemoryStore(text: string): boolean {
 }
 
 function isMemoryQuery(text: string): boolean {
-  return /จำอะไรเกี่ยวกับ|สีที่ผมเลือก|สีเว็บ|สีที่เราคุย|สีของเว็บ|memory ของ project|ตอนแรกผมบอก|เราคุยอะไร|เราคุยกัน|ย้อนแค่เรื่อง|เปลี่ยนใจตรงไหน|ถ้าผมกลับมาพรุ่งนี้|จำบทสนทนา|ได้ทั้งหมดไหม|เปิด history|show history|open history|เปิดประวัติ/iu.test(text);
+  return /จำอะไรเกี่ยวกับ|สีที่ผมเลือก|สีเว็บ|สีที่เราคุย|สีของเว็บ|memory ของ project|ตอนแรกผมบอก|เราคุยอะไร|เราคุยกัน|ย้อนแค่เรื่อง|เปลี่ยนใจตรงไหน|ถ้าผมกลับมาพรุ่งนี้|จำบทสนทนา|ได้ทั้งหมดไหม|เปิด history|show history|open history|เปิดประวัติ|ผมชอบ UI|ชอบ UI แบบไหน|what (?:ui|style) do i (?:like|prefer)/iu.test(text);
 }
 
 function isNegate(text: string): boolean {
