@@ -664,7 +664,7 @@ function parseQueueOp(
     if (/queue เป็นยังไง|queue เมื่อกี้/iu.test(text)) return { kind: 'review' };
     return null;
   }
-  if (/ขอดู list|queue เป็นยังไง|ตอนนี้(?:ทำ)?ถึงข้อไหน|show (?:the )?(?:queue|list)/iu.test(text)) {
+  if (/ขอดู list|queue เป็นยังไง|queue เมื่อกี้|ตอนนี้(?:ทำ)?ถึงข้อไหน|show (?:the )?(?:queue|list)/iu.test(text)) {
     return { kind: 'review' };
   }
   if (/^(โอเคเริ่ม|เริ่มคิว|start (?:the )?queue)$/iu.test(text)) return { kind: 'start' };

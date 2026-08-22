@@ -423,6 +423,9 @@ test('mission queue edits stay on the list until start, then bind the first pend
   const review = bindDiscourseToIntent(interpretDiscourse('ขอดู list ก่อน', queued), queued, 'ขอดู list ก่อน');
   assert.equal(review?.reasonCode, 'QUEUE_REVIEW');
   assert.match(String(review?.userMessage || ''), /Blog/);
+  const later = bindDiscourseToIntent(interpretDiscourse('queue เมื่อกี้ล่ะ', queued), queued, 'queue เมื่อกี้ล่ะ');
+  assert.equal(later?.reasonCode, 'QUEUE_REVIEW');
+  assert.match(String(later?.userMessage || ''), /Blog|test|build/i);
 
   const swapped = interpretDiscourse('สลับข้อ 2 กับ 3', queued);
   assert.equal(swapped.queueOp?.kind, 'swap');
