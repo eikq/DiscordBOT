@@ -29,6 +29,14 @@ export { applyForget, applySupersession, canSupersede, defaultRetention, isRetri
 export { assertQdrantIsIndexOnly, qdrantPayloadFor, qdrantPointId } from './qdrant';
 export { projectFact, projectObservation, projectPersonEntity, projectRelationship } from './socialProjection';
 export { SqliteJarvisMemoryStore } from './SqliteJarvisMemoryStore';
+export { ConversationHistoryStore } from './conversationStore';
+export type {
+  ConversationRole,
+  ConversationSessionRecord,
+  ConversationSource,
+  ConversationTurnRecord,
+  ConversationTurnStatus,
+} from './conversationStore';
 export { defaultJarvisDbPath } from './migrate';
 export type { JarvisMemoryStore, MemoryListFilter } from './store';
 export { mirrorSocialSnapshot } from './dualWrite';

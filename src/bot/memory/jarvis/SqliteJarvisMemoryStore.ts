@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { ConversationHistoryStore } from './conversationStore';
 import { canonicalMemoryId, isCanonicalMemoryId, parseCanonicalMemoryId } from './ids';
 import { currentSchemaVersion, defaultJarvisDbPath, openMigratedDatabase } from './migrate';
 import { applyForget, applySupersession, canSupersede, defaultRetention } from './semantics';
@@ -27,11 +28,18 @@ const SECRET_NAME = /(?:\.env|token|secret|api[_-]?key|credentials)/iu;
 
 export class SqliteJarvisMemoryStore implements JarvisMemoryStore {
   public readonly dbPath: string;
+  public readonly history: ConversationHistoryStore;
   private readonly db: DatabaseSync;
 
   constructor(dbPath: string) {
     this.dbPath = path.resolve(dbPath);
     this.db = openMigratedDatabase(this.dbPath);
+    this.history = new ConversationHistoryStore(this.db);
+    this.history.markAbandonedStarted();
+  }
+
+  public database(): DatabaseSync {
+    return this.db;
   }
 
   public static open(dbPath = defaultJarvisDbPath()): SqliteJarvisMemoryStore {

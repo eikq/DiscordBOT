@@ -1,4 +1,4 @@
-export const JARVIS_MEMORY_SCHEMA_VERSION = 2;
+export const JARVIS_MEMORY_SCHEMA_VERSION = 3;
 
 export const MEMORY_KINDS = [
   'entity',
