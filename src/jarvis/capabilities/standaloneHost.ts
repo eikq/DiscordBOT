@@ -36,6 +36,12 @@ import { registerWorldIntelCapabilities, type WorldIntelCapabilityPort } from '.
 import type { CapabilityHost } from './types';
 import { registerRecoverySandboxCapabilities } from '../recovery';
 import { defaultRuntimeRoot } from '../storage/operationalDb';
+import { registerSoftwareCapabilities } from '../build/capabilities';
+import { BuildPlanStore } from '../build/planStore';
+import { openMigratedDatabase } from '../../bot/memory/jarvis/migrate';
+import os from 'node:os';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 
 export type StandaloneCapabilityHostOptions = {
   worldIntel?: WorldIntelCapabilityPort | false;
@@ -60,6 +66,7 @@ export type StandaloneCapabilityHostOptions = {
     operator?: TrustedOperatorRuntime;
     displayAliases?: ActionGateOptions['displayAliases'];
   };
+  build?: false | { db?: DatabaseSync; sandboxRoot?: string };
 };
 
 export function createStandaloneCapabilityHost(
@@ -127,6 +134,19 @@ export function createStandaloneCapabilityHost(
     }
   }
 
+  if (options.build !== false) {
+    try {
+      const db = options.build?.db ?? defaultSoftwareDatabase();
+      registerSoftwareCapabilities(registry, {
+        plans: new BuildPlanStore(db),
+        events: options.actions === false ? undefined : options.actions?.events ?? sharedJarvisEventBus(),
+        sandboxRoot: options.build?.sandboxRoot,
+      });
+    } catch (error) {
+      console.warn(`[Jarvis] Software capabilities unavailable: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
   if (options.actions === false || !allowlists) return registry;
 
   const operator = options.actions?.operator ?? (options.actions?.leases || options.actions?.events || options.actions?.now || options.actions?.recoveryRoot
@@ -177,6 +197,14 @@ export function createStandaloneCapabilityHost(
     displayAliases: options.actions?.displayAliases,
   };
   return createActionGate(registry, gateOptions);
+}
+
+let softwareDb: DatabaseSync | undefined;
+
+function defaultSoftwareDatabase(): DatabaseSync {
+  if (softwareDb) return softwareDb;
+  softwareDb = openMigratedDatabase(path.join(os.tmpdir(), `jarvis-software-${process.pid}.sqlite`));
+  return softwareDb;
 }
 
 export function worldIntelPortFromGateway(gateway: McpResearchGateway): WorldIntelCapabilityPort {

@@ -8,6 +8,7 @@ import {
 } from '../capabilities/actions/constants';
 import { RESEARCH_CURRENT, RESEARCH_PRIVATE_BROWSE, RESEARCH_SEARCH } from '../research/constants';
 import { WORKSPACE_CURRENT, WORKSPACE_LIST, WORKSPACE_LIST_DOCUMENTS, WORKSPACE_SEARCH } from '../workspace/constants';
+import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../build/constants';
 import type { GoalDefinition, GoalRouteDefinition } from './types';
 
 export class GoalCatalog {
@@ -308,6 +309,58 @@ export const DEFAULT_GOALS: GoalDefinition[] = [
     permissionImplications: 'Scoped OPEN only. Never upgrades to shell, click, type, or submit.',
     maturity: 'REAL',
     allowedCapabilityPrefixes: ['desktop.'],
+    distribution: ['CORE'],
+  },
+  {
+    id: 'BUILD_WEBSITE',
+    version: 1,
+    name: 'Build a website from an owner brief',
+    description: 'Create a structured website plan, then write files only after owner approval and a bounded permission lease.',
+    scope: 'SOFTWARE',
+    handler: 'CAPABILITY_PLAN',
+    examples: ['Jarvis สร้างเว็บ portfolio ให้ผม', 'ทำเว็บขายรองเท้าให้หน่อย', 'Build a modern portfolio website'],
+    matchingHints: ['build website', 'สร้างเว็บ', 'portfolio', 'landing'],
+    requiredInputs: [{ id: 'brief', description: 'What to build.', required: true, smallestQuestion: 'What kind of website should I plan?' }],
+    optionalInputs: [],
+    routes: [
+      route('plan-website', 'Create a website build plan without writing files', 1, 'SOFTWARE', 'LOW', [
+        { capabilityId: SOFTWARE_PLAN_BUILD, adapterId: 'software.plan.brief.v1' },
+      ]),
+      route('apply-website', 'Write the approved website into the Jarvis sandbox', 2, 'SOFTWARE', 'MEDIUM', [
+        { capabilityId: SOFTWARE_APPLY_BUILD, adapterId: 'software.apply.plan.v1' },
+      ], true),
+    ],
+    expectedOutcome: 'A reviewed plan, then sandbox website files after permission.',
+    verificationExpectation: 'No project files exist before plan approval. After apply, sandbox artifacts exist under data/jarvis/builds/.',
+    permissionImplications: 'Plan is not execution authority. File writes require owner permission scoped to this goal.',
+    maturity: 'REAL',
+    allowedCapabilityPrefixes: ['software.'],
+    distribution: ['CORE'],
+  },
+  {
+    id: 'BUILD_SOFTWARE',
+    version: 1,
+    name: 'Build software from an owner brief',
+    description: 'Create a structured software plan, then write files only after owner approval and a bounded permission lease.',
+    scope: 'SOFTWARE',
+    handler: 'CAPABILITY_PLAN',
+    examples: ['สร้างแอป todo สำหรับมือถือ', 'Build a todo app', 'ช่วยสร้าง dashboard ดูสถานะ server'],
+    matchingHints: ['build software', 'สร้างแอป', 'todo', 'dashboard'],
+    requiredInputs: [{ id: 'brief', description: 'What to build.', required: true, smallestQuestion: 'What software should I plan?' }],
+    optionalInputs: [],
+    routes: [
+      route('plan-software', 'Create a software build plan without writing files', 1, 'SOFTWARE', 'LOW', [
+        { capabilityId: SOFTWARE_PLAN_BUILD, adapterId: 'software.plan.brief.v1' },
+      ]),
+      route('apply-software', 'Write the approved software into the Jarvis sandbox', 2, 'SOFTWARE', 'MEDIUM', [
+        { capabilityId: SOFTWARE_APPLY_BUILD, adapterId: 'software.apply.plan.v1' },
+      ], true),
+    ],
+    expectedOutcome: 'A reviewed plan, then sandbox software files after permission.',
+    verificationExpectation: 'No project files exist before plan approval. After apply, sandbox artifacts exist under data/jarvis/builds/.',
+    permissionImplications: 'Plan is not execution authority. File writes require owner permission scoped to this goal.',
+    maturity: 'REAL',
+    allowedCapabilityPrefixes: ['software.'],
     distribution: ['CORE'],
   },
 ];

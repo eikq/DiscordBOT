@@ -4,6 +4,8 @@ node_modules/
 .venv-stt/
 .venv-jaitts/
 build/
+!src/jarvis/build/
+!src/jarvis/build/**
 dist/
 coverage/
 .DS_Store

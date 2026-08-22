@@ -20,6 +20,9 @@ export const SEMANTIC_ACTIONS = [
   'LIST_DISPLAYS',
   'INSPECT_CONTAINMENT',
   'CLEAR_CONTAINMENT',
+  'BUILD_WEBSITE',
+  'BUILD_SOFTWARE',
+  'APPROVE_PLAN',
   'CLICK',
   'TYPE',
   'SUBMIT',
@@ -107,6 +110,10 @@ export function interpretSemanticIntent(
   if (asked) return { ...base, ...asked, confidence: 'HIGH' };
   const preference = matchPreference(raw);
   if (preference) return { ...base, ...preference, confidence: 'HIGH' };
+  const build = matchBuild(raw);
+  if (build) return { ...base, ...build, confidence: 'HIGH' };
+  const approve = matchApprovePlan(raw);
+  if (approve) return { ...base, ...approve, confidence: 'HIGH' };
 
   if (CLICK_VERB.test(raw) && !OPEN_VERB.test(raw)) {
     return {
@@ -350,7 +357,7 @@ function matchForgetAlias(text: string): Partial<SemanticIntent> | null {
 }
 
 function matchAskMemory(text: string): Partial<SemanticIntent> | null {
-  if (!/what do you remember|what do you call|which screen|จำอะไร|จอโน้ตบุ๊กคือจอไหน/iu.test(text)) return null;
+  if (!/what do you remember|what do you call|which screen|จำอะไร|จอโน้ตบุ๊กคือจอไหน|ผมชอบให้ตอบ|how do i like|reply style|ตอบแบบไหน/iu.test(text)) return null;
   return {
     action: 'ASK_MEMORY',
     objectType: /monitor|screen|จอ/iu.test(text) ? 'DISPLAY' : /project|โปรเจกต์/iu.test(text) ? 'PROJECT' : 'UNKNOWN',
@@ -359,10 +366,26 @@ function matchAskMemory(text: string): Partial<SemanticIntent> | null {
 }
 
 function matchPreference(text: string): Partial<SemanticIntent> | null {
-  if (!/i prefer|จำไว้ว่าผม|พูดไทย|speak thai unless/iu.test(text)) return null;
+  if (!/i prefer|จำไว้ว่าผม|จำไว้ว่าฉัน|พูดไทย|speak thai unless|remember that i/iu.test(text)) return null;
   return {
     action: 'REMEMBER_PREFERENCE',
     objectType: 'UNKNOWN',
     target: /thai|ไทย/iu.test(text) ? 'speech.language=th' : leftoverEntity(text),
   };
+}
+
+function matchBuild(text: string): Partial<SemanticIntent> | null {
+  if (/สร้างเว็บ|ทำเว็บ|เว็บไซต์|build (?:a |an )?(?:web(?:site)?|portfolio)|create (?:a |an )?(?:web(?:site)?|portfolio)|portfolio/iu.test(text)
+    && /สร้าง|ทำ|build|create|ช่วย/iu.test(text)) {
+    return { action: 'BUILD_WEBSITE', objectType: 'WEBSITE', entity: leftoverEntity(text) };
+  }
+  if (/สร้างแอป|สร้างแอพ|build (?:a |an )?(?:app|todo|dashboard)|create (?:a |an )?(?:app|todo|dashboard)|todo สำหรับมือถือ|dashboard ดูสถานะ/iu.test(text)) {
+    return { action: 'BUILD_SOFTWARE', objectType: 'UNKNOWN', entity: leftoverEntity(text) };
+  }
+  return null;
+}
+
+function matchApprovePlan(text: string): Partial<SemanticIntent> | null {
+  if (!/เอาตามแผนนี้|ตามแผนนี้|เริ่มได้|เริ่มเลย|approve (?:the )?plan|use this plan|go with this plan/iu.test(text.trim())) return null;
+  return { action: 'APPROVE_PLAN', objectType: 'UNKNOWN', entity: 'plan' };
 }

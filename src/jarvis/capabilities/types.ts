@@ -133,6 +133,7 @@ export interface CapabilityInvokeRequest {
   source?: 'text' | 'voice' | 'ui' | 'system';
   sessionId?: string;
   requestId?: string;
+  duration?: 'ONCE' | 'THIS_GOAL';
   /** Runtime-owned cancellation channel. This is never derived from model output. */
   signal?: AbortSignal;
 }

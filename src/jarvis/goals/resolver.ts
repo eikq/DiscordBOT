@@ -149,6 +149,12 @@ function deterministicMatch(
   aliases?: OwnerAliasRecord[],
 ): Match {
   const fromCatalog = (id: string) => catalog.get(id);
+  if (isBuildWebsiteIntent(text)) {
+    return matched(fromCatalog('BUILD_WEBSITE'), 0.97, { brief: text }, ['matcher:BUILD_WEBSITE']);
+  }
+  if (isBuildSoftwareIntent(text)) {
+    return matched(fromCatalog('BUILD_SOFTWARE'), 0.96, { brief: text }, ['matcher:BUILD_SOFTWARE']);
+  }
   if (/after setup|once (?:set ?up|configured)|need(?:s)? setup|need(?:s)? configuration|require(?:s)? setup|currently unavailable|not currently available|require(?:s)? (?:my )?permission|need(?:s)? (?:my )?permission|what requires my permission|what can you do|what goals can you|what are your capabilities|ทำอะไรได้บ้าง|ความสามารถ.*อะไร|ต้องตั้งค่า|ต้องขออนุญาต/iu.test(text)) {
     return matched(fromCatalog('self.capabilities'), 1, {}, ['matcher:self.capabilities']);
   }
@@ -430,7 +436,18 @@ function safeInputs(value: Record<string, unknown>): Record<string, unknown> {
 }
 
 function isWorkspaceIntent(text: string): boolean {
-  return /workspace|codebase|\brepo\b|local (?:files?|project)|my project|in my project|approved workspace|ค้น.*(?:workspace|โปรเจกต์)|หา.*(?:ไฟล์|โค้ด)|อยู่ไฟล์ไหน|อยู่ตรงไหน/iu.test(text);
+  return /workspace|codebase|\brepo\b|local (?:files?|project)|my project|in my project|approved workspace|ค้น.*(?:workspace|โปรเจกต์)|หา.*(?:ไฟล์|โค้ด)|อยู่ไฟล์ไหน|อยู่ตรงไหน/iu.test(text)
+    && !isBuildWebsiteIntent(text)
+    && !isBuildSoftwareIntent(text);
+}
+
+export function isBuildWebsiteIntent(text: string): boolean {
+  return /สร้างเว็บ|ทำเว็บ|เว็บไซต์|portfolio|landing page|ร้าน(?:ค้า)?|ขายรองเท้า|build (?:a |an )?(?:web(?:site)?|portfolio)|create (?:a |an )?(?:web(?:site)?|portfolio)/iu.test(text);
+}
+
+export function isBuildSoftwareIntent(text: string): boolean {
+  if (isBuildWebsiteIntent(text)) return false;
+  return /สร้างแอป|สร้างแอพ|build (?:a |an )?(?:app|application|todo|dashboard)|create (?:a |an )?(?:app|todo|dashboard)|todo สำหรับมือถือ|dashboard ดูสถานะ|software project/iu.test(text);
 }
 
 function extractWorkspaceQuery(text: string): string {

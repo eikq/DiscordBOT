@@ -9,6 +9,7 @@ import {
   SYSTEM_STATUS,
 } from '../capabilities/actions/constants';
 import { REMINDERS_CREATE } from '../automation/constants';
+import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../build/constants';
 import type { InputCompatibility } from './types';
 import { validateAdapterAuthorityBoundary, validateAgainstJsonSchema } from './schema';
 import { resolveResource } from '../resources/resolver';
@@ -214,6 +215,25 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
       const resource = input.resource && typeof input.resource === 'object' ? input.resource as { url?: string } : {};
       return { url: boundedString(resource.url || input.url, 'url', 500) };
     },
+  });
+  registry.register({
+    id: 'software.plan.brief.v1',
+    capabilityId: SOFTWARE_PLAN_BUILD,
+    acceptedGoalFields: ['brief'],
+    adapt: input => ({
+      brief: boundedString(input.brief, 'brief', 400),
+      query: boundedString(input.brief, 'brief', 400),
+    }),
+  });
+  registry.register({
+    id: 'software.apply.plan.v1',
+    capabilityId: SOFTWARE_APPLY_BUILD,
+    acceptedGoalFields: ['brief'],
+    adapt: input => (
+      typeof input.brief === 'string' && input.brief.trim()
+        ? { brief: input.brief.trim().slice(0, 400) }
+        : {}
+    ),
   });
   for (const capabilityId of [JARVIS_RUNTIME_STATUS, SYSTEM_STATUS]) {
     registry.register({

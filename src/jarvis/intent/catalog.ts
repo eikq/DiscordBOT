@@ -213,6 +213,16 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     argumentSchemaSummary: 'workspaceId?',
     sideEffectClass: 'READ_ONLY',
   },
+  'software.planBuild': {
+    shortDescription: 'Create a structured software/website plan without writing files.',
+    argumentSchemaSummary: 'brief',
+    sideEffectClass: 'READ_ONLY',
+  },
+  'software.applyBuild': {
+    shortDescription: 'Write an approved plan into the Jarvis sandbox after owner permission.',
+    argumentSchemaSummary: 'planId?, brief?',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
 };
 
 export function compactCapabilityCatalog(host?: CapabilityHost, availability: Record<string, CompactCapability['availability']> = {}): CompactCapability[] {

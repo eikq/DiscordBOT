@@ -9,7 +9,7 @@ export type {
   TrustedAdapterContext,
   TrustedInputAdapterDefinition,
 } from './inputAdapters';
-export { resolveOwnerGoal, validateGoalSuggestion } from './resolver';
+export { resolveOwnerGoal, validateGoalSuggestion, isBuildWebsiteIntent, isBuildSoftwareIntent } from './resolver';
 export type { GoalResolverOptions } from './resolver';
 export { buildGoalKnowledge } from './knowledge';
 export { PendingGoalCoordinator } from './pendingGoals';

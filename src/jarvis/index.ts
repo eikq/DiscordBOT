@@ -301,3 +301,6 @@ export {
   loadWorkspaceRegistry,
 } from './workspace';
 export type { WorkspaceResult, WorkspaceRuntime, WorkspaceSnapshot } from './workspace';
+export * from './build';
+export { permissionFirstFromCapability, shouldAvoidGenericRefusal } from './policy/permissionFirst';
+export { permissionProposalFromBuild } from './security/permissionProposal';

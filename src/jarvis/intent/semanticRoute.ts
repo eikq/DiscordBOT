@@ -48,6 +48,9 @@ export function resolutionFromSemantic(
   },
 ): IntentResolution | null {
   const actionClass = classifyActionability(text);
+  if (semantic.action === 'BUILD_WEBSITE' || semantic.action === 'BUILD_SOFTWARE' || semantic.action === 'APPROVE_PLAN') {
+    return null;
+  }
   if (semantic.action === 'CLICK' || semantic.action === 'TYPE' || semantic.action === 'SUBMIT') {
     return {
       kind: 'UNSUPPORTED',

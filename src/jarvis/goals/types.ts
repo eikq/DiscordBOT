@@ -11,6 +11,7 @@ export const GOAL_SCOPES = [
   'OWNER_DEVICE',
   'OWNER_SELECTED_SOURCE',
   'DESKTOP',
+  'SOFTWARE',
 ] as const;
 
 export type GoalScope = (typeof GOAL_SCOPES)[number];
