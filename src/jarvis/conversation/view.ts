@@ -35,6 +35,9 @@ export function compactRecent(summary: string): string {
 
 export function sanitizedRecent(summary: string | undefined): string {
   if (!summary || isOperationalNoise(summary)) return '';
+  if (/ผมหาข้อมูลจาก|แหล่งทางการ:|webpage text:|<untrusted_tool_output>/i.test(summary)) {
+    return 'research complete';
+  }
   return compactRecent(summary);
 }
 
@@ -87,7 +90,20 @@ export function optionsFromReply(text: string): OfferedOption[] {
     return [{ index, label: match[3]!.trim() }];
   });
   if (numbered.length) return numbered.slice(0, 8);
-  return extractComparisonOptions(text);
+  const comparison = extractComparisonOptions(text);
+  if (comparison.length) return comparison;
+  return extractListedOptions(text);
+}
+
+function extractListedOptions(text: string): OfferedOption[] {
+  const match = text.match(/(?:เพิ่ม|แนะนำ|เช่น|options?:|ตัวเลือก)\s*[:：]?\s*(.+)$/imu);
+  if (!match) return [];
+  const parts = match[1]!
+    .split(/\s*(?:,|และ|and)\s*/u)
+    .map(item => item.replace(/[—–].*$/u, '').replace(/[.:]$/u, '').trim())
+    .filter(item => item.length > 2 && item.length < 48 && !/รอ confirm|เริ่มแก้/iu.test(item));
+  if (parts.length < 2) return [];
+  return parts.slice(0, 8).map((label, index) => ({ index: index + 1, label }));
 }
 
 export function extractComparisonOptions(text: string | undefined): OfferedOption[] {

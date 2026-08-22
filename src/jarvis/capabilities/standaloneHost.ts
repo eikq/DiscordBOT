@@ -39,6 +39,7 @@ import { defaultRuntimeRoot } from '../storage/operationalDb';
 import { registerSoftwareCapabilities } from '../build/capabilities';
 import { BuildPlanStore } from '../build/planStore';
 import { registerProjectCapabilities } from '../project/capabilities';
+import { createProjectCommandRunner, skipLiveCommandsInTests } from '../project/commands';
 import { ProjectWorkspace } from '../project/workspace';
 import { openMigratedDatabase } from '../../bot/memory/jarvis/migrate';
 import os from 'node:os';
@@ -222,6 +223,7 @@ export function createStandaloneCapabilityHost(
   if (projectWorkspace) {
     registerProjectCapabilities(registry, {
       workspace: projectWorkspace,
+      runner: skipLiveCommandsInTests() ? undefined : createProjectCommandRunner(),
       devServers: operator.devServers,
     });
   }

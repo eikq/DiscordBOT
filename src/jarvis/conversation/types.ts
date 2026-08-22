@@ -88,6 +88,7 @@ export type RecentOperation = {
   slug?: string;
   ok?: boolean;
   summary?: string;
+  files?: string[];
   at: number;
 };
 

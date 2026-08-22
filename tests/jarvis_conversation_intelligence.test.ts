@@ -13,6 +13,8 @@ import {
   looksLikeProjectFollowUp,
   rewriteWrongRoute,
   uniqueSlugOrClarify,
+  optionsFromReply,
+  sanitizedRecent,
 } from '../src/jarvis/conversation';
 import type { ConversationState } from '../src/jarvis/conversation';
 import { DESKTOP_OPEN_SCOPED_RESOURCE } from '../src/jarvis/capabilities/actions/constants';
@@ -636,4 +638,152 @@ test('resume-the-site wording stays on the active project across paraphrases', (
     const bound = bindDiscourseToIntent(discourse, state, phrase);
     assert.doesNotMatch(String(bound?.userMessage || ''), /Todo/i, phrase);
   }
+});
+
+test('ellipsis if-pass then build uses last verification instead of running build blindly', () => {
+  const failed = softwareState({
+    recentVerification: { kind: 'test', ok: false, summary: 'Typed test runner is not attached.', at: 9, slug: 'portfolio' },
+  });
+  for (const phrase of ['ถ้าผ่านก็ build', 'แล้ว build ต่อเลยถ้าผ่าน', 'if it passes then build']) {
+    const discourse = interpretDiscourse(phrase, failed);
+    assert.equal(discourse.act, 'CONDITIONAL', phrase);
+    const bound = bindDiscourseToIntent(discourse, failed, phrase);
+    assert.equal(bound?.reasonCode, 'CONDITIONAL_HELD', phrase);
+    assert.notEqual(bound?.capabilityId, PROJECT_BUILD, phrase);
+  }
+
+  const passed = softwareState({
+    recentVerification: { kind: 'test', ok: true, summary: '12/12', at: 9, slug: 'portfolio' },
+  });
+  const go = bindDiscourseToIntent(interpretDiscourse('ถ้าผ่านก็ build', passed), passed, 'ถ้าผ่านก็ build');
+  assert.equal(go?.capabilityId, PROJECT_BUILD);
+});
+
+test('intensity and layout follow-ups stay on the active project', () => {
+  const state = softwareState({ pendingPermission: { proposalId: 'ap-hover', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio' } });
+  const light = interpretDiscourse('อย่าเยอะเกินไปนะ', state);
+  assert.equal(light.act, 'NEGATE');
+  assert.match(String(light.constraint || ''), /เยอะ|overdo|light/i);
+
+  const sparse = interpretDiscourse('หน้า home ยังดูโล่งไป', softwareState());
+  assert.equal(sparse.act, 'MODIFY_PROJECT');
+
+  const hover = bindDiscourseToIntent(
+    interpretDiscourse('แล้ว project card ให้ hover นิดหน่อย', state),
+    state,
+    'แล้ว project card ให้ hover นิดหน่อย',
+  );
+  assert.equal(hover?.reasonCode, 'WAITING_PERMISSION_NOTED');
+  assert.match(String(hover?.userMessage || ''), /hover/i);
+});
+
+test('what-to-add offers numbered options and the second choice binds that option', () => {
+  const state = softwareState();
+  for (const phrase of ['เพิ่มอะไรดี', 'what should we add', 'what to add']) {
+    const bound = bindDiscourseToIntent(interpretDiscourse(phrase, state), state, phrase);
+    assert.equal(bound?.reasonCode, 'SUGGEST_ADDITIONS', phrase);
+    assert.match(String(bound?.userMessage || ''), /2\.\s+Featured project section/i, phrase);
+    assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
+  }
+
+  const suggested = bindDiscourseToIntent(interpretDiscourse('เพิ่มอะไรดี', state), state, 'เพิ่มอะไรดี');
+  const next = applyTurnToConversation(state, {
+    ownerText: 'เพิ่มอะไรดี',
+    discourse: interpretDiscourse('เพิ่มอะไรดี', state),
+    resolution: suggested!,
+    replyText: suggested?.userMessage,
+  });
+  assert.equal(next.offeredOptions[1]?.label, 'Featured project section');
+  const picked = bindDiscourseToIntent(interpretDiscourse('เอาอันที่สอง', next), next, 'เอาอันที่สอง');
+  assert.equal(picked?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.match(String(picked?.arguments?.brief || ''), /Featured project section/i);
+});
+
+test('do-it after a correction applies the pending change instead of rerunning tests', () => {
+  const state = softwareState({
+    pendingChange: 'ไม่ใช่ หมายถึงทั้งเว็บ ไม่ใช่แค่หน้า home',
+    lastDiscourse: 'CORRECT',
+    recentVerification: { kind: 'test', ok: false, summary: 'not attached', at: 9, slug: 'portfolio' },
+  });
+  for (const phrase of ['ทำเลย', 'do it', 'go ahead']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'EXECUTE_NOW', phrase);
+    const bound = bindDiscourseToIntent(discourse, state, phrase);
+    assert.equal(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
+    assert.match(String(bound?.arguments?.brief || ''), /ทั้งเว็บ|home/i, phrase);
+  }
+});
+
+test('mobile and check-it follow-ups are status, not unsupported or a new apply', () => {
+  const state = softwareState({
+    activePreview: { url: 'http://127.0.0.1:4174', port: 4174, slug: 'portfolio' },
+  });
+  for (const phrase of ['แล้วมือถือเป็นไง', 'เช็กให้หน่อย', 'ดีขึ้นไหม']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'STATUS_QUERY', phrase);
+    const bound = bindDiscourseToIntent(discourse, state, phrase);
+    assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
+    assert.match(String(bound?.userMessage || ''), /Portfolio|4174|preview/i, phrase);
+  }
+});
+
+test('short-answer preference is remembered, not applied as a rewrite', () => {
+  const state = softwareState();
+  for (const phrase of ['เสร็จแล้วบอกสั้นๆ', 'ตอบสั้น', 'จำไว้ว่าผมไม่ชอบให้ถามซ้ำถ้ารู้ context อยู่แล้ว']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'MEMORY_STORE', phrase);
+    const bound = bindDiscourseToIntent(discourse, state, phrase);
+    assert.equal(bound?.reasonCode, 'REMEMBER_PREFERENCE', phrase);
+    assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
+  }
+});
+
+test('recent-change inspect recaps the last edit instead of listing the whole tree', () => {
+  const state = softwareState({
+    pendingChange: 'เพิ่ม hero section, project highlights',
+    recentOperation: {
+      kind: 'write',
+      ok: true,
+      summary: 'สร้างโปรเจกต์ Portfolio แล้ว Preview http://127.0.0.1:4174',
+      at: 8,
+      files: ['src/App.jsx', 'src/styles.css'],
+    },
+  });
+  const files = bindDiscourseToIntent(interpretDiscourse('ไฟล์ไหนเปลี่ยน', state), state, 'ไฟล์ไหนเปลี่ยน');
+  assert.equal(files?.reasonCode, 'INSPECT_RECENT_FILES');
+  assert.match(String(files?.userMessage || ''), /App\.jsx/);
+  assert.doesNotMatch(String(files?.userMessage || ''), /package-lock/);
+
+  const recapState = softwareState({ pendingChange: 'dark mode ทั้งเว็บ' });
+  const recap = bindDiscourseToIntent(interpretDiscourse('เมื่อกี้แก้อะไรไปบ้าง', recapState), recapState, 'เมื่อกี้แก้อะไรไปบ้าง');
+  assert.equal(recap?.reasonCode, 'INSPECT_RECENT_CHANGE');
+  assert.match(String(recap?.userMessage || ''), /dark mode/i);
+});
+
+test('comma-separated assistant suggestions become ordinal options', () => {
+  const options = optionsFromReply('จะปรับหน้า home ให้แน่นขึ้น: เพิ่ม hero section, project highlights, skills grid และ CTA button — รอ confirm แล้วเริ่มแก้');
+  assert.equal(options[1]?.label, 'project highlights');
+  assert.ok(options.length >= 3);
+});
+
+test('if-there-is-a-problem-then-fix only mutates when a real failure exists', () => {
+  const healthy = softwareState({
+    recentVerification: { kind: 'test', ok: true, summary: '12/12', at: 9 },
+  });
+  const held = bindDiscourseToIntent(interpretDiscourse('ถ้ามีปัญหาก็แก้', healthy), healthy, 'ถ้ามีปัญหาก็แก้');
+  assert.equal(held?.reasonCode, 'CONDITIONAL_HELD');
+  assert.notEqual(held?.capabilityId, SOFTWARE_APPLY_BUILD);
+
+  const broken = softwareState({
+    recentVerification: { kind: 'test', ok: false, summary: 'smoke failed', at: 9, slug: 'portfolio' },
+  });
+  const fix = bindDiscourseToIntent(interpretDiscourse('ถ้ามีปัญหาก็แก้', broken), broken, 'ถ้ามีปัญหาก็แก้');
+  assert.equal(fix?.capabilityId, SOFTWARE_APPLY_BUILD);
+});
+
+test('research dumps are not shown as the recent working-context line', () => {
+  assert.equal(
+    sanitizedRecent('ผมหาข้อมูลจาก 6 แหล่ง แหล่งทางการ: google.com, gemini.google.com - [google.com] Googl'),
+    'research complete',
+  );
 });

@@ -163,28 +163,29 @@ function continueWork(
   discourse: DiscourseInterpretation,
 ): IntentResolution | null {
   if (state.pendingPermission) {
+    if (discourse.act === 'MODIFY_PROJECT' || discourse.act === 'ACCUMULATE_REQUIREMENTS' || discourse.change) {
+      return talk(
+        `จำไว้แล้วครับ: ${discourse.change || text} — งานนี้ยังรออนุญาตอยู่ กดอนุญาตงานนี้ได้เลย`,
+        'WAITING_PERMISSION_NOTED',
+      );
+    }
     return talk('งานนี้รออนุญาตอยู่ครับ กดอนุญาตงานนี้ได้เลย', 'WAITING_PERMISSION');
   }
-  if (state.pendingPlanReview && discourse.act !== 'MODIFY_PROJECT') return approve(state);
+  if (state.pendingPlanReview && discourse.act !== 'MODIFY_PROJECT' && discourse.act !== 'EXECUTE_NOW') {
+    return approve(state);
+  }
   const fromRecentEdit = /MODIFY_PROJECT|ACCUMULATE_REQUIREMENTS|NEGATE|CORRECT|SELECT_ORDINAL/.test(state.lastDiscourse || '');
+  if (discourse.act === 'EXECUTE_NOW' && state.pendingChange) {
+    return applyChange(state, text, discourse);
+  }
   if (discourse.act === 'MODIFY_PROJECT' || discourse.change || (state.pendingChange && fromRecentEdit && discourse.act !== 'CONTINUE')) {
     if (!state.activePlanId && !state.activeProjectSlug) {
       return capability(SOFTWARE_PLAN_BUILD, { brief: discourse.change || text }, 'CONVERSATION_MODIFY_NEEDS_PLAN');
     }
-    return capability(SOFTWARE_APPLY_BUILD, {
-      planId: state.activePlanId,
-      goalId: state.activeGoalId,
-      brief: changeBrief(state, text, discourse),
-      merge: true,
-    }, 'CONVERSATION_MODIFY');
+    return applyChange(state, text, discourse);
   }
   if (state.pendingChange && fromRecentEdit) {
-    return capability(SOFTWARE_APPLY_BUILD, {
-      planId: state.activePlanId,
-      goalId: state.activeGoalId,
-      brief: changeBrief(state, text, discourse),
-      merge: true,
-    }, 'CONVERSATION_MODIFY');
+    return applyChange(state, text, discourse);
   }
   if (state.queue.some(item => item.status === 'pending' || item.status === 'running')) {
     const next = state.queue.find(item => item.status === 'pending' || item.status === 'running');
@@ -208,7 +209,12 @@ function continueWork(
   }
   if (state.activeProjectSlug) {
     const last = state.recentVerification || state.recentOperation;
-    if (last?.kind === 'test') return projectCall(state, PROJECT_RUN_TESTS, 'CONVERSATION_CONTINUE_TEST');
+    if (discourse.act === 'EXECUTE_NOW' && (state.pendingChange || state.selectedOption || fromRecentEdit)) {
+      return applyChange(state, text, discourse);
+    }
+    if (last?.kind === 'test' && discourse.act !== 'EXECUTE_NOW' && discourse.act !== 'CONTINUE') {
+      return projectCall(state, PROJECT_RUN_TESTS, 'CONVERSATION_CONTINUE_TEST');
+    }
     if (last?.kind === 'build') return projectCall(state, PROJECT_BUILD, 'CONVERSATION_CONTINUE_BUILD');
     if (last?.kind === 'preview') return projectCall(state, PROJECT_START_DEV_SERVER, 'CONVERSATION_CONTINUE_PREVIEW');
     if (discourse.act === 'CONTINUE' || (discourse.act === 'EXECUTE_NOW' && !state.pendingChange)) {
@@ -221,14 +227,22 @@ function continueWork(
         'CONTINUE_IDLE',
       );
     }
-    return capability(SOFTWARE_APPLY_BUILD, {
-      planId: state.activePlanId,
-      goalId: state.activeGoalId,
-      brief: changeBrief(state, text, discourse),
-      merge: true,
-    }, 'CONVERSATION_CONTINUE_APPLY');
+    return applyChange(state, text, discourse);
   }
   return talk('ตอนนี้ยังไม่มีงานค้างที่ต่อได้ทันที บอกได้เลยว่าให้ทำอะไรต่อ', 'NOTHING_TO_CONTINUE');
+}
+
+function applyChange(
+  state: ConversationState,
+  text: string,
+  discourse: DiscourseInterpretation,
+): IntentResolution {
+  return capability(SOFTWARE_APPLY_BUILD, {
+    planId: state.activePlanId,
+    goalId: state.activeGoalId,
+    brief: changeBrief(state, text, discourse),
+    merge: true,
+  }, 'CONVERSATION_MODIFY');
 }
 
 function approve(state: ConversationState): IntentResolution {
@@ -248,6 +262,9 @@ function accumulate(state: ConversationState, brief: string): IntentResolution {
 }
 
 function planRequest(state: ConversationState, text: string): IntentResolution {
+  if (/เพิ่มอะไรดี|what should we add|what to add/iu.test(text) && (state.activeProjectSlug || state.activePlanId)) {
+    return talk(suggestAdditions(state), 'SUGGEST_ADDITIONS');
+  }
   if (state.pendingPlanReview || state.activePlanId) {
     const title = state.pendingPlanReview?.title || 'แผนปัจจุบัน';
     if (/สั้น/iu.test(text)) {
@@ -256,6 +273,23 @@ function planRequest(state: ConversationState, text: string): IntentResolution {
     return talk(`ใช้แผน ${title} ได้ครับ บอกได้เลยว่าจะให้อนุมัติ หรือจะเพิ่มอะไรในแผน`, 'PLAN_SUMMARY');
   }
   return capability(SOFTWARE_PLAN_BUILD, { brief: text }, 'CONVERSATION_PLAN_REQUEST');
+}
+
+function suggestAdditions(state: ConversationState): string {
+  const project = state.projects.find(item => item.slug === state.activeProjectSlug);
+  const blocked = state.constraints.join(' ');
+  if (project?.kind === 'software' || /todo/i.test(project?.label || project?.slug || '')) {
+    return ['1. Clear completed', '2. Filter by status', '3. Dark mode'].join('\n');
+  }
+  const options = [
+    '1. Hero stats',
+    '2. Featured project section',
+    /testimonial/i.test(blocked) ? null : '3. Testimonials',
+  ].filter(Boolean);
+  if (!options.some(item => /Testimonials/i.test(item || ''))) {
+    options.push('3. Skills grid');
+  }
+  return options.join('\n');
 }
 
 function rerun(state: ConversationState): IntentResolution {
@@ -272,6 +306,17 @@ function rerun(state: ConversationState): IntentResolution {
 function inspect(state: ConversationState, text: string): IntentResolution {
   const resolved = uniqueSlugOrClarify(state);
   if ('message' in resolved) return clarify(resolved.message, 'NEED_PROJECT');
+  if (/เมื่อกี้แก้อะไร|ไฟล์ไหนเปลี่ยน|what changed|which files? changed/iu.test(text)) {
+    const files = state.recentOperation?.files?.filter(Boolean) || [];
+    if (files.length) {
+      return talk(files.slice(0, 12).join(', '), 'INSPECT_RECENT_FILES');
+    }
+    const recent = sanitizedRecent(state.recentOperation?.summary);
+    const change = state.pendingChange || state.selectedOption?.label;
+    if (change || recent) {
+      return talk(`ล่าสุดแก้: ${[change, recent].filter(Boolean).join(' · ')}`, 'INSPECT_RECENT_CHANGE');
+    }
+  }
   if (/package\.json|package อะไร/iu.test(text)) {
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: 'package.json' }, 'CONVERSATION_READ_PACKAGE');
   }
@@ -333,6 +378,12 @@ function selectOrdinal(state: ConversationState, ordinal: number | undefined): I
 
 function bindConditional(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution {
   const last = state.recentVerification;
+  const thenActs = nextActsForConditional(discourse);
+  if (thenActs.includes('MODIFY_PROJECT')) {
+    const problem = (last && last.ok === false) || Boolean(state.lastError);
+    if (!problem) return talk('ยังไม่เจอปัญหาที่ต้องแก้ครับ', 'CONDITIONAL_HELD');
+    return applyChange(state, discourse.change || '', discourse);
+  }
   if (discourse.ifKind === 'test' && last?.kind === 'test' && last.ok === false) {
     return talk('test ยังไม่ผ่าน เลยยังไม่ทำขั้นตอนถัดไปครับ', 'CONDITIONAL_HELD');
   }
