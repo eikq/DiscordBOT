@@ -190,6 +190,17 @@ const PREEMPT_PENDING_GOAL: ReadonlySet<DiscourseAct> = new Set([
   'BUILD',
   'PREVIEW',
   'QUEUE',
+  'CONTINUE',
+  'PAUSE',
+  'CANCEL',
+  'RERUN',
+  'NEGATE',
+  'CORRECT',
+  'CONDITIONAL',
+  'SELECT_ORDINAL',
+  'RESEARCH',
+  'PLAN_REQUEST',
+  'MODIFY_PROJECT',
 ]);
 
 export function discoursePreemptsPendingGoal(discourse: DiscourseInterpretation): boolean {
@@ -306,7 +317,7 @@ function isPreview(text: string, state: ConversationState | null | undefined): b
 
 function isTest(text: string): boolean {
   return /^(test|รัน test|run tests?)$/iu.test(text)
-    || /รัน test|run (?:the )?tests?|test ด้วย|test อีก|แล้ว tests?\b|then tests?\b|ดู tests?\b|test เฉพาะ|related tests?|tests? (?:for )?(?:that|this|it)/iu.test(text);
+    || /รัน test|run (?:the )?tests?|test ด้วย|test อีก|แล้ว tests?\b|then tests?\b|ดู tests?\b|test เฉพาะ|related tests?|tests? (?:for )?(?:that|this|it)|ลองเทส|เทสให้|รันเทส/iu.test(text);
 }
 
 function isBuild(text: string, state: ConversationState | null | undefined): boolean {
@@ -367,7 +378,7 @@ function isMemoryQuery(text: string): boolean {
 }
 
 function isNegate(text: string): boolean {
-  return /อย่าแตะ|ไม่ต้องเปลี่ยน|ไม่เอาส่วน|แต่ไม่เอา|ไม่ต้องถามผมระหว่างทาง|ไฟล์เก่าอย่าแตะ|อย่าเยอะ|อย่ามาก|ไม่ต้องเยอะ|keep it (?:simple|light)|don't overdo|อย่าเก็บพวก/iu.test(text);
+  return /อย่าแตะ|อย่าเปลี่ยน|ไม่ต้องเปลี่ยน|ไม่เอาส่วน|แต่ไม่เอา|ไม่ต้องถามผมระหว่างทาง|ไฟล์เก่าอย่าแตะ|อย่าเยอะ|อย่ามาก|ไม่ต้องเยอะ|keep it (?:simple|light)|don't overdo|อย่าเก็บพวก/iu.test(text);
 }
 
 function isCorrect(text: string): boolean {
@@ -391,7 +402,7 @@ function isStartFresh(text: string): boolean {
 function isNamedProjectResume(text: string, state: ConversationState | null | undefined): boolean {
   const named = mentionedProject(state, text);
   if (!named?.slug) return false;
-  if (named.slug === state?.activeProjectSlug && !/กลับ|สลับ|resume|back to/iu.test(text)) return false;
+  if (named.slug === state?.activeProjectSlug && !/กลับ|สลับ|resume|back to|มาทำ|ต่อกัน/iu.test(text)) return false;
   return /กลับ(?:ไป)?|มาทำ|ต่อกัน|สลับไป|switch to|resume|back to/iu.test(text)
     && !/สร้าง(?:เว็บ|โปรเจกต์)|อีกอัน|โปรเจกต์ใหม่|create (?:a )?(?:new )?(?:site|app|project)/iu.test(text);
 }
@@ -437,8 +448,12 @@ function isResearchFollowUp(text: string, state: ConversationState | null | unde
 function isAccumulate(text: string, state: ConversationState | null | undefined): boolean {
   if (!state?.pendingPlanReview) return false;
   if (isNewProject(text, state) || isApprovePlan(text) || isExecuteNow(text)) return false;
-  return /แนว|โทน|สี|mobile|responsive|หน้า about|contact|futuristic|ไม่รก|เน้นโชว์|เพิ่มหน้า/iu.test(text)
-    || text.length < 80;
+  if (isStatus(text) || isTest(text) || isBuild(text, state) || isPreview(text, state) || isRerun(text)) return false;
+  if (isNegate(text) || isInspect(text, state) || isMemoryQuery(text) || isMemoryStore(text) || isPlanRequest(text)) return false;
+  if (isRestoreTopic(text, state) || isResearch(text)) return false;
+  if (parseConditional(text, state) || parseOperationChain(text)) return false;
+  if (parseOrdinal(text, state) !== undefined && /เอา|ข้อ|อัน/iu.test(text)) return false;
+  return /แนว|โทน|สี|mobile|responsive|หน้า about|contact|futuristic|ไม่รก|เน้นโชว์|เพิ่มหน้า/iu.test(text);
 }
 
 function isModify(text: string, state: ConversationState | null | undefined): boolean {
@@ -448,8 +463,9 @@ function isModify(text: string, state: ConversationState | null | undefined): bo
 }
 
 function hasPositiveEdit(text: string): boolean {
-  return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|ทำตามนั้น|ตรงนั้นแหละ|ตรงนี้แหละ|hover|animation|dark mode|layout|column|โล่ง/iu.test(text)
-    && !/^(?:อย่า|ไม่เอา|ไม่ต้อง|แต่ไม่เอา|keep it|don't)/iu.test(text);
+  const added = /เพิ่ม|แก้|ใส่|ปรับ|ทำตามนั้น|ตรงนั้นแหละ|ตรงนี้แหละ|hover|animation|dark mode|layout|column|โล่ง/iu.test(text);
+  const changed = /เปลี่ยน/iu.test(text) && !/อย่าเปลี่ยน|ไม่ต้องเปลี่ยน|ไม่เปลี่ยน/iu.test(text);
+  return (added || changed) && !/^(?:อย่า|ไม่เอา|ไม่ต้อง|แต่ไม่เอา|keep it|don't)/iu.test(text);
 }
 
 function isDestructiveAmbiguous(text: string): boolean {

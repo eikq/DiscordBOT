@@ -463,6 +463,24 @@ test('pending-work questions report the active goal instead of pretending the qu
   assert.doesNotMatch(String(bound?.userMessage || ''), /ไม่มีคิวค้าง/);
 });
 
+test('a leftover waiting plan does not swallow tests, holds, or resume-the-site', () => {
+  const waiting = softwareState({
+    pendingPlanReview: { planId: 'plan_new', goalId: 'BUILD_WEBSITE', title: 'New leftover' },
+  });
+  const resume = interpretDiscourse('มาทำ portfolio ของเราต่อกัน', waiting);
+  assert.equal(resume.act, 'RESTORE_TOPIC');
+  assert.equal(discoursePreemptsPendingGoal(resume), true);
+  const testIt = interpretDiscourse('ลองเทสให้ที', waiting);
+  assert.equal(testIt.act, 'TEST');
+  assert.equal(discoursePreemptsPendingGoal(testIt), true);
+  const buildAsk = interpretDiscourse('ล่าสุด build ผ่านไหม', waiting);
+  assert.equal(buildAsk.act, 'STATUS_QUERY');
+  assert.equal(discoursePreemptsPendingGoal(buildAsk), true);
+  const navbar = interpretDiscourse('ส่วนเมนูด้านบนอย่าเปลี่ยนนะ', waiting);
+  assert.equal(navbar.act, 'NEGATE');
+  assert.equal(discoursePreemptsPendingGoal(navbar), true);
+});
+
 test('start-new-work acknowledgements do not invent a website goal', () => {
   const state = softwareState();
   for (const phrase of ['ถ้าไม่มีค้าง งั้นเริ่มงานใหม่กัน', "let's start something new"]) {
@@ -1240,6 +1258,9 @@ test('named resume restores the named project even if a later plan snapshot is l
     assert.notEqual(edit?.reasonCode, 'WAITING_PERMISSION', phrase);
     assert.notEqual(edit?.reasonCode, 'WAITING_PERMISSION_NOTED', phrase);
   }
+  const alreadyOnSite = interpretDiscourse('มาทำ portfolio ของเราต่อกัน', softwareState());
+  assert.equal(alreadyOnSite.act, 'RESTORE_TOPIC');
+  assert.notEqual(alreadyOnSite.act, 'NEW_PROJECT');
 });
 
 test('what-to-add stays a plan request even when a leftover queue is waiting', () => {
