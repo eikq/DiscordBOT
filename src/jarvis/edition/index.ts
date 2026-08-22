@@ -27,3 +27,19 @@ export {
 } from './resolve';
 export { communityRuntimePaths, createEditionCapabilityHost, guardCommunityHost } from './host';
 export { communityRejectedDemoScenario, communityRejectedHttpPath } from './http';
+export {
+  assertCommunityMayConstruct,
+  assertPrivateProviderAllowed,
+  COMMUNITY_PROVIDER_LOCK_ENV,
+  isCommunityProviderLock,
+  isPrivateProviderEnabled,
+  jarvisProviderPlan,
+  notePrivateProviderConstruction,
+  notePrivateProviderLaunch,
+  privateProviderConstructions,
+  privateProviderLaunches,
+  resetPrivateProviderConstructions,
+  PRIVATE_PROVIDER_IDS,
+  type JarvisProviderPlan,
+  type PrivateProviderId,
+} from './providers';

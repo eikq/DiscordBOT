@@ -63,6 +63,7 @@ export function applyCommunityEditionEnv(env: NodeJS.ProcessEnv = process.env, w
   env.JARVIS_EDITION = 'community';
   env.JARVIS_STANDALONE = '1';
   env.HOST = '127.0.0.1';
+  env.JARVIS_COMMUNITY_PROVIDER_LOCK = '1';
   if (!env.PORT?.trim()) env.PORT = '3012';
   if (env.JARVIS_DATA_ROOT?.trim()) {
     assertNotOwnerJarvisRoot(env.JARVIS_DATA_ROOT, workspaceRoot);

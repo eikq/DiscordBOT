@@ -1,7 +1,11 @@
+import { notePrivateProviderConstruction } from '../edition/providers';
 import type { DeviceCapabilityClass, DeviceProvider, DeviceRecord } from './types';
 
 export class SimulatedDeviceProvider implements DeviceProvider {
-  constructor(private readonly devices: DeviceRecord[] = defaultDevices()) {}
+  constructor(private readonly devices: DeviceRecord[] = defaultDevices()) {
+    notePrivateProviderConstruction('devices');
+    notePrivateProviderConstruction('cctv');
+  }
 
   public list(): DeviceRecord[] {
     return this.devices.map(item => ({ ...item, capabilities: [...item.capabilities], distribution: [...item.distribution] }));

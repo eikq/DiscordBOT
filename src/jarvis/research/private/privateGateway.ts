@@ -1,3 +1,4 @@
+import { notePrivateProviderConstruction, notePrivateProviderLaunch } from '../../edition/providers';
 import type { JarvisEventBus } from '../../security/eventBus';
 import { assertDedicatedChromium, isBrowserDenied } from './browserPolicy';
 import { interpretWebContent } from './injectionBoundary';
@@ -19,10 +20,12 @@ export class PrivateResearchGateway {
   private readonly health: PrivateRouteHealthChecker;
 
   constructor(private readonly options: PrivateResearchGatewayOptions = {}) {
+    notePrivateProviderConstruction('privateBrowser');
     this.health = options.health ?? new PrivateRouteHealthChecker();
   }
 
   public async healthCheck(): Promise<PrivateRouteHealth> {
+    notePrivateProviderLaunch('privateBrowser');
     const result = await this.health.check();
     this.options.bus?.emit('PRIVATE_ROUTE_CHECK', result.detail, {
       available: result.available,

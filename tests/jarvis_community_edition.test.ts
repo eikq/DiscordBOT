@@ -8,6 +8,13 @@ import { defaultBuildRoot } from '../src/jarvis/build/sandbox';
 import { DESKTOP_OPEN_APPLICATION } from '../src/jarvis/capabilities/actions/constants';
 import { isForbiddenGenericShell } from '../src/jarvis/security/constants';
 import { RESEARCH_PRIVATE_BROWSE } from '../src/jarvis/research/private/constants';
+import { BotService } from '../src/bot/BotService';
+import { McpResearchGateway } from '../src/bot/research/McpResearchGateway';
+import { VoiceServiceClient } from '../src/bot/voice/VoiceServiceClient';
+import { NightOrchestrator } from '../src/agent/night/NightOrchestrator';
+import { SimulatedDeviceProvider } from '../src/jarvis/devices';
+import { PrivateResearchGateway } from '../src/jarvis/research/private/privateGateway';
+import { WindowsDesktopActionAdapter } from '../src/jarvis/capabilities/actions/WindowsDesktopActionAdapter';
 import {
   applyCommunityEditionEnv,
   assertNotOwnerJarvisRoot,
@@ -22,7 +29,12 @@ import {
   jarvisDataRoot,
   jarvisEditionManifest,
   jarvisMemoryDbName,
+  jarvisProviderPlan,
   jarvisWorkspaceLogicalPath,
+  PRIVATE_PROVIDER_IDS,
+  privateProviderConstructions,
+  privateProviderLaunches,
+  resetPrivateProviderConstructions,
   resolveJarvisEdition,
 } from '../src/jarvis/edition';
 import { bindDiscourseToIntent, emptyConversationState, interpretDiscourse } from '../src/jarvis/conversation';
@@ -35,6 +47,7 @@ const TRACKED = [
   'JARVIS_STANDALONE',
   'JARVIS_DATA_ROOT',
   'JARVIS_RUNTIME_DIR',
+  'JARVIS_COMMUNITY_PROVIDER_LOCK',
   'HOST',
   'PORT',
   'JARVIS_LLM_MODEL',
@@ -198,6 +211,7 @@ test('applyCommunityEditionEnv forces loopback and refuses the owner data root',
     assert.equal(env.JARVIS_EDITION, 'community');
     assert.equal(env.JARVIS_STANDALONE, '1');
     assert.equal(env.HOST, '127.0.0.1');
+    assert.equal(env.JARVIS_COMMUNITY_PROVIDER_LOCK, '1');
     assert.ok(fs.existsSync(path.join(root, 'workspaces')));
     assert.throws(() => applyCommunityEditionEnv({
       JARVIS_DATA_ROOT: path.join(process.cwd(), 'data', 'jarvis'),
@@ -210,9 +224,61 @@ test('applyCommunityEditionEnv forces loopback and refuses the owner data root',
 test('community HTTP routes reject private browser and night agent', () => {
   assert.equal(communityRejectedHttpPath('/api/jarvis/private-research'), true);
   assert.equal(communityRejectedHttpPath('/api/jarvis/command-center/night'), true);
+  assert.equal(communityRejectedHttpPath('/api/jarvis/night'), true);
+  assert.equal(communityRejectedHttpPath('/api/intelligence/status'), true);
+  assert.equal(communityRejectedHttpPath('/api/bot/start'), true);
+  assert.equal(communityRejectedHttpPath('/api/control'), true);
+  assert.equal(communityRejectedHttpPath('/api/voice-export'), true);
+  assert.equal(communityRejectedHttpPath('/api/tts/test'), true);
+  assert.equal(communityRejectedHttpPath('/api/colab/notebook'), true);
   assert.equal(communityRejectedHttpPath('/api/jarvis/status'), false);
+  assert.equal(communityRejectedHttpPath('/api/jarvis/ask'), false);
+  assert.equal(communityRejectedHttpPath('/api/jarvis/research'), false);
   assert.equal(communityRejectedDemoScenario('monitoring'), true);
   assert.equal(communityRejectedDemoScenario('research'), false);
+});
+
+test('community provider plan never constructs or launches private providers', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-community-providers-'));
+  withEnv({
+    JARVIS_EDITION: 'community',
+    JARVIS_DATA_ROOT: root,
+    JARVIS_RUNTIME_DIR: path.join(root, 'runtime'),
+    JARVIS_COMMUNITY_PROVIDER_LOCK: undefined,
+  }, () => {
+    applyCommunityEditionEnv();
+    resetPrivateProviderConstructions();
+    const plan = jarvisProviderPlan('community');
+    assert.equal(plan.publicResearch, true);
+    for (const id of PRIVATE_PROVIDER_IDS) {
+      assert.equal(plan[id], false, id);
+    }
+    const host = createEditionCapabilityHost({
+      actions: { displayAliases: () => [] },
+    });
+    const ids = host.list().map(item => item.id);
+    assert.equal(ids.some(id => id.startsWith('world-intel.')), false);
+    assert.equal(ids.some(id => id.startsWith('desktop.')), false);
+    assert.equal(ids.some(id => id.startsWith('cctv.')), false);
+    assert.equal(ids.includes(RESEARCH_PRIVATE_BROWSE), false);
+    assert.deepEqual([...privateProviderConstructions()], []);
+    assert.deepEqual([...privateProviderLaunches()], []);
+    assert.throws(() => new McpResearchGateway(), /worldIntel/);
+    assert.throws(() => new PrivateResearchGateway(), /privateBrowser/);
+    assert.throws(() => new BotService(), /discord/);
+    assert.throws(() => new VoiceServiceClient(), /voiceClone/);
+    assert.throws(() => new SimulatedDeviceProvider(), /devices|cctv/);
+    assert.throws(() => new WindowsDesktopActionAdapter({
+      applications: [],
+      projects: [],
+      trustedOrigins: [],
+      trustedPathPrefixes: [],
+      workspaceRoot: root,
+    }), /desktop/);
+    assert.throws(() => new NightOrchestrator({} as never), /nightAgent/);
+    assert.deepEqual([...privateProviderConstructions()], []);
+    assert.deepEqual([...privateProviderLaunches()], []);
+  });
 });
 
 test('community demo history and memory phrases bind without a model', () => {

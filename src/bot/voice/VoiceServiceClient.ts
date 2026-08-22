@@ -1,3 +1,4 @@
+import { notePrivateProviderConstruction } from '../../jarvis/edition/providers';
 import { getVoiceServiceApiToken, getVoiceServiceBaseUrl } from './VoiceServiceConfig';
 
 export interface VoiceSampleUpload {
@@ -104,6 +105,10 @@ export interface VoiceTrainingExportPreview {
 }
 
 export class VoiceServiceClient {
+  constructor() {
+    notePrivateProviderConstruction('voiceClone');
+  }
+
   public isConfigured(): boolean {
     return Boolean(this.baseUrl && this.apiToken);
   }

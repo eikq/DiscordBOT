@@ -10,7 +10,8 @@ import { writeExperienceEpisode } from '../memory/experienceBridge';
 import { runCloudBenchmarkBank } from '../evolution/benchmarkFixtures';
 import type { CapabilityHost } from '../capabilities/types';
 import { OwnerControl, type OwnerControlState } from '../control';
-import { CCTV_CONNECT_GOAL, SimulatedDeviceProvider, cctvCapabilityContracts, type DeviceRecord } from '../devices';
+import { CCTV_CONNECT_GOAL, SimulatedDeviceProvider, cctvCapabilityContracts, type DeviceProvider, type DeviceRecord } from '../devices';
+import { isCommunityProviderLock } from '../edition/providers';
 import {
   CapabilityGapResolver,
   buildSelfKnowledgeSnapshot,
@@ -132,7 +133,7 @@ export class CommandCenterRuntime {
   public readonly candidates: CandidateManager;
   public readonly modelAdaptation = new ModelAdaptationRegistry();
   public readonly monitor = new ProactiveMonitor();
-  public readonly devices = new SimulatedDeviceProvider();
+  public readonly devices: DeviceProvider;
   public readonly visionCapture = new SimulatedScreenCapture();
   public readonly visionAnalyzer = new SimulatedVisionAnalyzer();
   public readonly night: NightCycle;
@@ -150,6 +151,9 @@ export class CommandCenterRuntime {
   private readonly gapResolver = new CapabilityGapResolver();
 
   constructor(options: CommandCenterOptions = {}) {
+    this.devices = isCommunityProviderLock()
+      ? { list: () => [], capability: () => false }
+      : new SimulatedDeviceProvider();
     const simulated = Boolean(options.simulated);
     this.events = options.events ?? sharedJarvisEventBus();
     this.operator = options.operator ?? sharedTrustedOperatorRuntime();

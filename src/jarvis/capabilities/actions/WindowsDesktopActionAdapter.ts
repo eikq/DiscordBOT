@@ -13,13 +13,16 @@ import {
 } from '../../desktop/windowsDisplayHost';
 import { verifyPlacement } from '../../desktop/perception';
 import type { DisplayInfo } from '../../desktop/monitorTopology';
+import { notePrivateProviderConstruction } from '../../edition/providers';
 
 const NEW_WINDOW_ARG = '--new-window';
 
 export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
   private readonly perception = new WindowsDesktopPerception();
 
-  constructor(private readonly lists: DesktopAllowlists) {}
+  constructor(private readonly lists: DesktopAllowlists) {
+    notePrivateProviderConstruction('desktop');
+  }
 
   public async openApplication(applicationId: string): Promise<DesktopLaunchResult> {
     const app = applicationById(this.lists, applicationId);

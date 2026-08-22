@@ -14,6 +14,7 @@ import { NightWorkspace } from './NightWorkspace';
 import { isPathInsideScope } from './paths';
 import { listChangedFiles, rejectOutOfScopeChanges, snapshotChangedFiles } from './scopeGuard';
 import { isDenied, type NightConfig, type NightRunState, type NightTask, type SafetyEvent, type TaskAttemptRecord } from './types';
+import { notePrivateProviderConstruction } from '../../jarvis/edition/providers';
 
 export type NightOrchestratorOptions = {
   config: NightConfig;
@@ -47,6 +48,7 @@ export class NightOrchestrator {
   private readonly contextFiles: Record<string, string>;
 
   constructor(options: NightOrchestratorOptions) {
+    notePrivateProviderConstruction('nightAgent');
     this.config = options.config;
     this.workspace = options.workspace;
     this.policy = new NightPolicy(options.config);

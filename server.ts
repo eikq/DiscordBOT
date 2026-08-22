@@ -28,7 +28,7 @@ import { applyCommunityEditionEnv, communityRejectedDemoScenario, communityRejec
 dotenv.config({ path: ".env.community", quiet: true });
 if (isCommunityEdition()) {
   applyCommunityEditionEnv();
-  console.log(`[Jarvis] edition=community dataRoot=${jarvisDataRoot()}`);
+  console.log(`[Jarvis] edition=community dataRoot=${jarvisDataRoot()} privateProviders=disabled publicResearch=community`);
 } else {
   dotenv.config({ quiet: true });
 }
@@ -178,7 +178,21 @@ async function startServer() {
     };
   };
 
-  // Initialize Discord Bot
+  // API routes
+  app.use(express.json({ limit: "100kb" }));
+
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  app.use((req, res, next) => {
+    if (isCommunityEdition() && communityRejectedHttpPath(req.path)) {
+      return res.status(404).json({ error: 'COMMUNITY_EXCLUDED' });
+    }
+    return next();
+  });
+
+  if (!isCommunityEdition()) {
   const researchAssistant = new ResearchAssistant();
   const botService = new BotService({ researchAssistant });
   const personaProfiles = new PersonaProfileManager();
@@ -207,7 +221,7 @@ async function startServer() {
     job.finishedAt = Date.now();
     retainVoiceConversionJob(jobId);
   };
-  
+
   if (process.env.JARVIS_STANDALONE === '1') {
     botStatus = "Standalone Jarvis; Discord client not started.";
     console.log('[Server] JARVIS_STANDALONE=1; Discord client not started.');
@@ -226,9 +240,6 @@ async function startServer() {
     botStatus = "Missing DISCORD_TOKEN in environment.";
   }
 
-  // API routes
-  app.use(express.json({ limit: "100kb" }));
-
   // A saved tunnel URL is loaded only when the legacy Colab backend is explicitly selected.
   const colabUrlFilePath = path.join(process.cwd(), 'data', 'colab_url.txt');
   if (getVoiceBackend() === 'colab' && fs.existsSync(colabUrlFilePath)) {
@@ -241,10 +252,6 @@ async function startServer() {
       }
     } catch (err) {}
   }
-
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
-  });
 
   app.get('/api/intelligence/status', async (_req, res) => {
     try {
@@ -793,6 +800,7 @@ async function startServer() {
     }
     return res.download(notebookPath);
   });
+  }
 
   const jarvisLab = createJarvisLabRuntime({
     attachDefaultMemory: true,

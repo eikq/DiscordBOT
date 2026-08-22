@@ -617,6 +617,18 @@ export class JarvisLabRuntime {
   }
 
   public async privateResearchSnapshot(): Promise<PrivateRouteHealth> {
+    if (isCommunityEdition()) {
+      return {
+        virtualBox: 'unknown',
+        gateway: 'unknown',
+        workstation: 'unknown',
+        tor: 'unknown',
+        isolationOk: false,
+        available: false,
+        reasonCode: 'COMMUNITY_EXCLUDED',
+        detail: 'Private browser is not part of Jarvis Community Edition.',
+      };
+    }
     return new PrivateResearchGateway().healthCheck();
   }
 

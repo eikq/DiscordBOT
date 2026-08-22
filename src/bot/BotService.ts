@@ -30,6 +30,7 @@ import {
   type LearningSessionRecord,
 } from './voice/LearningSessionController';
 import { ResearchAssistant } from './research/ResearchAssistant';
+import { notePrivateProviderConstruction, notePrivateProviderLaunch } from '../jarvis/edition/providers';
 import {
   JARVIS_PERSONA_ID,
   JARVIS_VOICE_ID,
@@ -94,6 +95,7 @@ export class BotService {
   private startPromise: Promise<void> | null = null;
 
   constructor(options: { researchAssistant?: ResearchAssistant } = {}) {
+    notePrivateProviderConstruction('discord');
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -1635,6 +1637,7 @@ export class BotService {
   }
 
   public async start(token: string) {
+    notePrivateProviderLaunch('discord');
     if (!token) throw new Error("Discord token is required.");
     if (this.client.isReady()) return;
     if (!this.startPromise) {

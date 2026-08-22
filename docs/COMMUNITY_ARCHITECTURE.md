@@ -43,19 +43,27 @@ Generated Community state is gitignored. There is no automatic owner-data migrat
 
 ## Capability registration
 
-`createEditionCapabilityHost()` is the Community entrypoint.
+`JARVIS_EDITION=community` → `CommunityEditionManifest` → `jarvisProviderPlan()` → only Community provider factories run.
 
-Community registers conversation-supporting hosts: public research, software/project, reminders, workspace intel, recovery sandbox, and ActionGate.
+`createEditionCapabilityHost()` is the Community entrypoint. It sets `worldIntel: false`, `desktop: false`, and `privateGateway: false` before the standalone host is built.
 
-Community does **not** register:
+`applyCommunityEditionEnv()` also sets `JARVIS_COMMUNITY_PROVIDER_LOCK=1`. Private constructors and process launchers (WorldIntel MCP, Discord client start, private-browser/Whonix health, desktop adapter, simulated devices, Night Orchestrator, voice-clone client) throw if that lock is set.
+
+Community registers conversation-supporting hosts: public Wikipedia/DuckDuckGo research, software/project, reminders, workspace intel, recovery sandbox, and ActionGate.
+
+Community does **not** register, start, spawn, or route:
 
 - desktop / Windows display control
 - runtime service start/stop
 - world-intel MCP
-- `research.privateBrowse`
+- `research.privateBrowse` / Whonix / private browser
 - CCTV / device contracts
+- Discord
+- voice cloning
+- Night Agent
+- cybersecurity capability subsystem
 
-`guardCommunityHost()` also rejects those IDs if invoked.
+`guardCommunityHost()` also rejects those IDs if invoked. Community HTTP middleware 404s the matching Digital Me / owner routes.
 
 ## Permissions
 
@@ -76,4 +84,6 @@ Fallback model name is `local-model`, not an owner-specific GGUF id. The UI must
 
 ## Startup
 
-`npm run jarvis:community` or `Start-Jarvis-Community.ps1` sets `JARVIS_STANDALONE=1`, binds `127.0.0.1`, and skips Discord.
+`npm run jarvis:community` or `Start-Jarvis-Community.ps1` sets `JARVIS_STANDALONE=1`, binds `127.0.0.1`, applies the Community provider lock, and skips Discord.
+
+Public research uses only the Community-safe Wikipedia + DuckDuckGo path. It does not construct `ResearchAssistant` / `McpResearchGateway` and does not spawn `world-intel-mcp`.

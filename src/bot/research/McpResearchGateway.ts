@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { LlmToolCall, LlmToolDefinition, ToolExecutionResult } from '../llm/LocalLlmProvider';
+import { notePrivateProviderConstruction, notePrivateProviderLaunch } from '../../jarvis/edition/providers';
 
 export const WORLD_INTEL_PINNED_COMMIT = '9254192d83f88bd7e5312b074c11f09398b84ca9';
 
@@ -52,6 +53,7 @@ export class McpResearchGateway {
   private readonly allowedTools: Set<string>;
 
   constructor() {
+    notePrivateProviderConstruction('worldIntel');
     const configured = process.env.WORLD_INTEL_ALLOWED_TOOLS
       ?.split(',')
       .map(tool => tool.trim())
@@ -131,6 +133,7 @@ export class McpResearchGateway {
   }
 
   private async connect(): Promise<void> {
+    notePrivateProviderLaunch('worldIntel');
     const command = this.resolveCommand();
     const client = new Client({ name: 'digital-me-discord-bot', version: '0.1.0' });
     const transport = new StdioClientTransport({
