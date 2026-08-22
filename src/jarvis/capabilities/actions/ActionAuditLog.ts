@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { jarvisDataRoot } from '../../edition/resolve';
 import type { ActionAuditEvent } from './types';
 
 export class ActionAuditLog {
@@ -21,7 +22,7 @@ export class ActionAuditLog {
 }
 
 export function defaultActionAuditPath(workspaceRoot = process.cwd()): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'audit', 'actions.jsonl');
+  return path.join(jarvisDataRoot(workspaceRoot), 'audit', 'actions.jsonl');
 }
 
 function sanitize(event: ActionAuditEvent): ActionAuditEvent {

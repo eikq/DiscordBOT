@@ -6,8 +6,10 @@ import type { SemanticFactRecord } from '../../bot/memory/jarvis/types';
 import type { BuildPlan } from '../build/types';
 import { OWNER_PREF_PREFIX, listOwnerAliases } from './ownerSemantics';
 
+import { jarvisDataRoot } from '../edition/resolve';
+
 export function defaultObsidianVaultPath(): string {
-  return path.join(process.cwd(), 'data', 'jarvis', 'obsidian');
+  return path.join(jarvisDataRoot(), 'obsidian');
 }
 
 export type ObsidianProjectionInput = {

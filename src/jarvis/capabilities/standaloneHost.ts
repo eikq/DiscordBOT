@@ -71,6 +71,7 @@ export type StandaloneCapabilityHostOptions = {
     permissions?: import('../security/persistentPermission').PersistentPermissionStore;
   };
   build?: false | { db?: DatabaseSync; sandboxRoot?: string };
+  desktop?: boolean;
 };
 
 export function createStandaloneCapabilityHost(
@@ -82,25 +83,27 @@ export function createStandaloneCapabilityHost(
   let allowlists: DesktopAllowlists | undefined;
   if (options.actions !== false) {
     allowlists = options.actions?.allowlists ?? loadDesktopAllowlists();
-    const adapter = options.actions?.adapter ?? new WindowsDesktopActionAdapter(allowlists);
-    registerDesktopCapabilities(registry, {
-      adapter,
-      allowlists,
-      systemStatus: options.actions?.systemStatus ?? { snapshot: systemHealthSnapshot },
-      displayAliases: options.actions?.displayAliases,
-    });
-    if (adapter instanceof WindowsDesktopActionAdapter) {
-      void import('../desktop/windowsDisplayHost').then(mod => {
-        void mod.ensureDesktopHostAssembly();
-      });
-    }
-    try {
-      registerRuntimeCapabilities(registry, {
+    if (options.desktop !== false) {
+      const adapter = options.actions?.adapter ?? new WindowsDesktopActionAdapter(allowlists);
+      registerDesktopCapabilities(registry, {
+        adapter,
         allowlists,
-        services: options.actions?.services ?? sharedJarvisServiceController(),
+        systemStatus: options.actions?.systemStatus ?? { snapshot: systemHealthSnapshot },
+        displayAliases: options.actions?.displayAliases,
       });
-    } catch (error) {
-      console.warn(`[Jarvis] Runtime capabilities unavailable: ${error instanceof Error ? error.message : error}`);
+      if (adapter instanceof WindowsDesktopActionAdapter) {
+        void import('../desktop/windowsDisplayHost').then(mod => {
+          void mod.ensureDesktopHostAssembly();
+        });
+      }
+      try {
+        registerRuntimeCapabilities(registry, {
+          allowlists,
+          services: options.actions?.services ?? sharedJarvisServiceController(),
+        });
+      } catch (error) {
+        console.warn(`[Jarvis] Runtime capabilities unavailable: ${error instanceof Error ? error.message : error}`);
+      }
     }
     if (options.reminders !== false) {
       try {

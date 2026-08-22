@@ -2,6 +2,18 @@ import { LocalLlmProvider } from '../../bot/llm/LocalLlmProvider';
 import { CANONICAL_LLM_BASE_URL, CANONICAL_LLM_MODEL } from '../../bot/llm/canonicalRuntime';
 import { MODEL_HEALTH_STATUSES, ownerMessageForModelHealth, type ModelHealthStatus } from '../../bot/llm/modelHealth';
 import { QWEN_OFFLINE_OWNER_MESSAGE } from '../models/qwen38Cyber';
+import {
+  COMMUNITY_MODEL_OFFLINE_MESSAGE,
+  communityCapabilitySummaryText,
+  communityUnavailablePrivateText,
+  createEditionCapabilityHost,
+  isCommunityCapabilityAllowed,
+  isCommunityEdition,
+  jarvisDataRoot,
+  jarvisEditionManifest,
+  jarvisWorkspaceLogicalPath,
+  resolveJarvisEdition,
+} from '../edition';
 import { spokenTrustedModelIdentity, trustedRuntimeModelIdentity } from '../models/runtimeIdentity';
 import { SqliteJarvisMemoryStore } from '../../bot/memory/jarvis/SqliteJarvisMemoryStore';
 import type { ConversationHistoryStore } from '../../bot/memory/jarvis/conversationStore';
@@ -72,7 +84,6 @@ import {
 } from '../intent';
 import { isUnavailableAction } from '../intent/results';
 import { capabilityResultToToolRef } from '../capabilities/CapabilityRegistry';
-import { createStandaloneCapabilityHost } from '../capabilities/standaloneHost';
 import type { CapabilityHost, CapabilityProviderKind } from '../capabilities/types';
 import { createJarvisRequest } from '../core/request';
 import type { ActionResult, JarvisCore, JarvisCoreResult } from '../core/types';
@@ -181,6 +192,10 @@ export type JarvisLabPresentationStatus = {
 
 export type JarvisLabStatus = {
   discordRequired: false;
+  edition: 'owner' | 'community';
+  editionLabel: string;
+  dataRoot: string;
+  manifest: ReturnType<typeof jarvisEditionManifest>;
   ready: boolean;
   coreState: 'idle' | 'ready' | 'degraded';
   memory: {
@@ -342,7 +357,7 @@ export class JarvisLabRuntime {
       options.attachDefaultCapabilities ? defaultConversationStatePath() : undefined,
     );
     const capabilities = options.capabilities
-      ?? (options.attachDefaultCapabilities ? createStandaloneCapabilityHost({
+      ?? (options.attachDefaultCapabilities ? createEditionCapabilityHost({
         reminders: this.reminders,
         research: this.research ? { runtime: this.research } : undefined,
         workspace: this.workspace ? { runtime: this.workspace } : undefined,
@@ -363,7 +378,9 @@ export class JarvisLabRuntime {
     this.projectIds = configuredProjectIds(allowlists);
     this.llm = options.llm ?? new LocalLlmProvider(
       process.env.JARVIS_LLM_BASE_URL || process.env.LOCAL_QWEN_BASE_URL || CANONICAL_LLM_BASE_URL,
-      process.env.JARVIS_LLM_MODEL || process.env.LOCAL_QWEN_MODEL || CANONICAL_LLM_MODEL,
+      process.env.JARVIS_LLM_MODEL
+        || process.env.LOCAL_QWEN_MODEL
+        || (isCommunityEdition() ? 'local-model' : CANONICAL_LLM_MODEL),
     );
     this.modelProfiles = options.modelProfiles ?? new ModelProfileRegistry();
     this.modelCertifications = options.modelCertifications ?? new ModelCertificationRegistry();
@@ -421,9 +438,12 @@ export class JarvisLabRuntime {
           }
         : undefined;
     } catch {
-      llm = { enabled: false, reachable: false, health: 'MODEL_OFFLINE', ownerMessage: QWEN_OFFLINE_OWNER_MESSAGE };
+      llm = { enabled: false, reachable: false, health: 'MODEL_OFFLINE', ownerMessage: this.offlineModelMessage() };
     }
     if (llm?.profile) this.modelProfiles.replace(llm.profile);
+    if (isCommunityEdition() && llm && llm.health !== 'MODEL_READY') {
+      llm.ownerMessage = COMMUNITY_MODEL_OFFLINE_MESSAGE;
+    }
     const modelReady = llm?.health === 'MODEL_READY';
     const services = await this.serviceSnapshot();
     const selfKnowledge = await this.selfKnowledgeSnapshot({
@@ -431,8 +451,14 @@ export class JarvisLabRuntime {
       modelAvailable: modelReady,
       services,
     });
+    const edition = resolveJarvisEdition();
+    const manifest = jarvisEditionManifest(edition);
     return {
       discordRequired: false,
+      edition,
+      editionLabel: manifest.label,
+      dataRoot: jarvisDataRoot(),
+      manifest,
       ready: true,
       coreState: this.memoryAttached || modelReady ? 'ready' : 'degraded',
       memory: {
@@ -441,15 +467,15 @@ export class JarvisLabRuntime {
       },
       capabilities: {
         attached: this.capabilityIds.length > 0,
-        ids: [...this.capabilityIds],
-        catalog: this.capabilityHost?.list().map(item => ({
+        ids: this.capabilityIds.filter(id => edition !== 'community' || isCommunityCapabilityAllowed(id)),
+        catalog: (this.capabilityHost?.list() ?? []).filter(item => edition !== 'community' || isCommunityCapabilityAllowed(item.id)).map(item => ({
           id: item.id,
           description: item.description,
           providerKind: item.providerKind,
           untrustedOutput: item.untrustedOutput,
           requiredService: item.requiredService,
           sideEffect: item.sideEffect,
-        })) ?? [],
+        })),
       },
       presentation: await this.presentationStatus(sessionId),
       llm,
@@ -507,7 +533,7 @@ export class JarvisLabRuntime {
         detail: service.reason,
         evidence: [`service:${service.id}:${service.health}`],
       })),
-      declarations: cctvCapabilityContracts(),
+      declarations: isCommunityEdition() ? [] : cctvCapabilityContracts(),
     });
   }
 
@@ -801,8 +827,6 @@ export class JarvisLabRuntime {
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
     this.persistOwnerTurn(sessionId, String(input.text || ''), input.actionSource === 'voice' ? 'voice' : 'text');
     extractDurableOwnerMemory(this.memoryStore, String(input.text || ''));
-    const offline = await this.maybeOfflineModelReply(input, sessionId);
-    if (offline) return this.finalizeVisibleTurn(sessionId, offline);
     const approved = await this.continueApprovedPlan(input, sessionId);
     if (approved) return this.finalizeVisibleTurn(sessionId, approved);
     if (knowledgeKind && !this.workCenter()?.pendingGoals.store.waiting(sessionId).length) {
@@ -823,6 +847,10 @@ export class JarvisLabRuntime {
       const worked = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
       await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, worked);
       return this.finalizeVisibleTurn(sessionId, worked);
+    }
+    if (!this.hasDeterministicAskReply(prepared)) {
+      const offline = await this.maybeOfflineModelReply(input, sessionId);
+      if (offline) return this.finalizeVisibleTurn(sessionId, offline);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
@@ -869,8 +897,6 @@ export class JarvisLabRuntime {
       if (finalized.speech) emit({ type: 'speech', payload: finalized.speech });
       return finalized;
     };
-    const offline = await this.maybeOfflineModelReply(input, sessionId);
-    if (offline) return emitFinal(offline);
     const approved = await this.continueApprovedPlan(input, sessionId);
     if (approved) return emitFinal(approved);
     if (knowledgeKind && !this.workCenter()?.pendingGoals.store.waiting(sessionId).length) {
@@ -891,6 +917,10 @@ export class JarvisLabRuntime {
       const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
       await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
       return emitFinal(output);
+    }
+    if (!this.hasDeterministicAskReply(prepared)) {
+      const offline = await this.maybeOfflineModelReply(input, sessionId);
+      if (offline) return emitFinal(offline);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
@@ -1003,6 +1033,13 @@ export class JarvisLabRuntime {
     return this.finalizeVisibleTurn(sessionId, await this.finishActionTurn(invoked, sessionId, input.speak));
   }
 
+  private hasDeterministicAskReply(
+    prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
+  ): boolean {
+    return Boolean(prepared.turn.actionOnly && prepared.turn.presetActionResults?.length)
+      || Boolean(prepared.turn.capabilityCalls?.length);
+  }
+
   private decideAskRoute(
     input: JarvisLabAskInput,
     prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
@@ -1030,9 +1067,16 @@ export class JarvisLabRuntime {
     kind: SelfKnowledgeAnswer['kind'],
   ) {
   if (kind === 'MODEL_IDENTITY') {
+    const selectedId = isCommunityEdition()
+      ? (process.env.JARVIS_LLM_MODEL || process.env.LOCAL_QWEN_MODEL || 'local-model')
+      : 'qwen38-cyber';
     const identity = trustedRuntimeModelIdentity({
-      profile: this.modelProfiles.get('qwen38-cyber'),
-      selectedId: 'qwen38-cyber',
+      profile: this.modelProfiles.get(selectedId) || configuredLocalModelProfile({
+        id: selectedId,
+        displayName: selectedId,
+        runtime: 'openai-compatible',
+      }),
+      selectedId,
     });
     const answer = {
       kind: 'MODEL_IDENTITY' as const,
@@ -1082,7 +1126,7 @@ export class JarvisLabRuntime {
   }
   const snapshot = await this.selfKnowledgeSnapshot();
     const question = String(input.text || '');
-    const gap = kind === 'CCTV_STATUS'
+    const gap = kind === 'CCTV_STATUS' && !isCommunityEdition()
       ? await new CapabilityGapResolver().resolve({
           objective: CCTV_CONNECT_GOAL.title,
           graph: resolveCapabilityGoal(CCTV_CONNECT_GOAL, snapshot),
@@ -1091,7 +1135,7 @@ export class JarvisLabRuntime {
       : kind === 'GAP_EXPLANATION'
         ? await resolveSelfKnowledgeGap(question, snapshot)
         : undefined;
-    const answer = answerFromSelfKnowledge(kind, snapshot, gap, question);
+    const answer = this.communitySelfKnowledgeAnswer(kind, answerFromSelfKnowledge(kind, snapshot, gap, question));
     const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
     const result: JarvisCoreResult = {
       requestId: request.requestId,
@@ -1956,7 +2000,7 @@ export class JarvisLabRuntime {
       role: 'OWNER',
       visibleText: text,
       inputMode: inputMode === 'voice' ? 'voice' : 'text',
-      modelProfileId: 'qwen38-cyber',
+      modelProfileId: this.configuredModelId(),
       goalId: plan?.goalId,
       planId: plan?.id,
       metadata: { source: inputMode },
@@ -1967,7 +2011,7 @@ export class JarvisLabRuntime {
       role: 'JARVIS',
       visibleText: '',
       inputMode: 'system-derived',
-      modelProfileId: 'qwen38-cyber',
+      modelProfileId: this.configuredModelId(),
     });
     this.activeJarvisTurnId = jarvis.id;
   }
@@ -2071,7 +2115,7 @@ export class JarvisLabRuntime {
         slug: pending.id.slice(0, 24),
         capabilityId: pending.permissionRequirements[0] || SOFTWARE_APPLY_BUILD,
       }) : null,
-      runtime: { model: 'qwen38-cyber' },
+      runtime: { model: this.configuredModelId() },
       projectMemory: [
         view.project ? `Working on ${view.project}` : '',
         view.current ? `Current: ${view.current}` : '',
@@ -2083,13 +2127,56 @@ export class JarvisLabRuntime {
     return built.promptBlock;
   }
 
+  private configuredModelId(): string {
+    return process.env.JARVIS_LLM_MODEL
+      || process.env.LOCAL_QWEN_MODEL
+      || (isCommunityEdition() ? 'local-model' : 'qwen38-cyber');
+  }
+
+  private offlineModelMessage(): string {
+    return isCommunityEdition() ? COMMUNITY_MODEL_OFFLINE_MESSAGE : QWEN_OFFLINE_OWNER_MESSAGE;
+  }
+
+  private communitySelfKnowledgeAnswer(
+    kind: SelfKnowledgeAnswer['kind'],
+    answer: SelfKnowledgeAnswer,
+  ): SelfKnowledgeAnswer {
+    if (!isCommunityEdition()) return answer;
+    if (kind === 'CAPABILITY_SUMMARY' || kind === 'AVAILABLE_NOW') {
+      return {
+        ...answer,
+        text: communityCapabilitySummaryText(),
+        capabilityIds: this.capabilityIds.filter(isCommunityCapabilityAllowed),
+      };
+    }
+    if (kind === 'CCTV_STATUS' || kind === 'DEVICE_CONTROL') {
+      return {
+        kind,
+        text: communityUnavailablePrivateText(),
+        capabilityIds: [],
+        evidence: ['edition:community', 'manifest:excluded'],
+      };
+    }
+    const capabilityIds = answer.capabilityIds.filter(isCommunityCapabilityAllowed);
+    if (/cctv|camera|cyber|whonix|nvr|private browser/i.test(answer.text)) {
+      return {
+        ...answer,
+        text: communityCapabilitySummaryText(),
+        capabilityIds,
+      };
+    }
+    return { ...answer, capabilityIds };
+  }
+
   private async maybeOfflineModelReply(input: JarvisLabAskInput, sessionId: string) {
     if (!this.llmGeneratesAnswers || !this.llm?.getRuntimeStatus) return undefined;
     try {
       const runtime = await this.llm.getRuntimeStatus();
       const health = asModelHealth(runtime.health);
       if (!health || health === 'MODEL_READY') return undefined;
-      const message = runtime.ownerMessage || ownerMessageForModelHealth(health) || QWEN_OFFLINE_OWNER_MESSAGE;
+      const message = isCommunityEdition()
+        ? this.offlineModelMessage()
+        : runtime.ownerMessage || ownerMessageForModelHealth(health) || this.offlineModelMessage();
       sharedJarvisEventBus().emit('MODEL_STATUS_CHANGED', message, { health }, 'warn');
       const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
       const result: JarvisCoreResult = {
@@ -2202,7 +2289,7 @@ export class JarvisLabRuntime {
         kind: plan.projectType === 'WEBSITE' ? 'website' as const : 'software' as const,
         goalId: plan.goalId,
         planId: plan.id,
-        workspace: `data/jarvis/builds/${plan.slug}`,
+        workspace: jarvisWorkspaceLogicalPath(plan.slug),
       }));
     const stackedPlan = (current.topicStack || []).find(frame => (
       frame.projectSlug === (current.activeProjectSlug || slug) && frame.planId

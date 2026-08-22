@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { jarvisDataRoot, jarvisMemoryDbName } from '../../../jarvis/edition/resolve';
 import { listSchemaMigrations } from './schema';
 import { JARVIS_MEMORY_SCHEMA_VERSION } from './types';
 
 export function defaultJarvisDbPath(): string {
-  return path.join(process.cwd(), 'data', 'jarvis', 'jarvis.db');
+  return path.join(jarvisDataRoot(), jarvisMemoryDbName());
 }
 
 export function openMigratedDatabase(dbPath: string): DatabaseSync {

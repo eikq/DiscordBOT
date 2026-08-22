@@ -13,14 +13,14 @@ import type { ResearchResult } from './types';
 
 export type ResearchCapabilityDeps = {
   runtime?: ResearchRuntime;
-  privateGateway?: PrivateResearchGateway;
+  privateGateway?: PrivateResearchGateway | false;
 };
 
 export function registerResearchCapabilities(host: CapabilityHost, deps: ResearchCapabilityDeps): void {
   for (const id of [RESEARCH_SEARCH, RESEARCH_FETCH, RESEARCH_GET, RESEARCH_COMPARE, RESEARCH_CURRENT]) {
     host.register(createHandler(id, deps));
   }
-  host.register(createPrivateBrowseHandler(deps));
+  if (deps.privateGateway !== false) host.register(createPrivateBrowseHandler(deps));
 }
 
 function createHandler(id: string, deps: ResearchCapabilityDeps): CapabilityHandler {
@@ -190,7 +190,8 @@ function createPrivateBrowseHandler(deps: ResearchCapabilityDeps): CapabilityHan
       rollback: { mode: 'not_required', strategy: 'The isolated browser session is ephemeral and does not mutate owner browser state.' },
     }),
     availability: async () => {
-      const health = await deps.privateGateway?.healthCheck();
+      const gateway = deps.privateGateway === false ? undefined : deps.privateGateway;
+      const health = await gateway?.healthCheck();
       return {
         id: RESEARCH_PRIVATE_BROWSE,
         availability: health?.available ? 'up' : 'unavailable',

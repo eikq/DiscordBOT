@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { duckDuckGoSearchProvider, wikipediaSearchProvider } from './searchProviders';
 import { createResearchStore, defaultResearchDbPath } from './researchStore';
 import { ResearchRuntime, type ResearchRuntimeDeps } from './researchRuntime';
@@ -68,7 +67,7 @@ export function resetSharedResearchRuntime(): void {
 }
 
 export function researchDbBeside(workspaceRoot: string): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'research', 'research.db');
+  return defaultResearchDbPath(workspaceRoot);
 }
 
 async function defaultPublicLookup(hostname: string): Promise<string[]> {

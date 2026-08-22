@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { jarvisDataRoot } from '../edition/resolve';
 
 export type ReminderAuditEvent = {
   v: 1;
@@ -44,7 +45,7 @@ export class ReminderAuditLog {
 }
 
 export function defaultReminderAuditPath(workspaceRoot = process.cwd()): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'audit', 'reminders.jsonl');
+  return path.join(jarvisDataRoot(workspaceRoot), 'audit', 'reminders.jsonl');
 }
 
 export function sanitizeReminderAudit(event: ReminderAuditEvent): ReminderAuditEvent {

@@ -1,3 +1,5 @@
+import { jarvisWorkspaceLogicalPath } from '../edition/resolve';
+
 export type PermissionDuration = 'ONCE' | 'THIS_GOAL';
 
 export type PermissionEffect =
@@ -39,7 +41,7 @@ export function permissionProposalFromBuild(input: {
     goal: input.title,
     summary: `ขอสิทธิ์สร้าง/แก้ไฟล์ ติดตั้ง dependencies รัน build/test และเปิด preview localhost ในโปรเจกต์ ${input.slug}`,
     reason: 'เพื่อสร้างตามแผนที่คุณอนุมัติ',
-    scope: `data/jarvis/builds/${input.slug}`,
+    scope: jarvisWorkspaceLogicalPath(input.slug),
     duration: 'THIS_GOAL',
     effects: [...BUILD_GOAL_EFFECTS],
     capabilityId: input.capabilityId,

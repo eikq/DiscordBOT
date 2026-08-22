@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { jarvisDataRoot } from '../edition/resolve';
 import { isoUtc } from './clock';
 import { AUTOMATION_SCHEMA_VERSION, isReminderStatus } from './constants';
 import { computeNextRunAt, isRecurring, nextAfterOccurrence } from './schedule';
@@ -61,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_occurrences_pending ON reminder_occurrences(statu
 `;
 
 export function defaultAutomationDbPath(workspaceRoot = process.cwd()): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'automation.db');
+  return path.join(jarvisDataRoot(workspaceRoot), 'automation.db');
 }
 
 export class ReminderStore {

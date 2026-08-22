@@ -23,7 +23,15 @@ import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
 import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
 import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parseOperatorReason, parsePermissionGrant, parsePrivilegeLeaseId, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
-dotenv.config({ quiet: true });
+import { applyCommunityEditionEnv, communityRejectedDemoScenario, communityRejectedHttpPath, isCommunityEdition, jarvisDataRoot } from "./src/jarvis/edition";
+
+dotenv.config({ path: ".env.community", quiet: true });
+if (isCommunityEdition()) {
+  applyCommunityEditionEnv();
+  console.log(`[Jarvis] edition=community dataRoot=${jarvisDataRoot()}`);
+} else {
+  dotenv.config({ quiet: true });
+}
 if (process.env.JARVIS_STANDALONE === '1') {
   const profile = applyJarvisInteractiveProfile();
   console.log(`[Jarvis] runtime profile=${profile.id} keep_alive=${profile.keepAlive} ctx=${profile.contextTokens} timeoutMs=${profile.timeoutMs} gpu_layers=${profile.gpuLayers}`);
@@ -1106,6 +1114,9 @@ async function startServer() {
     }
     const scenario = parseDemoScenario(req.body?.scenario);
     if (!scenario) return res.status(400).json({ error: 'Unknown demo scenario.', reasonCode: 'PLAN_INVALID' });
+    if (isCommunityEdition() && communityRejectedDemoScenario(scenario)) {
+      return res.status(404).json({ error: 'That demo is not part of Jarvis Community Edition.', reasonCode: 'COMMUNITY_EXCLUDED' });
+    }
     try {
       const center = sharedCommandCenter();
       await center.runDemo(scenario);
@@ -1162,6 +1173,9 @@ async function startServer() {
     if (rejectIfMutationBlocked(req, res)) return;
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
       return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    if (isCommunityEdition() && communityRejectedHttpPath('/api/jarvis/command-center/night')) {
+      return res.status(404).json({ error: 'Night Agent is not part of Jarvis Community Edition.', reasonCode: 'COMMUNITY_EXCLUDED' });
     }
     const action = parseNightAction(req.body?.action) ?? 'run';
     try {
@@ -1260,6 +1274,9 @@ async function startServer() {
   app.get('/api/jarvis/private-research', async (_req, res) => {
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
       return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    if (isCommunityEdition() && communityRejectedHttpPath('/api/jarvis/private-research')) {
+      return res.status(404).json({ error: 'Private browser is not part of Jarvis Community Edition.', reasonCode: 'COMMUNITY_EXCLUDED' });
     }
     try {
       return res.json(await jarvisLab.privateResearchSnapshot());

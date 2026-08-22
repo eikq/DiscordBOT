@@ -5,6 +5,7 @@
 
 export function resolveLocalQwenApiKey(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const candidates = [
+    env.JARVIS_LLM_API_KEY,
     env.LOCAL_QWEN_API_KEY,
     env.JARVIS_QWEN_API_KEY,
     env.LLM_API_KEY,

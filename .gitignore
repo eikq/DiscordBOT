@@ -14,6 +14,7 @@ __pycache__/
 *.py[cod]
 .env*
 !.env.example
+!.env.community.example
 data/colab_url.txt
 data/fine_tuning/
 data/memory/
@@ -29,6 +30,7 @@ benchmarks/
 data/learning_sessions/
 data/personas.json
 data/jarvis/
+data/community/
 *.pptx.inspect.ndjson
 !public-demo/build/
 !public-demo/build/sites-vite-plugin.ts

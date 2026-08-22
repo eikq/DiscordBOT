@@ -28,6 +28,7 @@ import type {
   PermissionDecision,
 } from './types';
 import { urlTargetClass } from './urlSafety';
+import { jarvisWorkspaceLogicalPath } from '../../edition/resolve';
 import { capabilityRequiresLease, MAX_LEASE_TTL_MS } from '../../security/constants';
 import { isPrivilegeDenied, type PrivilegeLeaseStore } from '../../security/privilegeLease';
 import type { PrivilegeLease } from '../../security/types';
@@ -921,8 +922,8 @@ class ActionGate implements ActionHost {
       plan?.id,
       proposal.normalizedArguments.planId,
       proposal.target,
-      plan ? `data/jarvis/builds/${plan.slug}` : undefined,
-      typeof proposal.normalizedArguments.slug === 'string' ? `data/jarvis/builds/${proposal.normalizedArguments.slug}` : undefined,
+      plan ? jarvisWorkspaceLogicalPath(plan.slug) : undefined,
+      typeof proposal.normalizedArguments.slug === 'string' ? jarvisWorkspaceLogicalPath(proposal.normalizedArguments.slug) : undefined,
     ].filter((item): item is string => Boolean(item));
     return scopes.some(scope => !isPrivilegeDenied(this.options.leases!.peekOptional(proposal.capabilityId, scope)));
   }
@@ -937,7 +938,7 @@ class ActionGate implements ActionHost {
       capabilityIds: [...APPLY_BUILD_COVERED_CAPABILITIES],
       resourceScopes: [
         String(plan?.id || proposal.normalizedArguments.planId || proposal.capabilityId),
-        `data/jarvis/builds/${slug}`,
+        jarvisWorkspaceLogicalPath(slug),
       ],
       reason: 'Owner granted this build goal.',
       ttlMs: 2 * 60 * 60_000,
@@ -1475,7 +1476,7 @@ function describeProposal(
     return {
       displayName: String(input.brief || 'Build project'),
       summary: 'ขอสิทธิ์สร้าง/แก้ไฟล์ ติดตั้ง dependencies รัน build/test และเปิด preview localhost จนกว่างานนี้จะจบ',
-      target: String(input.planId || 'data/jarvis/builds'),
+      target: String(input.planId || jarvisWorkspaceLogicalPath('project').replace(/\/project$/, '')),
       risk: 'CONFIRM_REQUIRED',
     };
   }
@@ -1484,7 +1485,7 @@ function describeProposal(
     return {
       displayName: capabilityId,
       summary: `Project operation ${capabilityId} in ${slug}`,
-      target: `data/jarvis/builds/${slug}`,
+      target: jarvisWorkspaceLogicalPath(slug),
       risk: capabilityId.includes('read') || capabilityId.includes('list') || capabilityId.includes('inspect')
         ? 'READ_ONLY'
         : 'CONFIRM_REQUIRED',

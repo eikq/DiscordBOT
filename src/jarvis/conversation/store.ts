@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { jarvisDataRoot, jarvisWorkspaceLogicalPath } from '../edition/resolve';
 import { emptyConversationState, type ConversationState, type ProjectRecord } from './types';
 import { isReportableFailure } from './view';
 
@@ -84,7 +85,7 @@ export class ConversationStateStore {
       activePreview: input.preview === null
         ? undefined
         : input.preview ?? current.activePreview,
-      activeWorkspace: slug ? `data/jarvis/builds/${slug}` : current.activeWorkspace,
+      activeWorkspace: slug ? jarvisWorkspaceLogicalPath(slug) : current.activeWorkspace,
       lastError,
       referents: {
         ...current.referents,
@@ -119,7 +120,7 @@ export class ConversationStateStore {
 }
 
 export function defaultConversationStatePath(workspaceRoot = process.cwd()): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'runtime', 'conversation-state.json');
+  return path.join(jarvisDataRoot(workspaceRoot), 'runtime', 'conversation-state.json');
 }
 
 function mergeProjects(

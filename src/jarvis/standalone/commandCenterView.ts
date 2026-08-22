@@ -1,3 +1,4 @@
+import { isCommunityEdition } from '../edition';
 import { AUTONOMY_LABELS } from '../control';
 import { liveOpsSteps, capabilityBar, systemNodeState, visualStatusLine, windowedEvents, type LiveOpsStep } from '../ui/operationsView';
 import type { CommandCenterSnapshot } from './commandCenter';
@@ -231,7 +232,7 @@ export function presentCommandCenter(
       preflight: snapshot.permission.preflight,
     },
     memoryActivity: snapshot.memoryActivity,
-    devices: snapshot.devices.map(device => ({
+    devices: isCommunityEdition() ? [] : snapshot.devices.map(device => ({
       id: device.id,
       label: device.label,
       kind: device.kind,

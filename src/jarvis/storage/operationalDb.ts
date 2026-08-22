@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { jarvisDataRoot } from '../edition/resolve';
 
 const FORBIDDEN_BASENAMES = new Set([
   'jarvis.db',
+  'community.db',
   'memory.db',
   'automation.db',
   'workspace.db',
@@ -29,5 +31,5 @@ export function openOperationalSqlite(dbPath: string, label: string): { db: Data
 }
 
 export function defaultRuntimeRoot(workspaceRoot = process.cwd()): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'runtime');
+  return path.join(jarvisDataRoot(workspaceRoot), 'runtime');
 }

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { jarvisDataRoot } from '../edition/resolve';
 import {
   FETCH_CACHE_TTL_MS,
   MAX_SESSIONS,
@@ -26,7 +27,7 @@ export type ResearchStore = {
 const FORBIDDEN_DB = new Set(['jarvis.db', 'memory.db', 'automation.db', 'workspace.db']);
 
 export function defaultResearchDbPath(workspaceRoot = process.cwd()): string {
-  return path.join(workspaceRoot, 'data', 'jarvis', 'research', 'research.db');
+  return path.join(jarvisDataRoot(workspaceRoot), 'research', 'research.db');
 }
 
 export function createResearchStore(dbPath: string): ResearchStore {

@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { jarvisDataRoot, jarvisWorkspaceDirName } from '../edition/resolve';
 import type { BuildPlan } from './types';
 
 export function defaultBuildRoot(): string {
-  return path.join(process.cwd(), 'data', 'jarvis', 'builds');
+  return path.join(jarvisDataRoot(), jarvisWorkspaceDirName());
 }
 
 export function sandboxPathFor(slug: string, root = defaultBuildRoot()): string {

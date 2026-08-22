@@ -3,6 +3,7 @@ import type { ConversationState, DiscourseAct, DiscourseInterpretation, ProjectR
 import { activeProject, restoreProject, projectForOwnerText, isLeftoverWaitingPlan } from './referents';
 import { optionsFromReply, isOperationalNoise, isPermissionPrompt, extractComparisonOptions, pickRecommendedOption } from './view';
 import { interpretDiscourse } from './discourse';
+import { jarvisWorkspaceLogicalPath } from '../edition/resolve';
 
 export function applyTurnToConversation(
   state: ConversationState,
@@ -108,7 +109,7 @@ export function applyTurnToConversation(
       next.activeProjectSlug = project.slug;
       next.activeGoalId = project.goalId || next.activeGoalId;
       next.activePlanId = project.planId || next.activePlanId;
-      next.activeWorkspace = project.workspace || `data/jarvis/builds/${project.slug}`;
+      next.activeWorkspace = project.workspace || jarvisWorkspaceLogicalPath(project.slug);
       next.referents.this_project = project.slug;
       next.referents.this_site = project.slug;
       next.referents.this_app = project.slug;
@@ -215,7 +216,7 @@ export function applyTurnToConversation(
       next.activeProjectSlug = record.slug;
       next.activeGoalId = record.goalId || next.activeGoalId;
       next.activePlanId = record.planId || next.activePlanId;
-      next.activeWorkspace = record.workspace || `data/jarvis/builds/${record.slug}`;
+      next.activeWorkspace = record.workspace || jarvisWorkspaceLogicalPath(record.slug);
       if (!['RESEARCH', 'SWITCH_TOPIC', 'STATUS_QUERY', 'MEMORY_QUERY', 'MEMORY_STORE'].includes(input.discourse.act)) {
         next.activeTopic = 'software';
       }

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { jarvisDataRoot } from '../edition/resolve';
 import { WORKSPACE_SCHEMA_VERSION } from './constants';
 import type { DocumentChunk, DocumentRecord, IndexStatus, SymbolRecord, WorkspaceResult } from './types';
 
@@ -40,7 +41,7 @@ export type StoredDocument = {
 };
 
 export function defaultWorkspaceDbPath(hostRoot = process.cwd()): string {
-  return path.join(hostRoot, 'data', 'jarvis', 'workspace', 'workspace.db');
+  return path.join(jarvisDataRoot(hostRoot), 'workspace', 'workspace.db');
 }
 
 export function createWorkspaceStore(dbPath: string): WorkspaceStore {
