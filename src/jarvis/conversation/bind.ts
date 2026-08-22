@@ -660,6 +660,10 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
     return talk('ตอนนี้ยังไม่มี preview ที่เปิดอยู่ครับ', 'STATUS_QUERY');
   }
   if (focus === 'inventory') {
+    const active = state.projects.find(item => item.slug === state.activeProjectSlug);
+    if (/หลัก|main project|current project/iu.test(text) && active) {
+      return talk(`โปรเจกต์หลักคือ ${active.label} (${active.slug})`, 'STATUS_QUERY');
+    }
     if (!state.projects.length) return talk('ยังไม่มีโปรเจกต์ในบริบทนี้ครับ', 'STATUS_QUERY');
     const lines = state.projects.map((item, index) => `${index + 1}. ${item.label} (${item.slug})${item.slug === state.activeProjectSlug ? ' · active' : ''}`);
     return talk(lines.join('\n'), 'STATUS_QUERY');
@@ -834,6 +838,12 @@ function bindQueue(
 ): IntentResolution {
   if (discourse.queueOp?.kind === 'start') {
     return continueWork(state, text, { ...discourse, act: 'CONTINUE' });
+  }
+  if (discourse.queueOp?.kind === 'append') {
+    return talk(`เพิ่มท้ายคิว: ${discourse.queueOp.text}`, 'QUEUE_CAPTURED');
+  }
+  if (discourse.queueOp && discourse.queueOp.kind !== 'review') {
+    return talk('ปรับคิวแล้วครับ', 'QUEUE_UPDATED');
   }
   if (discourse.queueOp?.kind === 'review' || !discourse.queueItems?.length) {
     const items = state.queue.length

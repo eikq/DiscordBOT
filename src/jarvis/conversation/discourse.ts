@@ -174,6 +174,10 @@ const PREEMPT_PENDING_GOAL: ReadonlySet<DiscourseAct> = new Set([
   'RESTORE_TOPIC',
   'START_FRESH',
   'INSPECT_PROJECT',
+  'TEST',
+  'BUILD',
+  'PREVIEW',
+  'QUEUE',
 ]);
 
 export function discoursePreemptsPendingGoal(discourse: DiscourseInterpretation): boolean {
@@ -298,20 +302,21 @@ function isRerun(text: string): boolean {
 }
 
 function isStatus(text: string): boolean {
-  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
-    || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
+  return /^(ผ่าน)$/u.test(text)
+    || /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
+    || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
 function classifyStatusFocus(text: string, state: ConversationState | null | undefined): import('./types').StatusFocus {
   if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|จำได้ไหม|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
   if (/พร้อมทำงาน|พร้อมไหม|are you ready|ready to work/iu.test(text)) return 'readiness';
-  if (/ผ่านไหม|ผ่าน\?/iu.test(text)) return 'verification';
+  if (/ผ่านไหม|ผ่าน\?|^ผ่าน$/iu.test(text)) return 'verification';
   if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
   if (/เราแก้|มีโอกาสเกิดอีก|แก้ไปยังไง/iu.test(text)) return 'recovery';
   if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก/iu.test(text)) return 'failure';
   if (/มีงานอะไรค้าง|มีอะไรค้าง|what(?:'s| is) left/iu.test(text)) return 'pending';
   if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
-  if (/มีกี่ project|project หลัก/iu.test(text)) return 'inventory';
+  if (/มีกี่ project|project หลัก|main project|current project/iu.test(text)) return 'inventory';
   if (/ตอนนี้ตอบผมแบบไหน/iu.test(text)) return 'preference';
   if (/permission อะไร|ครอบคลุมอะไร/iu.test(text)) return 'permission';
   if (/ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้/iu.test(text)) return 'capability';

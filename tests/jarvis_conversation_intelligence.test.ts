@@ -990,6 +990,45 @@ test('research recommendations ignore leftover project-inventory options', () =>
   assert.ok(String(picked?.arguments?.query || '').length <= 200);
 });
 
+test('queue append speaks the new item instead of an empty-queue review', () => {
+  const state = softwareState({ queue: [] });
+  const text = 'เสร็จแล้วเพิ่ม loading animation ต่อท้ายด้วย';
+  const discourse = interpretDiscourse(text, state);
+  assert.equal(discourse.act, 'QUEUE');
+  assert.equal(discourse.queueOp?.kind, 'append');
+  const bound = bindDiscourseToIntent(discourse, state, text);
+  assert.equal(bound?.reasonCode, 'QUEUE_CAPTURED');
+  assert.match(String(bound?.userMessage), /loading animation/i);
+  assert.doesNotMatch(String(bound?.userMessage), /ยังไม่มีคิว/);
+});
+
+test('principal-project status names the active project instead of leftover inventory', () => {
+  const state = softwareState({
+    activeProjectSlug: 'todo-app',
+    projects: [
+      { slug: 'todo-modern', label: 'Todo App', kind: 'website' },
+      { slug: 'portfolio', label: 'Portfolio', kind: 'website' },
+      { slug: 'todo-app', label: 'Todo App', kind: 'website' },
+    ],
+  });
+  for (const phrase of ['project หลักตอนนี้คืออันไหน', 'which is the main project']) {
+    const bound = bindDiscourseToIntent(interpretDiscourse(phrase, state), state, phrase);
+    assert.match(String(bound?.userMessage), /todo-app/i, phrase);
+    assert.doesNotMatch(String(bound?.userMessage), /todo-modern/i, phrase);
+  }
+});
+
+test('bare pass follow-up is verification after punctuation strip', () => {
+  const state = softwareState({
+    recentVerification: { kind: 'test', ok: true, summary: '12/12', at: 9, slug: 'todo-app' },
+  });
+  for (const phrase of ['ผ่าน?', 'ผ่าน']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'STATUS_QUERY', phrase);
+    assert.equal(discourse.statusFocus, 'verification', phrase);
+  }
+});
+
 test('queue append and after-build-before-preview reposition the last pending item', () => {
   let state = softwareState({
     queue: [
