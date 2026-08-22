@@ -327,6 +327,27 @@ test('conversation state survives a store reload', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('hydrate does not let a leftover draft replace the stacked site plan', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-conversation-'));
+  const file = path.join(dir, 'conversation-state.json');
+  const store = new ConversationStateStore(file, () => 12);
+  store.put(softwareState({
+    topicStack: [{ topic: 'software', projectSlug: 'portfolio', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio', label: 'Portfolio' }],
+    activePlanId: 'plan_leftover',
+    projects: [{ slug: 'portfolio', label: 'Portfolio', kind: 'website', planId: 'plan_leftover', goalId: 'BUILD_WEBSITE' }],
+  }));
+  const next = store.hydrate({
+    sessionId: 'jarvis-lab',
+    projects: [{ slug: 'portfolio', label: 'Leftover', kind: 'website', planId: 'plan_leftover', goalId: 'BUILD_WEBSITE' }],
+    activePlanId: 'plan_leftover',
+    pendingPlanReview: { planId: 'plan_leftover', goalId: 'BUILD_WEBSITE', title: 'Leftover' },
+  });
+  assert.equal(next.activePlanId, 'plan_portfolio');
+  assert.equal(next.projects.find(item => item.slug === 'portfolio')?.planId, 'plan_portfolio');
+  assert.equal(next.pendingPlanReview, undefined);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('Presence forwards continue/status and unbound ทำเลย to Jarvis instead of swallowing them', () => {
   assert.equal(presenceShouldForwardToJarvis({ voiceFamily: 'WORK_CONTINUE', approval: { kind: 'not-approval' } }), true);
   assert.equal(presenceShouldForwardToJarvis({ voiceFamily: 'TASK_STATUS', approval: { kind: 'not-approval' } }), true);
@@ -1579,4 +1600,30 @@ test('leftover plans do not steal research recall, in-sentence ordinals, or heal
   assert.equal(restored.activeProjectSlug, 'portfolio');
   assert.equal(restored.activePlanId, 'plan_portfolio');
   assert.equal(restored.pendingPlanReview, undefined);
+
+  const compile = interpretDiscourse('ถ้าโอเค compile/build ต่อ', leftover);
+  assert.equal(compile.act, 'CONDITIONAL');
+  assert.equal(compile.thenAct, 'BUILD');
+
+  const armed = softwareState({
+    recentVerification: { kind: 'test', ok: true, summary: 'Tests passed for portfolio', at: 9, slug: 'portfolio' },
+    pendingConditional: { ifKind: 'build', thenAct: 'PREVIEW', thenActs: ['BUILD', 'PREVIEW'], stopOnFail: true },
+  });
+  const go = bindDiscourseToIntent(
+    interpretDiscourse('ถ้าไม่พังก็ไปขั้นต่อไปเอง', armed),
+    armed,
+    'ถ้าไม่พังก็ไปขั้นต่อไปเอง',
+  );
+  assert.notEqual(go?.reasonCode, 'CONDITIONAL_STORED');
+  assert.ok(go?.capabilityId === PROJECT_BUILD || go?.capabilityId === PROJECT_START_DEV_SERVER);
+
+  const longState = softwareState({
+    selectedOption: { index: 1, label: 'Framer Motion' },
+    pendingChange: 'z'.repeat(180),
+    constraints: ['อย่าแตะ navbar', 'x'.repeat(180)],
+  });
+  const home = 'ปรับหน้า home ให้ดูแพงขึ้น แต่ห้ามแตะ navbar และอย่าเปลี่ยนสีหลัก';
+  const applyHome = bindDiscourseToIntent(interpretDiscourse(home, longState), longState, home);
+  assert.equal(applyHome?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.ok(String(applyHome?.arguments?.brief || '').length <= 400);
 });

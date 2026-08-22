@@ -544,6 +544,7 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
   const acts = chainActs(text);
   if (acts.length >= 2) return chainInterpretation(text, acts);
   const ifPass = /ถ้า.{0,12}ผ่าน|if (?:it |they |that |the tests? |tests? )?pass/iu.test(text);
+  const ifOk = /ถ้าโอเค|if (?:that'?s |it(?:'s| is) )?ok(?:ay)?/iu.test(text);
   const ifBuildPass = /ถ้า\s*build\s*ผ่าน|if (?:the )?build pass/iu.test(text);
   const thenBuild = (
     /(?:ก็|แล้ว|then)\s+build|build ต่อ/iu.test(text)
@@ -601,7 +602,7 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
       change: text,
     };
   }
-  if (ifPass && thenBuild && thenPreview) {
+  if ((ifPass || ifOk) && thenBuild && thenPreview) {
     return {
       act: 'CONDITIONAL',
       ifKind: 'test',
@@ -613,7 +614,7 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
       change: text,
     };
   }
-  if (ifPass && thenBuild) {
+  if ((ifPass || ifOk) && thenBuild) {
     return {
       act: 'CONDITIONAL',
       ifKind: 'test',

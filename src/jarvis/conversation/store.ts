@@ -44,9 +44,25 @@ export class ConversationStateStore {
 
   public hydrate(input: ConversationHydration): ConversationState {
     const current = this.get(input.sessionId);
-    const projects = mergeProjects(current.projects, input.projects || []);
-    const slug = input.activeProjectSlug || current.activeProjectSlug || projects[0]?.slug;
-    const planId = input.activePlanId || current.activePlanId;
+    const slug = input.activeProjectSlug || current.activeProjectSlug || input.projects?.[0]?.slug || current.projects[0]?.slug;
+    const stackedPlan = [...(current.topicStack || [])].reverse().find(frame => (
+      frame.projectSlug === slug && frame.planId
+    ))?.planId;
+    const leftoverDraft = Boolean(
+      input.pendingPlanReview?.planId
+      && stackedPlan
+      && input.pendingPlanReview.planId !== stackedPlan,
+    );
+    const projects = mergeProjects(
+      current.projects,
+      input.projects || [],
+      leftoverDraft && slug && stackedPlan ? { slug, planId: stackedPlan } : undefined,
+    );
+    const planId = leftoverDraft
+      ? (current.activePlanId && current.activePlanId !== input.pendingPlanReview!.planId
+        ? current.activePlanId
+        : stackedPlan)
+      : (input.activePlanId || current.activePlanId);
     const preserveTopic = current.activeTopic === 'research'
       || current.activeTopic === 'chat'
       || current.activeTopic === 'queue';
@@ -59,7 +75,7 @@ export class ConversationStateStore {
       activeProjectSlug: slug,
       activeGoalId: input.activeGoalId || current.activeGoalId || projects.find(item => item.slug === slug)?.goalId,
       activePlanId: planId,
-      pendingPlanReview: input.pendingPlanReview === null
+      pendingPlanReview: leftoverDraft || input.pendingPlanReview === null
         ? undefined
         : input.pendingPlanReview ?? current.pendingPlanReview,
       pendingPermission: input.pendingPermission === null
@@ -106,11 +122,24 @@ export function defaultConversationStatePath(workspaceRoot = process.cwd()): str
   return path.join(workspaceRoot, 'data', 'jarvis', 'runtime', 'conversation-state.json');
 }
 
-function mergeProjects(current: ProjectRecord[], incoming: ProjectRecord[]): ProjectRecord[] {
+function mergeProjects(
+  current: ProjectRecord[],
+  incoming: ProjectRecord[],
+  pin?: { slug: string; planId: string },
+): ProjectRecord[] {
   const bySlug = new Map<string, ProjectRecord>();
   for (const item of [...current, ...incoming]) {
     if (!item.slug) continue;
-    bySlug.set(item.slug, { ...bySlug.get(item.slug), ...item });
+    const existing = bySlug.get(item.slug);
+    if (existing?.planId && item.planId && existing.planId !== item.planId) {
+      bySlug.set(item.slug, { ...existing, ...item, planId: existing.planId });
+    } else {
+      bySlug.set(item.slug, { ...existing, ...item });
+    }
+  }
+  if (pin?.slug && pin.planId) {
+    const project = bySlug.get(pin.slug);
+    if (project) bySlug.set(pin.slug, { ...project, planId: pin.planId });
   }
   return [...bySlug.values()];
 }

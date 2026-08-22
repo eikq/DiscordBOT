@@ -476,7 +476,7 @@ function bindConditional(state: ConversationState, discourse: DiscourseInterpret
       return bindConditional(state, {
         ...discourse,
         act: 'CONDITIONAL',
-        change: discourse.change === 'CONTINUE_IF_HEALTHY' ? 'GO' : discourse.change,
+        change: discourse.change === 'CONTINUE_IF_HEALTHY' ? 'ทำเลย' : discourse.change,
         thenAct: stored[stored.length - 1],
         thenActs: stored,
         ifKind: state.pendingConditional?.ifKind || discourse.ifKind,
@@ -969,7 +969,10 @@ function changeBrief(
   const here = /ตรงนั้น|ตรงนี้|this file|that function|ตรงนั้นแหละ/iu.test(text) && state.referents.this_file
     ? `in ${state.referents.this_file}`
     : '';
-  return [discourse.change || state.pendingChange || text, selected, here, ...state.constraints].filter(Boolean).join('\n');
+  return [discourse.change || state.pendingChange || text, selected, here, ...state.constraints]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 400);
 }
 
 function researchQuery(

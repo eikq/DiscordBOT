@@ -2204,16 +2204,26 @@ export class JarvisLabRuntime {
         planId: plan.id,
         workspace: `data/jarvis/builds/${plan.slug}`,
       }));
+    const stackedPlan = [...(current.topicStack || [])].reverse().find(frame => (
+      frame.projectSlug === (current.activeProjectSlug || slug) && frame.planId
+    ))?.planId;
     const matchingPlan = latest && latest.id === (current.activePlanId || latest.id) ? latest : latest;
+    const leftoverLatest = Boolean(stackedPlan && matchingPlan && matchingPlan.id !== stackedPlan);
     const reviewPlan = matchingPlan && (matchingPlan.status === 'READY_FOR_REVIEW' || matchingPlan.status === 'DRAFT')
       && (!current.activePlanId || matchingPlan.id === current.activePlanId)
+      && !leftoverLatest
       ? matchingPlan
       : undefined;
     return this.conversations.hydrate({
       sessionId,
-      projects: planProjects,
+      projects: planProjects.filter(item => (
+        !stackedPlan
+        || item.slug !== (current.activeProjectSlug || slug)
+        || item.planId === stackedPlan
+        || item.planId === current.activePlanId
+      )),
       activeProjectSlug: slug,
-      activePlanId: current.activePlanId || latest?.id,
+      activePlanId: leftoverLatest ? (current.activePlanId === matchingPlan?.id ? stackedPlan : (current.activePlanId || stackedPlan)) : (current.activePlanId || latest?.id),
       activeGoalId: current.activeGoalId || latest?.goalId,
       pendingPlanReview: reviewPlan
         ? { planId: reviewPlan.id, goalId: reviewPlan.goalId, title: reviewPlan.title }
@@ -2264,9 +2274,10 @@ export class JarvisLabRuntime {
     const kind = operationKindFromCapability(action?.capabilityId);
     const createdPlan = /CONVERSATION_NEW_PROJECT|CONVERSATION_PLAN|CONVERSATION_PLAN_REQUEST|CONVERSATION_MERGE_PLAN/.test(bound?.resolution.reasonCode || '')
       || action?.capabilityId === 'software.planBuild';
+    const currentPlan = current.activePlanId ? this.plans?.get(current.activePlanId) : undefined;
     const plan = createdPlan
       ? (this.plans?.latestForSession(sessionId) || snapshot.plan)
-      : (snapshot.plan || this.plans?.latestForSession(sessionId));
+      : (currentPlan || snapshot.plan || this.plans?.latestForSession(sessionId));
     this.conversations.patch(sessionId, state => applyTurnToConversation(state, {
       ownerText,
       discourse,
