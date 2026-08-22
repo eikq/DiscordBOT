@@ -935,9 +935,14 @@ async function startServer() {
       if (!proposalId || !token) return res.status(400).json({ error: 'proposalId and token are required.' });
       const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
       const speak = Boolean(req.body?.speak);
-      const actionSource = req.body?.actionSource === 'voice' ? 'voice' : 'ui';
+      const actionSource = req.body?.actionSource === 'voice'
+        ? 'voice'
+        : req.body?.actionSource === 'text'
+          ? 'text'
+          : 'ui';
       const duration = req.body?.duration === 'ONCE' || req.body?.duration === 'THIS_GOAL' ? req.body.duration : undefined;
-      return res.json(await jarvisLab.confirmAction({ proposalId, token, sessionId, speak, actionSource, duration }));
+      const visibleText = typeof req.body?.visibleText === 'string' ? req.body.visibleText.slice(0, 240) : undefined;
+      return res.json(await jarvisLab.confirmAction({ proposalId, token, sessionId, speak, actionSource, duration, visibleText }));
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -952,8 +957,13 @@ async function startServer() {
       if (!proposalId) return res.status(400).json({ error: 'proposalId is required.' });
       const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
       const speak = Boolean(req.body?.speak);
-      const actionSource = req.body?.actionSource === 'voice' ? 'voice' : 'ui';
-      return res.json(await jarvisLab.denyAction({ proposalId, sessionId, speak, actionSource }));
+      const actionSource = req.body?.actionSource === 'voice'
+        ? 'voice'
+        : req.body?.actionSource === 'text'
+          ? 'text'
+          : 'ui';
+      const visibleText = typeof req.body?.visibleText === 'string' ? req.body.visibleText.slice(0, 240) : undefined;
+      return res.json(await jarvisLab.denyAction({ proposalId, sessionId, speak, actionSource, visibleText }));
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -1046,6 +1056,17 @@ async function startServer() {
       });
       const bus = sharedJarvisEventBus();
       const after = sseCursorFrom(req.query.after, req.headers['last-event-id']);
+      const snapshot = jarvisLab.permissionSnapshot();
+      res.write(formatSseEvent({
+        id: 'snapshot',
+        seq: 0,
+        type: 'PERMISSION_SNAPSHOT',
+        at: new Date().toISOString(),
+        level: 'info',
+        summary: snapshot.pendingPermission ? 'Pending permission restored' : 'Runtime permission snapshot',
+        payload: snapshot as unknown as Record<string, unknown>,
+        visualState: snapshot.pendingPermission ? 'WAITING_PERMISSION' : undefined,
+      }));
       writeSseReplay(after === undefined ? [] : bus.recentAfter(after), chunk => { res.write(chunk); });
       const unsubscribe = bus.subscribe(event => {
         res.write(formatSseEvent(event));
@@ -1060,7 +1081,10 @@ async function startServer() {
       return;
     }
     try {
-      return res.json({ events: jarvisLab.recentOperations() });
+      return res.json({
+        events: jarvisLab.recentOperations(),
+        snapshot: jarvisLab.permissionSnapshot(),
+      });
     } catch (error) {
       return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }

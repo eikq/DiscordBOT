@@ -8,13 +8,21 @@ import type { JarvisEventBus } from '../security/eventBus';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from './constants';
 import { createBuildPlan, spokenPlanSummary } from './planner';
 import type { BuildPlanStore } from './planStore';
-import { sandboxExists, writeApprovedSandbox } from './sandbox';
+import { sandboxExists } from './sandbox';
 import type { BuildPlan } from './types';
+import { executeApprovedBuild } from './executeApprovedBuild';
+import { ProjectWorkspace } from '../project/workspace';
+import { createProjectCommandRunner, skipLiveCommandsInTests } from '../project/commands';
+import type { ProjectCommandRunner } from '../project/types';
+import type { DevServerRegistry } from '../project/devServer';
 
 export type SoftwareCapabilityDeps = {
   plans: BuildPlanStore;
   events?: JarvisEventBus;
   sandboxRoot?: string;
+  runner?: ProjectCommandRunner;
+  devServers?: DevServerRegistry;
+  workspace?: ProjectWorkspace;
 };
 
 const WRITABLE = new Set(['APPROVED', 'EXECUTING', 'VERIFYING', 'COMPLETED']);
@@ -75,26 +83,26 @@ function applyHandler(deps: SoftwareCapabilityDeps): CapabilityHandler {
       sideEffect: 'write',
       requiredService: 'software',
       providerKind: 'local',
-      timeoutMs: 20_000,
+      timeoutMs: 300_000,
       untrustedOutput: false,
       effects: [{
         kind: 'CREATE',
-        description: 'Create sandbox project files under data/jarvis/builds/<slug>/.',
+        description: 'Create, install, build, test, and optionally preview a project under data/jarvis/builds/<slug>/.',
         destructive: false,
         reversible: true,
         privilege: 'owner_approval',
         targetInputFields: ['planId'],
-        estimatedAffectedObjects: 6,
+        estimatedAffectedObjects: 12,
         massChangePolicy: 'bounded_generated_output',
       }],
-      verification: { mode: 'handler_result', description: 'Confirm sandbox files exist after an approved apply.' },
-      rollback: { mode: 'not_required', strategy: 'Sandbox files stay inside the Jarvis build root and can be deleted by the owner.' },
+      verification: { mode: 'handler_result', description: 'Confirm workspace files and command exit codes after an approved apply.' },
+      rollback: { mode: 'not_required', strategy: 'Project files stay inside the Jarvis build root and can be deleted by the owner.' },
       intelligence: {
         maturity: 'REAL',
         executionMode: 'REAL',
         permission: 'OWNER_REQUIRED',
         distribution: ['CORE'],
-        knownLimitations: ['No unrestricted shell', 'No npm install', 'No CLICK/TYPE/SUBMIT'],
+        knownLimitations: ['No unrestricted shell', 'No CLICK/TYPE/SUBMIT', 'Localhost preview only'],
       },
     }),
     availability: async () => ({ id: SOFTWARE_APPLY_BUILD, availability: 'up', degraded: false }),
@@ -142,11 +150,11 @@ function invokePlan(
   };
 }
 
-function invokeApply(
+async function invokeApply(
   input: Record<string, unknown>,
   context: CapabilityInvocationContext | undefined,
   deps: SoftwareCapabilityDeps,
-): CapabilityResult {
+): Promise<CapabilityResult> {
   const plan = resolvePlan(input, context, deps);
   if (!plan) {
     return fail(SOFTWARE_APPLY_BUILD, 'rejected', 'PLAN_NOT_FOUND', 'I do not have an approved plan for this session.', 'write');
@@ -161,59 +169,47 @@ function invokeApply(
       plan,
     );
   }
-  deps.events?.emit('PLAN_STAGE_STARTED', 'project structure prepared', {
-    planId: plan.id,
-    title: plan.title,
-    slug: plan.slug,
-  });
   if (plan.status !== 'COMPLETED') {
     deps.plans.save({ ...plan, status: 'EXECUTING' });
   }
-  const written = writeApprovedSandbox(plan, deps.sandboxRoot);
-  deps.events?.emit('ARTIFACT_CREATED', 'file created', {
-    planId: plan.id,
-    title: plan.title,
-    slug: plan.slug,
-    files: written.files,
+  const workspace = deps.workspace ?? new ProjectWorkspace(deps.sandboxRoot);
+  const executed = await executeApprovedBuild(plan, {
+    workspace,
+    runner: deps.runner ?? (skipLiveCommandsInTests() ? undefined : createProjectCommandRunner()),
+    devServers: deps.devServers,
+    events: deps.events,
   });
-  deps.events?.emit('VERIFY_STARTED', 'checking sandbox artifacts', { planId: plan.id, slug: plan.slug });
-  const exists = sandboxExists({ slug: plan.slug }, deps.sandboxRoot);
-  deps.events?.emit('VERIFY_RESULT', exists ? 'test passed' : 'test failed', {
-    planId: plan.id,
-    slug: plan.slug,
-    ok: exists,
-  });
-  const next: BuildPlan = {
-    ...plan,
-    status: exists ? 'COMPLETED' : 'FAILED',
-    stages: plan.stages.map(stage => ({ ...stage, status: exists ? 'complete' : stage.status })),
-    updatedAt: Date.now(),
-  };
-  deps.plans.save(next);
-  deps.events?.emit(exists ? 'PLAN_STAGE_COMPLETED' : 'PLAN_STAGE_FAILED', exists ? 'sandbox ready' : 'sandbox missing', {
-    planId: next.id,
-    title: next.title,
-    slug: next.slug,
-  });
-  const content = exists
-    ? `สร้างโปรเจกต์ ${next.title} ใน sandbox แล้ว (${written.dir})`
-    : 'สร้างไฟล์ไม่สำเร็จ';
+  deps.plans.save(executed.plan);
+  const exists = sandboxExists({ slug: executed.plan.slug }, workspace.sandboxRoot) || workspace.exists(executed.plan.slug);
+  const testsOk = !executed.tests || executed.tests.skipped || executed.tests.exitCode === 0;
+  const ok = executed.plan.status === 'COMPLETED' && exists && testsOk;
+  const content = ok
+    ? executed.preview
+      ? `สร้างโปรเจกต์ ${executed.plan.title} แล้ว Preview ${executed.preview.url}`
+      : `สร้างโปรเจกต์ ${executed.plan.title} ใน ${executed.workspace}`
+    : executed.correction?.summary || 'สร้างโปรเจกต์ไม่สำเร็จ';
   return {
     capabilityId: SOFTWARE_APPLY_BUILD,
-    status: exists ? 'ok' : 'error',
+    status: ok ? 'ok' : 'error',
     structured: {
-      status: exists ? 'completed' : 'failed',
-      reasonCode: exists ? 'SANDBOX_WRITTEN' : 'SANDBOX_MISSING',
+      status: ok ? 'completed' : 'failed',
+      reasonCode: ok ? 'PROJECT_BUILT' : (executed.failedStage || 'PROJECT_FAILED'),
       risk: 'CONFIRM_REQUIRED',
       summary: content,
-      plan: next,
-      artifact: written.dir,
+      plan: executed.plan,
+      artifact: executed.workspace,
+      files: executed.files,
+      install: executed.install,
+      build: executed.build,
+      tests: executed.tests,
+      preview: executed.preview,
+      correction: executed.correction,
     },
     content,
     sourceUrls: [],
     untrustedOutput: false,
     sideEffect: 'write',
-    ...(exists ? {} : { error: 'SANDBOX_MISSING' }),
+    ...(ok ? {} : { error: executed.failedStage || 'PROJECT_FAILED' }),
   };
 }
 

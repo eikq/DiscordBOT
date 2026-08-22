@@ -36,7 +36,14 @@ export function pendingConfirmationOf(result: CapabilityResult): PendingConfirma
     risk: isActionRisk(structured.risk) ? structured.risk : 'CONFIRM_REQUIRED',
     reason: typeof structured.reason === 'string' ? structured.reason : 'Confirmation required.',
     expiresAt: typeof structured.expiresAt === 'string' ? structured.expiresAt : '',
+    ...(isRecord(structured.permissionProposal)
+      ? { permissionProposal: structured.permissionProposal as PendingConfirmation['permissionProposal'] }
+      : {}),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function freezeActionResults(results: ActionResult[]): ActionResult[] {

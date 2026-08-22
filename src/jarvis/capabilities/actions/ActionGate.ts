@@ -11,7 +11,7 @@ import { createAbortReason, readAbortReason } from '../cancellation';
 import { ActionAuditLog } from './ActionAuditLog';
 import { applicationById, projectById } from './allowlists';
 import { CONFIRMATION_TTL_MS, DESKTOP_OPEN_SCOPED_RESOURCE, isGatedCapabilityId, isReadOnlyGatedCapability } from './constants';
-import { ConfirmationStore } from './ConfirmationStore';
+import { ConfirmationStore, type StoredConfirmation } from './ConfirmationStore';
 import { createProposalId, hashArguments } from './hash';
 import { PermissionPolicy } from './PermissionPolicy';
 import { SessionWebGrantStore } from '../../desktop/sessionWebGrants';
@@ -28,8 +28,9 @@ import type {
   PermissionDecision,
 } from './types';
 import { urlTargetClass } from './urlSafety';
-import { capabilityRequiresLease } from '../../security/constants';
+import { capabilityRequiresLease, MAX_LEASE_TTL_MS } from '../../security/constants';
 import { isPrivilegeDenied, type PrivilegeLeaseStore } from '../../security/privilegeLease';
+import type { PrivilegeLease } from '../../security/types';
 import type { JarvisEventBus } from '../../security/eventBus';
 import { DestructiveActionCircuitBreaker } from '../../safety/circuitBreaker';
 import { rollbackForResult, verificationForResult } from '../../safety/lifecycle';
@@ -38,7 +39,29 @@ import type { FailureContainment } from '../../safety/failureContainment';
 import type { EmergencyStopController } from '../../security/emergencyStop';
 import type { VerificationRegistry } from '../../safety/verificationRegistry';
 import { toJournalOperationId, type ExecutionJournalCoordinator } from '../../executionJournal';
-import { permissionProposalFromBuild } from '../../security/permissionProposal';
+import {
+  BUILD_GOAL_EFFECTS,
+  permissionProposalFromBuild,
+  type PermissionProposal,
+} from '../../security/permissionProposal';
+import {
+  PERMISSION_POLICY_REVISION,
+  PersistentPermissionStore,
+  applyOwnerDecision,
+  buildSandboxTargetAllowed,
+  createPendingPermissionRecord,
+  leaseFromPermission,
+  revalidatePermissionRecord,
+  type PersistentPermissionRecord,
+} from '../../security/persistentPermission';
+import { ownerDecisionSourceFrom } from '../../security/ownerConfirmation';
+import { APPLY_BUILD_COVERED_CAPABILITIES, isProjectCapabilityId } from '../../project';
+import type { BuildPlan } from '../../build/types';
+
+export type ActionGatePlanLookup = {
+  get(id: string): BuildPlan | null;
+  latestForSession?(sessionId: string): BuildPlan | null;
+};
 
 export type ActionGateOptions = {
   policy?: PermissionPolicy | null;
@@ -56,6 +79,9 @@ export type ActionGateOptions = {
   journal?: ExecutionJournalCoordinator;
   sessionWebGrants?: SessionWebGrantStore;
   displayAliases?: () => OwnerAliasRecord[];
+  permissions?: PersistentPermissionStore;
+  plans?: ActionGatePlanLookup;
+  sandboxRoot?: string;
 };
 
 export interface ActionHost extends CapabilityHost {
@@ -70,6 +96,13 @@ export interface ActionHost extends CapabilityHost {
   }): Promise<CapabilityResult>;
   denyProposal(proposalId: string, source?: ActionSource): Promise<CapabilityResult>;
   pendingFrom(result: CapabilityResult): PendingConfirmation | undefined;
+  hydratePersistedPermissions?(availableIds: string[]): void;
+  hydratePendingConfirmation?(sessionId?: string): PendingConfirmation | undefined;
+  runtimePermissionView?(): {
+    pending?: PendingConfirmation;
+    lease: import('../../security/types').PrivilegeLeaseInventoryItem | null;
+    record: PersistentPermissionRecord | null;
+  };
 }
 
 export function isActionHost(host: CapabilityHost): host is ActionHost {
@@ -329,7 +362,13 @@ class ActionGate implements ActionHost {
         proposalId: proposal.proposalId,
         scope: proposal.preflight?.permissionScope,
       });
-      if (request.duration !== 'ONCE') this.issueBuildGoalLease(proposal);
+      const lease = request.duration !== 'ONCE' ? this.issueBuildGoalLease(proposal) : undefined;
+      this.persistOwnerDecision(proposal, {
+        decision: 'granted',
+        source: sourceOf(request),
+        duration: request.duration,
+        lease,
+      });
       return this.execute(proposal, validated.value, request);
     }
 
@@ -373,6 +412,16 @@ class ActionGate implements ActionHost {
       source,
       reasonCode: 'OWNER_DENIED',
     });
+    this.persistOwnerDecision({
+      proposalId,
+      capabilityId: stored.capabilityId,
+      displayName: stored.displayName,
+      summary: stored.summary,
+      target: stored.target,
+      argumentsHash: stored.argumentsHash,
+      normalizedArguments: stored.input,
+      source,
+    } as ActionProposal, { decision: 'denied', source, duration: 'ONCE' });
     return this.terminal(
       stored.capabilityId,
       'denied',
@@ -600,7 +649,22 @@ class ActionGate implements ActionHost {
   }
 
   private requireConfirmation(proposal: ActionProposal, decision: PermissionDecision): CapabilityResult {
-    const issued = this.confirmations.issue(proposal);
+    const permissionProposal = this.permissionProposalFor(proposal);
+    const issued = this.confirmations.issue(proposal, {
+      expiresAt: proposal.capabilityId === 'software.applyBuild' || isProjectCapabilityId(proposal.capabilityId)
+        ? (Date.parse(proposal.expiresAt) || undefined)
+        : undefined,
+      permissionProposal,
+      sessionId: proposal.provenance.sessionId,
+    });
+    this.persistPending(proposal, issued.record.expiresAt, permissionProposal);
+    this.options.events?.emit('PERMISSION_WAITING', decision.userMessage, {
+      capabilityId: proposal.capabilityId,
+      proposalId: proposal.proposalId,
+      target: proposal.target,
+      planId: permissionProposal?.planId,
+      goalId: permissionProposal?.goalId,
+    }, 'warn', { visualState: 'WAITING_PERMISSION' });
     return {
       capabilityId: proposal.capabilityId,
       status: 'confirmation_required',
@@ -616,19 +680,7 @@ class ActionGate implements ActionHost {
         reasonCode: decision.reasonCode,
         expiresAt: new Date(issued.record.expiresAt).toISOString(),
         preflight: proposal.preflight,
-        ...(proposal.capabilityId === 'software.applyBuild' ? {
-          permissionProposal: permissionProposalFromBuild({
-            title: String(proposal.normalizedArguments.brief || proposal.displayName),
-            slug: String(proposal.normalizedArguments.slug || proposal.normalizedArguments.brief || 'project')
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/gu, '-')
-              .replace(/^-+|-+$/gu, '')
-              .slice(0, 40) || 'project',
-            capabilityId: proposal.capabilityId,
-            planId: typeof proposal.normalizedArguments.planId === 'string' ? proposal.normalizedArguments.planId : undefined,
-            goalId: typeof proposal.normalizedArguments.goalId === 'string' ? proposal.normalizedArguments.goalId : undefined,
-          }),
-        } : {}),
+        ...(permissionProposal ? { permissionProposal } : {}),
       },
       content: proposal.capabilityId === 'desktop.openTrustedUrl'
         ? 'ต้องการให้ผมเปิดเว็บไซต์นี้ไหม?'
@@ -639,6 +691,122 @@ class ActionGate implements ActionHost {
     };
   }
 
+  public hydratePersistedPermissions(availableIds: string[]): void {
+    const store = this.options.permissions;
+    if (!store) return;
+    const available = new Set(availableIds);
+    const targetAllowed = buildSandboxTargetAllowed(this.options.sandboxRoot);
+    for (const record of store.list()) {
+      const result = revalidatePermissionRecord(record, {
+        now: this.now(),
+        policyRevision: PERMISSION_POLICY_REVISION,
+        currentEffects: BUILD_GOAL_EFFECTS,
+        plan: record.planId ? this.options.plans?.get(record.planId) : null,
+        capabilityAvailable: id => available.has(id),
+        targetAllowed,
+      });
+      if (result.record.status !== record.status || result.record.revalidationReason !== record.revalidationReason) {
+        store.save(result.record);
+      }
+      if (result.record.status === 'INVALID_AFTER_RESTART' || result.record.status === 'NEEDS_REAPPROVAL' || result.record.status === 'EXPIRED') {
+        this.options.events?.emit('LEASE_INVALID_AFTER_RESTART', result.record.revalidationReason || result.record.status, {
+          proposalId: result.record.proposalId,
+          leaseId: result.record.leaseId,
+          status: result.record.status,
+        }, 'warn');
+        continue;
+      }
+      if (result.restored && result.record.status === 'ACTIVE') {
+        const lease = leaseFromPermission(result.record);
+        if (lease) this.options.leases?.restoreValidated(lease);
+      }
+    }
+  }
+
+  public runtimePermissionView(): {
+    pending?: PendingConfirmation;
+    lease: import('../../security/types').PrivilegeLeaseInventoryItem | null;
+    record: PersistentPermissionRecord | null;
+  } {
+    const pending = this.hydratePendingConfirmation();
+    const record = this.options.permissions?.list().find(item => (
+      item.status === 'PENDING' || item.status === 'ACTIVE' || item.status === 'GRANTED'
+    )) || null;
+    const lease = this.options.leases?.listInventory().find(item => item.state === 'ACTIVE') || null;
+    return { pending, lease, record };
+  }
+
+  public hydratePendingConfirmation(sessionId?: string): PendingConfirmation | undefined {
+    const fromRam = this.confirmations.unused().find(item => !sessionId || !item.sessionId || item.sessionId === sessionId);
+    const record = this.options.permissions?.latestPending(sessionId);
+    const available = new Set(this.inner.list().map(item => item.id));
+    if (record) {
+      const revalidated = revalidatePermissionRecord(record, {
+        now: this.now(),
+        policyRevision: PERMISSION_POLICY_REVISION,
+        currentEffects: BUILD_GOAL_EFFECTS,
+        plan: record.planId ? this.options.plans?.get(record.planId) : null,
+        capabilityAvailable: id => available.has(id),
+        targetAllowed: buildSandboxTargetAllowed(this.options.sandboxRoot),
+      });
+      if (revalidated.record.status !== record.status || revalidated.record.revalidationReason !== record.revalidationReason) {
+        this.options.permissions?.save(revalidated.record);
+      }
+      if (revalidated.restored && revalidated.record.status === 'PENDING') {
+        return this.pendingFromPersisted(revalidated.record);
+      }
+      if (fromRam && fromRam.proposalId === record.proposalId) return undefined;
+    }
+    if (fromRam) return this.pendingFromPersisted(ramAsPermission(fromRam));
+    return undefined;
+  }
+
+  private pendingFromPersisted(record: PersistentPermissionRecord): PendingConfirmation | undefined {
+    const stored = this.confirmations.peek(record.proposalId);
+    const token = stored ? this.confirmations.unusedPlaintextToken(record.proposalId) : undefined;
+    if (stored && token) return this.pendingFromStored(stored, token);
+    return this.reissuePending(record);
+  }
+
+  private reissuePending(record: PersistentPermissionRecord): PendingConfirmation | undefined {
+    const issued = this.confirmations.issue({
+      proposalId: record.proposalId,
+      capabilityId: record.capabilityId,
+      displayName: record.displayName,
+      summary: record.summary,
+      target: record.target,
+      normalizedArguments: record.normalizedArguments,
+      argumentsHash: record.argumentsHash,
+      risk: 'CONFIRM_REQUIRED',
+      sideEffectClass: 'write',
+      source: 'ui',
+      createdAt: new Date(record.createdAt).toISOString(),
+      expiresAt: new Date(record.expiresAt).toISOString(),
+      provenance: { sessionId: record.sessionId, source: 'ui' },
+    }, {
+      expiresAt: record.expiresAt,
+      permissionProposal: record.permissionProposal,
+      sessionId: record.sessionId,
+    });
+    return this.pendingFromStored(issued.record, issued.token);
+  }
+
+  private pendingFromStored(record: { proposalId: string; capabilityId: string; displayName: string; summary: string; target: string; expiresAt: number; permissionProposal?: PermissionProposal }, token?: string): PendingConfirmation | undefined {
+    if (!token) return undefined;
+    return {
+      proposalId: record.proposalId,
+      token,
+      capabilityId: record.capabilityId,
+      displayName: record.displayName,
+      summary: record.summary,
+      target: record.target,
+      risk: 'CONFIRM_REQUIRED',
+      reason: record.summary,
+      expiresAt: new Date(record.expiresAt).toISOString(),
+      ...(record.permissionProposal ? { permissionProposal: record.permissionProposal } : {}),
+    };
+  }
+
   private createProposal(
     request: CapabilityInvokeRequest,
     input: Record<string, unknown>,
@@ -646,6 +814,9 @@ class ActionGate implements ActionHost {
   ): ActionProposal {
     const now = this.now();
     const meta = describeProposal(request.id, input, this.options.allowlists);
+    const ttl = request.id === 'software.applyBuild' || isProjectCapabilityId(request.id)
+      ? MAX_LEASE_TTL_MS
+      : CONFIRMATION_TTL_MS;
     const proposal: ActionProposal = {
       proposalId: request.confirmation?.proposalId || createProposalId(),
       capabilityId: request.id,
@@ -658,7 +829,7 @@ class ActionGate implements ActionHost {
       sideEffectClass: isReadOnlyGatedCapability(request.id) ? 'read' : 'write',
       source: sourceOf(request),
       createdAt: new Date(now).toISOString(),
-      expiresAt: new Date(now + CONFIRMATION_TTL_MS).toISOString(),
+      expiresAt: new Date(now + ttl).toISOString(),
       provenance: {
         requestId: request.requestId,
         sessionId: request.sessionId,
@@ -742,24 +913,116 @@ class ActionGate implements ActionHost {
   }
 
   private hasOptionalGoalLease(proposal: ActionProposal): boolean {
-    if (proposal.capabilityId !== 'software.applyBuild') return false;
+    if (proposal.capabilityId !== 'software.applyBuild' && !isProjectCapabilityId(proposal.capabilityId)) return false;
     if (!this.options.leases) return false;
-    const resource = String(proposal.normalizedArguments.planId || proposal.capabilityId);
-    const peeked = this.options.leases.peekOptional(proposal.capabilityId, resource);
-    return !isPrivilegeDenied(peeked);
+    const plan = this.planForProposal(proposal);
+    const scopes = [
+      plan?.id,
+      proposal.normalizedArguments.planId,
+      proposal.target,
+      plan ? `data/jarvis/builds/${plan.slug}` : undefined,
+      typeof proposal.normalizedArguments.slug === 'string' ? `data/jarvis/builds/${proposal.normalizedArguments.slug}` : undefined,
+    ].filter((item): item is string => Boolean(item));
+    return scopes.some(scope => !isPrivilegeDenied(this.options.leases!.peekOptional(proposal.capabilityId, scope)));
   }
 
-  private issueBuildGoalLease(proposal: ActionProposal): void {
-    if (proposal.capabilityId !== 'software.applyBuild' || !this.options.leases) return;
-    this.options.leases.issue({
-      capabilityIds: ['software.applyBuild'],
-      resourceScopes: [String(proposal.normalizedArguments.planId || 'software.applyBuild')],
+  private issueBuildGoalLease(proposal: ActionProposal) {
+    if ((proposal.capabilityId !== 'software.applyBuild' && !isProjectCapabilityId(proposal.capabilityId)) || !this.options.leases) {
+      return undefined;
+    }
+    const plan = this.planForProposal(proposal);
+    const slug = plan?.slug || 'project';
+    const issued = this.options.leases.issue({
+      capabilityIds: [...APPLY_BUILD_COVERED_CAPABILITIES],
+      resourceScopes: [
+        String(plan?.id || proposal.normalizedArguments.planId || proposal.capabilityId),
+        `data/jarvis/builds/${slug}`,
+      ],
       reason: 'Owner granted this build goal.',
       ttlMs: 2 * 60 * 60_000,
       maxActions: 32,
       ownerApproved: true,
+      taskId: plan?.goalId,
+      stepId: plan?.id,
       approvalProvenance: { proposalId: proposal.proposalId },
     }, 'owner');
+    return issued.ok ? issued.lease : undefined;
+  }
+
+  private persistPending(proposal: ActionProposal, expiresAt: number, permissionProposal?: PermissionProposal): void {
+    if (!this.options.permissions) return;
+    if (proposal.capabilityId !== 'software.applyBuild' && !isProjectCapabilityId(proposal.capabilityId)) return;
+    const plan = this.planForProposal(proposal);
+    this.options.permissions.save(createPendingPermissionRecord({
+      proposalId: proposal.proposalId,
+      capabilityId: proposal.capabilityId,
+      capabilityIds: [...APPLY_BUILD_COVERED_CAPABILITIES],
+      displayName: proposal.displayName,
+      summary: proposal.summary,
+      target: permissionProposal?.scope || proposal.target,
+      argumentsHash: proposal.argumentsHash,
+      normalizedArguments: proposal.normalizedArguments,
+      effects: permissionProposal?.effects || BUILD_GOAL_EFFECTS,
+      grantMode: permissionProposal?.duration || 'THIS_GOAL',
+      goalId: permissionProposal?.goalId || plan?.goalId,
+      planId: permissionProposal?.planId || plan?.id,
+      sessionId: proposal.provenance.sessionId,
+      expiresAt,
+      permissionProposal,
+      resourceScopes: permissionProposal ? [permissionProposal.scope, permissionProposal.planId || ''].filter(Boolean) : [proposal.target],
+      now: this.now(),
+    }));
+  }
+
+  private persistOwnerDecision(
+    proposal: Pick<ActionProposal, 'proposalId' | 'capabilityId' | 'displayName' | 'summary' | 'target' | 'argumentsHash' | 'normalizedArguments'> & { source?: ActionSource },
+    input: { decision: 'granted' | 'denied'; source: ActionSource; duration?: 'ONCE' | 'THIS_GOAL'; lease?: PrivilegeLease },
+  ): void {
+    const store = this.options.permissions;
+    if (!store) return;
+    const current = store.getByProposal(proposal.proposalId) || createPendingPermissionRecord({
+      proposalId: proposal.proposalId,
+      capabilityId: proposal.capabilityId,
+      displayName: proposal.displayName,
+      summary: proposal.summary,
+      target: proposal.target,
+      argumentsHash: proposal.argumentsHash,
+      normalizedArguments: proposal.normalizedArguments,
+      effects: BUILD_GOAL_EFFECTS,
+      grantMode: input.duration || 'THIS_GOAL',
+      expiresAt: this.now() + CONFIRMATION_TTL_MS,
+      now: this.now(),
+    });
+    store.save(applyOwnerDecision(current, {
+      decision: input.decision,
+      source: ownerDecisionSourceFrom(input.source),
+      lease: input.lease,
+      now: this.now(),
+    }));
+  }
+
+  private permissionProposalFor(proposal: ActionProposal): PermissionProposal | undefined {
+    if (proposal.capabilityId !== 'software.applyBuild' && !isProjectCapabilityId(proposal.capabilityId)) {
+      return undefined;
+    }
+    const plan = this.planForProposal(proposal);
+    const slug = plan?.slug || 'project';
+    return permissionProposalFromBuild({
+      title: plan?.title || String(proposal.normalizedArguments.brief || proposal.displayName),
+      slug,
+      capabilityId: proposal.capabilityId,
+      planId: plan?.id || (typeof proposal.normalizedArguments.planId === 'string' ? proposal.normalizedArguments.planId : undefined),
+      goalId: plan?.goalId || (typeof proposal.normalizedArguments.goalId === 'string' ? proposal.normalizedArguments.goalId : undefined),
+    });
+  }
+
+  private planForProposal(proposal: ActionProposal): BuildPlan | null {
+    const planId = typeof proposal.normalizedArguments.planId === 'string' ? proposal.normalizedArguments.planId : undefined;
+    if (planId && this.options.plans) return this.options.plans.get(planId);
+    if (proposal.provenance.sessionId && this.options.plans?.latestForSession) {
+      return this.options.plans.latestForSession(proposal.provenance.sessionId);
+    }
+    return null;
   }
 
   private requireLease(proposal: ActionProposal, consume: boolean): CapabilityResult | undefined {
@@ -787,6 +1050,14 @@ class ActionGate implements ActionHost {
           capabilityId: proposal.capabilityId,
           leaseId: decision.lease.id,
         });
+        const record = this.options.permissions?.list('ACTIVE').find(item => item.leaseId === decision.lease.id);
+        if (record) {
+          this.options.permissions?.save({
+            ...record,
+            remainingActions: decision.lease.remainingActions,
+            updatedAt: this.now(),
+          });
+        }
       }
       return undefined;
     }
@@ -1042,6 +1313,23 @@ function emergencyStateFor(state: CapabilityCancellationRecord['state']): import
   return 'CANCELLATION_REQUESTED';
 }
 
+function ramAsPermission(record: StoredConfirmation): PersistentPermissionRecord {
+  return createPendingPermissionRecord({
+    proposalId: record.proposalId,
+    capabilityId: record.capabilityId,
+    displayName: record.displayName,
+    summary: record.summary,
+    target: record.target,
+    argumentsHash: record.argumentsHash,
+    normalizedArguments: record.input,
+    effects: record.permissionProposal?.effects || BUILD_GOAL_EFFECTS,
+    grantMode: record.permissionProposal?.duration || 'THIS_GOAL',
+    expiresAt: record.expiresAt,
+    permissionProposal: record.permissionProposal,
+    sessionId: record.sessionId,
+  });
+}
+
 function sourceOf(request: CapabilityInvokeRequest): ActionSource {
   return request.source ?? 'text';
 }
@@ -1185,9 +1473,20 @@ function describeProposal(
   if (capabilityId === 'software.applyBuild') {
     return {
       displayName: String(input.brief || 'Build project'),
-      summary: 'ขอสิทธิ์สร้าง/แก้ไฟล์และรัน build/test ในโฟลเดอร์โปรเจกต์นี้จนกว่างานนี้จะจบ',
-      target: String(input.slug ? `data/jarvis/builds/${input.slug}` : input.planId || 'data/jarvis/builds'),
+      summary: 'ขอสิทธิ์สร้าง/แก้ไฟล์ ติดตั้ง dependencies รัน build/test และเปิด preview localhost จนกว่างานนี้จะจบ',
+      target: String(input.planId || 'data/jarvis/builds'),
       risk: 'CONFIRM_REQUIRED',
+    };
+  }
+  if (capabilityId.startsWith('project.')) {
+    const slug = String(input.slug || 'project');
+    return {
+      displayName: capabilityId,
+      summary: `Project operation ${capabilityId} in ${slug}`,
+      target: `data/jarvis/builds/${slug}`,
+      risk: capabilityId.includes('read') || capabilityId.includes('list') || capabilityId.includes('inspect')
+        ? 'READ_ONLY'
+        : 'CONFIRM_REQUIRED',
     };
   }
   return { displayName: 'System status', summary: 'Read system status', target: 'system', risk: 'READ_ONLY' };

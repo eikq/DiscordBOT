@@ -14,6 +14,8 @@ export type StoredConfirmation = {
   expiresAt: number;
   used: boolean;
   denied: boolean;
+  sessionId?: string;
+  permissionProposal?: import('../../security/permissionProposal').PermissionProposal;
 };
 
 export type ConsumeResult =
@@ -22,6 +24,8 @@ export type ConsumeResult =
 
 export class ConfirmationStore {
   private readonly records = new Map<string, StoredConfirmation>();
+  /** In-memory plaintext only. Never persist confirmation tokens. */
+  private readonly plaintextTokens = new Map<string, string>();
 
   constructor(
     private readonly options: {
@@ -30,7 +34,11 @@ export class ConfirmationStore {
     } = {},
   ) {}
 
-  public issue(proposal: ActionProposal): { token: string; record: StoredConfirmation } {
+  public issue(proposal: ActionProposal, extra: {
+    expiresAt?: number;
+    permissionProposal?: StoredConfirmation['permissionProposal'];
+    sessionId?: string;
+  } = {}): { token: string; record: StoredConfirmation } {
     const now = this.now();
     const ttlMs = this.options.ttlMs ?? CONFIRMATION_TTL_MS;
     const issued = issueConfirmationToken();
@@ -43,12 +51,29 @@ export class ConfirmationStore {
       displayName: proposal.displayName,
       summary: proposal.summary,
       target: proposal.target,
-      expiresAt: now + ttlMs,
+      expiresAt: extra.expiresAt ?? (now + ttlMs),
       used: false,
       denied: false,
+      ...(extra.permissionProposal ? { permissionProposal: extra.permissionProposal } : {}),
+      ...(extra.sessionId ? { sessionId: extra.sessionId } : {}),
     };
     this.records.set(proposal.proposalId, record);
+    this.plaintextTokens.set(proposal.proposalId, issued.token);
     return { token: issued.token, record };
+  }
+
+  public unusedPlaintextToken(proposalId: string): string | undefined {
+    const record = this.records.get(proposalId);
+    if (!record || record.used || record.denied || this.now() > record.expiresAt) {
+      this.plaintextTokens.delete(proposalId);
+      return undefined;
+    }
+    return this.plaintextTokens.get(proposalId);
+  }
+
+  public unused(): StoredConfirmation[] {
+    const now = this.now();
+    return [...this.records.values()].filter(record => !record.used && !record.denied && record.expiresAt >= now);
   }
 
   public peek(proposalId: string): StoredConfirmation | undefined {
@@ -64,6 +89,7 @@ export class ConfirmationStore {
     if (!hashesEqual(record.argumentsHash, argumentsHash)) return { ok: false, reasonCode: 'ARGUMENTS_CHANGED' };
     if (!hashesEqual(record.tokenHash, hashToken(token))) return { ok: false, reasonCode: 'INVALID_TOKEN' };
     record.used = true;
+    this.plaintextTokens.delete(proposalId);
     return { ok: true, record };
   }
 
@@ -72,6 +98,7 @@ export class ConfirmationStore {
     if (!record) return undefined;
     record.denied = true;
     record.used = true;
+    this.plaintextTokens.delete(proposalId);
     return record;
   }
 
@@ -81,6 +108,7 @@ export class ConfirmationStore {
       if (record.used || record.denied || this.now() > record.expiresAt) continue;
       record.denied = true;
       record.used = true;
+      this.plaintextTokens.delete(record.proposalId);
       denied.push(record.proposalId);
     }
     return denied;

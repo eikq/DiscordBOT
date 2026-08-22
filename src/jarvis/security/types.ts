@@ -29,7 +29,13 @@ export type PrivilegeLease = {
   };
 };
 
-export type PrivilegeLeaseState = 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'CONSUMED';
+export type PrivilegeLeaseState =
+  | 'ACTIVE'
+  | 'EXPIRED'
+  | 'REVOKED'
+  | 'CONSUMED'
+  | 'INVALID_AFTER_RESTART'
+  | 'NEEDS_REAPPROVAL';
 
 export type PrivilegeLeaseInventoryItem = PrivilegeLease & {
   state: PrivilegeLeaseState;
@@ -117,6 +123,10 @@ export type JarvisOperationEventType =
   | 'TASK_COMPLETED'
   | 'TASK_FAILED'
   | 'PERMISSION_WAITING'
+  | 'PERMISSION_SNAPSHOT'
+  | 'LEASE_REVALIDATED'
+  | 'LEASE_INVALID_AFTER_RESTART'
+  | 'PREVIEW_READY'
   | 'NIGHT_CYCLE'
   | 'AFFECT'
   | 'MONITOR'

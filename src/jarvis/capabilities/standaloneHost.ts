@@ -38,6 +38,8 @@ import { registerRecoverySandboxCapabilities } from '../recovery';
 import { defaultRuntimeRoot } from '../storage/operationalDb';
 import { registerSoftwareCapabilities } from '../build/capabilities';
 import { BuildPlanStore } from '../build/planStore';
+import { registerProjectCapabilities } from '../project/capabilities';
+import { ProjectWorkspace } from '../project/workspace';
 import { openMigratedDatabase } from '../../bot/memory/jarvis/migrate';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,6 +67,7 @@ export type StandaloneCapabilityHostOptions = {
     recoveryRoot?: string;
     operator?: TrustedOperatorRuntime;
     displayAliases?: ActionGateOptions['displayAliases'];
+    permissions?: import('../security/persistentPermission').PersistentPermissionStore;
   };
   build?: false | { db?: DatabaseSync; sandboxRoot?: string };
 };
@@ -134,14 +137,30 @@ export function createStandaloneCapabilityHost(
     }
   }
 
+  let plans: BuildPlanStore | undefined;
+  let projectWorkspace: ProjectWorkspace | undefined;
+  let softwareDeps: {
+    plans: BuildPlanStore;
+    events?: JarvisEventBus;
+    sandboxRoot?: string;
+    workspace: ProjectWorkspace;
+    devServers?: import('../project/devServer').DevServerRegistry;
+  } | undefined;
   if (options.build !== false) {
     try {
       const db = options.build?.db ?? defaultSoftwareDatabase();
-      registerSoftwareCapabilities(registry, {
-        plans: new BuildPlanStore(db),
+      plans = new BuildPlanStore(db);
+      projectWorkspace = new ProjectWorkspace(options.build?.sandboxRoot);
+      softwareDeps = {
+        plans,
         events: options.actions === false ? undefined : options.actions?.events ?? sharedJarvisEventBus(),
         sandboxRoot: options.build?.sandboxRoot,
-      });
+        workspace: projectWorkspace,
+      };
+      registerSoftwareCapabilities(registry, softwareDeps);
+      if (options.actions === false) {
+        registerProjectCapabilities(registry, { workspace: projectWorkspace });
+      }
     } catch (error) {
       console.warn(`[Jarvis] Software capabilities unavailable: ${error instanceof Error ? error.message : error}`);
     }
@@ -195,8 +214,20 @@ export function createStandaloneCapabilityHost(
     verification: operator.verification,
     journal: operator.journal,
     displayAliases: options.actions?.displayAliases,
+    permissions: options.actions?.permissions ?? operator.permissions,
+    plans,
+    sandboxRoot: options.build === false ? undefined : options.build?.sandboxRoot,
   };
-  return createActionGate(registry, gateOptions);
+  const gated = createActionGate(registry, gateOptions);
+  if (projectWorkspace) {
+    registerProjectCapabilities(registry, {
+      workspace: projectWorkspace,
+      devServers: operator.devServers,
+    });
+  }
+  if (softwareDeps && operator.devServers) softwareDeps.devServers = operator.devServers;
+  gated.hydratePersistedPermissions?.(registry.list().map(item => item.id));
+  return gated;
 }
 
 let softwareDb: DatabaseSync | undefined;

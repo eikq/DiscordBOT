@@ -26,8 +26,12 @@ export const VISUAL_WORKFLOW_NODES = [
   'PLAN',
   'REVIEW',
   'PERMISSION',
+  'SCAFFOLD',
+  'INSTALL',
   'BUILD',
   'TEST',
+  'PREVIEW',
+  'VERIFY',
   'DONE',
 ] as const;
 

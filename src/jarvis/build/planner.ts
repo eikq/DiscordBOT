@@ -57,13 +57,13 @@ export function createBuildPlan(input: {
     assumptions: [
       'React/Vite starter unless the owner names another stack.',
       'Files stay inside data/jarvis/builds/<slug>/ until a later export task.',
-      'No unrestricted shell, npm install, or deploy runs during this v1 apply.',
+      'Install, build, test, and localhost preview use typed project capabilities. No unrestricted shell.',
     ],
     projectType,
     suggestedStack: projectType === 'WEBSITE' ? 'React/Vite' : 'React/Vite app',
     stages,
-    permissionsNeeded: ['WRITE_PROJECT', 'RUN_PROJECT_COMMANDS'],
-    artifactsExpected: [`${slug}/`, `${slug}/index.html`, `${slug}/tests/smoke.test.mjs`],
+    permissionsNeeded: ['WRITE_PROJECT', 'INSTALL_PROJECT_DEPENDENCIES', 'RUN_PROJECT_COMMANDS', 'START_DEV_SERVER'],
+    artifactsExpected: [`${slug}/`, `${slug}/package.json`, `${slug}/src/App.jsx`, `${slug}/tests/smoke.test.mjs`],
     acceptanceCriteria: [
       'Owner can review the plan before any files exist.',
       'After approval and a bounded lease, sandbox files exist under data/jarvis/builds/.',
@@ -108,10 +108,13 @@ function defaultStages(projectType: BuildProjectType): BuildStage[] {
   return [
     stage('requirements', 'Requirements', 'Capture the owner brief and defaults.', [], ['brief.md']),
     stage('architecture', 'Architecture', 'Choose a bounded stack and folder layout.', ['requirements'], ['README.md']),
-    stage('setup', 'Project Setup', 'Write the sandbox project files after permission.', ['architecture'], ['package.json', 'index.html']),
-    stage('ui', uiTitle, 'Add the first visible screens.', ['setup'], ['src/App.jsx']),
-    stage('tests', 'Tests', 'Add a smoke check for the skeleton.', ['ui'], ['tests/smoke.test.mjs']),
-    stage('verify', 'Final Verify', 'Confirm artifacts exist inside the sandbox.', ['tests'], ['sandbox']),
+    stage('scaffold', 'Scaffold', 'Create the workspace and source files after permission.', ['architecture'], ['package.json', 'src/App.jsx']),
+    stage('install', 'Install', 'Run npm install inside the project workspace.', ['scaffold'], ['node_modules']),
+    stage('ui', uiTitle, 'Keep the first visible screens in the workspace.', ['install'], ['src/App.jsx']),
+    stage('build', 'Build', 'Run the registered build script.', ['ui'], ['dist']),
+    stage('tests', 'Tests', 'Run the registered test script or bounded Node smoke test.', ['build'], ['tests/smoke.test.mjs']),
+    stage('preview', 'Preview', 'Start the registered dev script on localhost only.', ['tests'], ['preview-url']),
+    stage('verify', 'Final Verify', 'Confirm exit-code evidence and localhost preview.', ['preview'], ['sandbox']),
   ];
 }
 

@@ -21,6 +21,13 @@ export type PermissionProposal = {
   goalId?: string;
 };
 
+export const BUILD_GOAL_EFFECTS: PermissionEffect[] = [
+  'WRITE_PROJECT',
+  'INSTALL_PROJECT_DEPENDENCIES',
+  'RUN_PROJECT_COMMANDS',
+  'START_DEV_SERVER',
+];
+
 export function permissionProposalFromBuild(input: {
   title: string;
   slug: string;
@@ -30,13 +37,14 @@ export function permissionProposalFromBuild(input: {
 }): PermissionProposal {
   return {
     goal: input.title,
-    summary: `ขอสิทธิ์สร้าง/แก้ไฟล์และรัน build/test ในโปรเจกต์ ${input.slug}`,
+    summary: `ขอสิทธิ์สร้าง/แก้ไฟล์ ติดตั้ง dependencies รัน build/test และเปิด preview localhost ในโปรเจกต์ ${input.slug}`,
     reason: 'เพื่อสร้างตามแผนที่คุณอนุมัติ',
     scope: `data/jarvis/builds/${input.slug}`,
     duration: 'THIS_GOAL',
-    effects: ['WRITE_PROJECT', 'RUN_PROJECT_COMMANDS'],
+    effects: [...BUILD_GOAL_EFFECTS],
     capabilityId: input.capabilityId,
     planId: input.planId,
     goalId: input.goalId,
   };
 }
+

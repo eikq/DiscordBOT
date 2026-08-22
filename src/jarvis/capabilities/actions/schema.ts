@@ -69,6 +69,21 @@ import type { DesktopAllowlists } from './types';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../../build/constants';
+import {
+  PROJECT_BUILD,
+  PROJECT_CREATE_WORKSPACE,
+  PROJECT_INSPECT_ARTIFACT,
+  PROJECT_INSTALL_DEPENDENCIES,
+  PROJECT_LIST_FILES,
+  PROJECT_READ_FILE,
+  PROJECT_RUN_SCRIPT,
+  PROJECT_RUN_TESTS,
+  PROJECT_START_DEV_SERVER,
+  PROJECT_STOP_DEV_SERVER,
+  PROJECT_WRITE_FILE,
+  isProjectCapabilityId,
+  isRegisteredProjectScript,
+} from '../../project/constants';
 import { looksLikeSecret } from '../../security/redaction';
 import { sanitizeDisplaySelector } from '../../desktop/monitorTopology';
 
@@ -337,6 +352,10 @@ export function validateActionInput(
     return validateSoftwareInput(capabilityId, input);
   }
 
+  if (isProjectCapabilityId(capabilityId)) {
+    return validateProjectInput(capabilityId, input);
+  }
+
   return { ok: false, reasonCode: 'UNKNOWN_CAPABILITY', userMessage: 'Unknown capability.' };
 }
 
@@ -364,6 +383,55 @@ function validateSoftwareInput(capabilityId: string, input: Record<string, unkno
   }
   if (capabilityId === SOFTWARE_PLAN_BUILD && !value.brief && !value.query) {
     return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'brief is required.' };
+  }
+  return { ok: true, value };
+}
+
+function validateProjectInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {
+  const allowedById: Record<string, string[]> = {
+    [PROJECT_CREATE_WORKSPACE]: ['slug'],
+    [PROJECT_WRITE_FILE]: ['slug', 'relativePath', 'contents'],
+    [PROJECT_READ_FILE]: ['slug', 'relativePath'],
+    [PROJECT_LIST_FILES]: ['slug'],
+    [PROJECT_INSTALL_DEPENDENCIES]: ['slug', 'mode'],
+    [PROJECT_RUN_SCRIPT]: ['slug', 'script'],
+    [PROJECT_RUN_TESTS]: ['slug'],
+    [PROJECT_BUILD]: ['slug'],
+    [PROJECT_START_DEV_SERVER]: ['slug'],
+    [PROJECT_STOP_DEV_SERVER]: ['slug'],
+    [PROJECT_INSPECT_ARTIFACT]: ['slug'],
+  };
+  const allowed = allowedById[capabilityId] || ['slug'];
+  if (!onlyKeys(input, allowed)) {
+    return { ok: false, reasonCode: 'ARBITRARY_SHELL_REJECTED', userMessage: 'Those project arguments are not allowed.' };
+  }
+  if (typeof input.slug !== 'string' || !/^[a-zA-Z0-9._-]{1,40}$/u.test(input.slug) || input.slug.includes('..')) {
+    return { ok: false, reasonCode: 'PATH_TRAVERSAL_BLOCKED', userMessage: 'Project slug is invalid.' };
+  }
+  const value: Record<string, unknown> = { slug: input.slug };
+  if (allowed.includes('relativePath')) {
+    if (typeof input.relativePath !== 'string' || !input.relativePath.trim() || input.relativePath.includes('..') || input.relativePath.startsWith('/') || /^[a-zA-Z]:[\\/]/u.test(input.relativePath)) {
+      return { ok: false, reasonCode: 'PATH_TRAVERSAL_BLOCKED', userMessage: 'Project file path must stay inside the workspace.' };
+    }
+    value.relativePath = input.relativePath.trim().slice(0, 180);
+  }
+  if (allowed.includes('contents') && input.contents !== undefined) {
+    if (typeof input.contents !== 'string' || input.contents.length > 200_000 || looksLikeSecret(input.contents)) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Project file contents are not allowed.' };
+    }
+    value.contents = input.contents;
+  }
+  if (capabilityId === PROJECT_RUN_SCRIPT) {
+    if (typeof input.script !== 'string' || !isRegisteredProjectScript(input.script)) {
+      return { ok: false, reasonCode: 'UNREGISTERED_SCRIPT', userMessage: 'Only registered package.json scripts can run.' };
+    }
+    value.script = input.script;
+  }
+  if (capabilityId === PROJECT_INSTALL_DEPENDENCIES && input.mode !== undefined) {
+    if (input.mode !== 'install' && input.mode !== 'ci') {
+      return { ok: false, reasonCode: 'INSTALL_MODE_BLOCKED', userMessage: 'Only npm install or npm ci are allowed.' };
+    }
+    value.mode = input.mode;
   }
   return { ok: true, value };
 }

@@ -223,6 +223,61 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     argumentSchemaSummary: 'planId?, brief?',
     sideEffectClass: 'CONFIRM_REQUIRED',
   },
+  'project.createWorkspace': {
+    shortDescription: 'Create a goal-scoped project folder under data/jarvis/builds/<slug>/.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.writeFile': {
+    shortDescription: 'Write one relative file inside the project workspace.',
+    argumentSchemaSummary: 'slug, relativePath, contents',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.readFile': {
+    shortDescription: 'Read one relative file inside the project workspace.',
+    argumentSchemaSummary: 'slug, relativePath',
+    sideEffectClass: 'READ_ONLY',
+  },
+  'project.listFiles': {
+    shortDescription: 'List files inside the project workspace.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'READ_ONLY',
+  },
+  'project.installDependencies': {
+    shortDescription: 'Run npm install or npm ci inside the exact project workspace.',
+    argumentSchemaSummary: 'slug, mode?',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.runScript': {
+    shortDescription: 'Run a registered package.json script. No raw shell.',
+    argumentSchemaSummary: 'slug, script',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.runTests': {
+    shortDescription: 'Run the registered test script or bounded Node smoke test.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.build': {
+    shortDescription: 'Run the registered build script inside the project workspace.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.startDevServer': {
+    shortDescription: 'Start the registered dev script on 127.0.0.1 only.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.stopDevServer': {
+    shortDescription: 'Stop a Jarvis-owned localhost preview process.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'CONFIRM_REQUIRED',
+  },
+  'project.inspectArtifact': {
+    shortDescription: 'Inspect generated project files without opening arbitrary paths.',
+    argumentSchemaSummary: 'slug',
+    sideEffectClass: 'READ_ONLY',
+  },
 };
 
 export function compactCapabilityCatalog(host?: CapabilityHost, availability: Record<string, CompactCapability['availability']> = {}): CompactCapability[] {

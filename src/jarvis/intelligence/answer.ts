@@ -1,6 +1,7 @@
 import { isForbiddenGenericShell } from '../security/constants';
 import { resolveCapabilityGoal } from './capabilityGraph';
 import { CapabilityGapResolver } from './gapResolver';
+import { isModelIdentityQuestion, spokenTrustedModelIdentity, trustedRuntimeModelIdentity } from '../models/runtimeIdentity';
 import type {
   CapabilityGoalDefinition,
   GapResolutionPlan,
@@ -18,7 +19,8 @@ export type SelfKnowledgeAnswerKind =
   | 'DEVICE_CONTROL'
   | 'COMPETENCE'
   | 'UNAVAILABLE'
-  | 'GAP_EXPLANATION';
+  | 'GAP_EXPLANATION'
+  | 'MODEL_IDENTITY';
 
 export type SelfKnowledgeAnswer = {
   kind: SelfKnowledgeAnswerKind;
@@ -52,6 +54,7 @@ const UNAVAILABLE_STATUSES = [
 export function selfKnowledgeQuestionKind(text: string): SelfKnowledgeAnswerKind | undefined {
   const raw = text.trim();
   if (!raw) return undefined;
+  if (isModelIdentityQuestion(raw)) return 'MODEL_IDENTITY';
   if (/\b(cctv|camera|nvr|rtsp|onvif)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(raw)) return 'CCTV_STATUS';
   if (/can you.*(?:control|use).*(?:computer|pc|screen)|ควบคุม.*(?:คอม|พีซี|หน้าจอ)/iu.test(raw)) return 'DEVICE_CONTROL';
   if (/what.*(?:become better|improved at)|what are you better at|เก่งขึ้น.*อะไร|พัฒนา.*ความสามารถ/iu.test(raw)) return 'COMPETENCE';
@@ -134,6 +137,7 @@ export function answerFromSelfKnowledge(
   question?: string,
 ): SelfKnowledgeAnswer {
   if (kind === 'CCTV_STATUS') return cctvAnswer(snapshot, gap);
+  if (kind === 'MODEL_IDENTITY') return modelIdentityAnswer();
   if (kind === 'DEVICE_CONTROL') return deviceControlAnswer(snapshot);
   if (kind === 'COMPETENCE') return competenceAnswer(snapshot);
   if (kind === 'UNAVAILABLE') return listAnswer('UNAVAILABLE', unavailableCapabilities(snapshot), 'These capabilities are not currently available', 'The current evidence snapshot does not list an unavailable capability.');
@@ -145,6 +149,21 @@ export function answerFromSelfKnowledge(
     return gapExplanationAnswer(snapshot, gap, question ? interpretRequestedCapability(question, snapshot) : undefined);
   }
   return capabilitySummaryAnswer(snapshot);
+}
+
+function modelIdentityAnswer(): SelfKnowledgeAnswer {
+  const identity = trustedRuntimeModelIdentity();
+  return {
+    kind: 'MODEL_IDENTITY',
+    text: spokenTrustedModelIdentity(identity),
+    capabilityIds: [],
+    evidence: [
+      `profile:${identity.id}`,
+      `displayName:${identity.displayName}`,
+      `alias:${identity.alias}`,
+      `source:${identity.source}`,
+    ],
+  };
 }
 
 function capabilitySummaryAnswer(snapshot: SelfKnowledgeSnapshot): SelfKnowledgeAnswer {

@@ -229,6 +229,14 @@ export {
   capabilityRequiresLease,
   isForbiddenGenericShell,
   redactSecrets,
+  PersistentPermissionStore,
+  permissionPolicyFingerprint,
+  PERMISSION_POLICY_REVISION,
+  defaultPersistentPermissionPath,
+  revalidatePermissionRecord,
+  createPendingPermissionRecord,
+  applyOwnerDecision,
+  leaseFromPermission,
 } from './security';
 export {
   ExperienceStore,
@@ -303,4 +311,6 @@ export {
 export type { WorkspaceResult, WorkspaceRuntime, WorkspaceSnapshot } from './workspace';
 export * from './build';
 export { permissionFirstFromCapability, shouldAvoidGenericRefusal } from './policy/permissionFirst';
-export { permissionProposalFromBuild } from './security/permissionProposal';
+export { permissionProposalFromBuild, BUILD_GOAL_EFFECTS } from './security/permissionProposal';
+export { ownerConfirmationVisibleText, ownerDecisionSourceFrom } from './security/ownerConfirmation';
+export * from './project';

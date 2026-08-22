@@ -2,8 +2,8 @@ export { SOFTWARE_APPLY_BUILD, SOFTWARE_CAPABILITY_IDS, SOFTWARE_PLAN_BUILD } fr
 export { createBuildPlan, inferProjectType, isPlanApprovalUtterance, slugFromBrief, spokenPlanSummary } from './planner';
 export { BuildPlanStore } from './planStore';
 export { defaultBuildRoot, sandboxExists, sandboxPathFor, writeApprovedSandbox } from './sandbox';
-export { registerSoftwareCapabilities } from './capabilities';
-export type { SoftwareCapabilityDeps } from './capabilities';
+export { executeApprovedBuild } from './executeApprovedBuild';
+export type { ApprovedBuildResult, ApprovedBuildRuntime } from './executeApprovedBuild';
 export type {
   BuildPlan,
   BuildPlanStatus,

@@ -212,6 +212,22 @@ export class PrivilegeLeaseStore {
     return this.match(capabilityId, resourceScope, true);
   }
 
+  public restoreValidated(lease: PrivilegeLease): PrivilegeDecision {
+    if (lease.capabilityIds.some(id => isForbiddenGenericShell(id))) {
+      return denied('GENERIC_SHELL_FORBIDDEN', 'Generic unrestricted shell is not a Jarvis capability.');
+    }
+    if (!lease.ownerApproved || lease.revokedAt) {
+      return denied('INVALID_AFTER_RESTART', 'Persisted lease is not owner-approved.');
+    }
+    this.leases.set(lease.id, cloneLease(lease));
+    this.options.events?.emit('LEASE_REVALIDATED', 'Persisted privilege lease was revalidated after restart.', {
+      leaseId: lease.id,
+      capabilityIds: lease.capabilityIds,
+      expiresAt: lease.expiresAt,
+    });
+    return { ok: true, lease: cloneLease(lease) };
+  }
+
   public get(id: string): PrivilegeLease | undefined {
     const lease = this.leases.get(id);
     return lease ? cloneLease(lease) : undefined;

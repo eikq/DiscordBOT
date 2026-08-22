@@ -12,6 +12,7 @@ export type PresenceBuildSurface = {
   title: string;
   artifact?: string;
   tests?: string;
+  previewUrl?: string;
   evidence: string[];
   nodes: PresenceBuildNode[];
 };
@@ -31,8 +32,12 @@ const NODES: Array<{ id: VisualWorkflowNode; label: string }> = [
   { id: 'PLAN', label: 'Plan' },
   { id: 'REVIEW', label: 'Review' },
   { id: 'PERMISSION', label: 'Permission' },
+  { id: 'SCAFFOLD', label: 'Scaffold' },
+  { id: 'INSTALL', label: 'Install' },
   { id: 'BUILD', label: 'Build' },
   { id: 'TEST', label: 'Test' },
+  { id: 'PREVIEW', label: 'Preview' },
+  { id: 'VERIFY', label: 'Verify' },
   { id: 'DONE', label: 'Done' },
 ];
 
@@ -44,12 +49,15 @@ const EVENT_TO_NODE: Record<string, VisualWorkflowNode> = {
   PLAN_CREATED: 'REVIEW',
   PLAN_APPROVED: 'REVIEW',
   PERMISSION_REQUESTED: 'PERMISSION',
-  PERMISSION_GRANTED: 'BUILD',
-  PLAN_STAGE_STARTED: 'BUILD',
-  ARTIFACT_CREATED: 'BUILD',
+  PERMISSION_WAITING: 'PERMISSION',
+  PERMISSION_SNAPSHOT: 'PERMISSION',
+  PERMISSION_GRANTED: 'SCAFFOLD',
+  PLAN_STAGE_STARTED: 'SCAFFOLD',
+  ARTIFACT_CREATED: 'SCAFFOLD',
   ARTIFACT_UPDATED: 'BUILD',
+  PREVIEW_READY: 'PREVIEW',
   VERIFY_STARTED: 'TEST',
-  VERIFY_RESULT: 'TEST',
+  VERIFY_RESULT: 'VERIFY',
   PLAN_STAGE_COMPLETED: 'DONE',
   PLAN_STAGE_FAILED: 'BUILD',
 };
@@ -59,8 +67,8 @@ const PLAN_STATUS_TO_NODE: Record<string, VisualWorkflowNode> = {
   READY_FOR_REVIEW: 'REVIEW',
   APPROVED: 'PERMISSION',
   WAITING_PERMISSION: 'PERMISSION',
-  EXECUTING: 'BUILD',
-  VERIFYING: 'TEST',
+  EXECUTING: 'SCAFFOLD',
+  VERIFYING: 'VERIFY',
   COMPLETED: 'DONE',
   FAILED: 'BUILD',
 };
@@ -75,13 +83,23 @@ export function buildSurfaceFromEvents(
   const relevant = events.filter(item => item.type && EVENT_TO_NODE[item.type]);
   if (!relevant.length) return null;
   const latest = relevant[relevant.length - 1]!;
+  const stage = typeof latest.payload?.stage === 'string'
+    && NODES.some(node => node.id === latest.payload?.stage)
+    ? latest.payload.stage as VisualWorkflowNode
+    : EVENT_TO_NODE[latest.type!] || 'PLAN';
+  const previewUrl = typeof latest.payload?.preview === 'object' && latest.payload?.preview && typeof (latest.payload.preview as { url?: string }).url === 'string'
+    ? (latest.payload.preview as { url: string }).url
+    : typeof latest.payload?.url === 'string' && latest.payload.url.startsWith('http://127.0.0.1')
+      ? latest.payload.url
+      : undefined;
   return surfaceFor({
     title: String(latest.payload?.title || latest.payload?.slug || 'Build'),
     slug: typeof latest.payload?.slug === 'string' ? latest.payload.slug : undefined,
     evidence: relevant.map(item => String(item.summary || item.type)).slice(-6),
-    active: EVENT_TO_NODE[latest.type!] || 'PLAN',
+    active: stage,
     failed: latest.type === 'PLAN_STAGE_FAILED',
     done: latest.type === 'PLAN_STAGE_COMPLETED',
+    previewUrl,
   });
 }
 
@@ -111,6 +129,7 @@ function surfaceFor(input: {
   active: VisualWorkflowNode;
   failed: boolean;
   done: boolean;
+  previewUrl?: string;
 }): PresenceBuildSurface {
   const nodes = NODES.map(node => {
     const order = NODES.findIndex(item => item.id === node.id);
@@ -129,6 +148,7 @@ function surfaceFor(input: {
   return {
     title: input.title,
     artifact: input.slug ? `data/jarvis/builds/${input.slug}` : undefined,
+    previewUrl: input.previewUrl,
     evidence: input.evidence,
     nodes,
   };

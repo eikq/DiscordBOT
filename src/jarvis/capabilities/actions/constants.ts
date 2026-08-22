@@ -4,6 +4,12 @@ import { RESEARCH_PRIVATE_BROWSE } from '../../research/private/constants';
 import { isWorkspaceReadCapability, WORKSPACE_CAPABILITY_IDS } from '../../workspace/constants';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../../build/constants';
+import {
+  PROJECT_CAPABILITY_IDS,
+  PROJECT_LIST_FILES,
+  PROJECT_READ_FILE,
+  PROJECT_INSPECT_ARTIFACT,
+} from '../../project/constants';
 
 export {
   REMINDERS_CANCEL,
@@ -61,6 +67,7 @@ export const GATED_CAPABILITY_IDS = [
   RECOVERY_SANDBOX_ROLLBACK,
   SOFTWARE_PLAN_BUILD,
   SOFTWARE_APPLY_BUILD,
+  ...PROJECT_CAPABILITY_IDS,
 ] as const;
 
 export const CONFIRMATION_TTL_MS = 120_000;
@@ -84,5 +91,8 @@ export function isReadOnlyGatedCapability(id: string): boolean {
     || isReminderReadCapability(id)
     || isResearchReadCapability(id)
     || isWorkspaceReadCapability(id)
-    || id === SOFTWARE_PLAN_BUILD;
+    || id === SOFTWARE_PLAN_BUILD
+    || id === PROJECT_READ_FILE
+    || id === PROJECT_LIST_FILES
+    || id === PROJECT_INSPECT_ARTIFACT;
 }

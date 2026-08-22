@@ -2,6 +2,7 @@ import { LocalLlmProvider } from '../../bot/llm/LocalLlmProvider';
 import { CANONICAL_LLM_BASE_URL, CANONICAL_LLM_MODEL } from '../../bot/llm/canonicalRuntime';
 import { MODEL_HEALTH_STATUSES, ownerMessageForModelHealth, type ModelHealthStatus } from '../../bot/llm/modelHealth';
 import { QWEN_OFFLINE_OWNER_MESSAGE } from '../models/qwen38Cyber';
+import { spokenTrustedModelIdentity, trustedRuntimeModelIdentity } from '../models/runtimeIdentity';
 import { SqliteJarvisMemoryStore } from '../../bot/memory/jarvis/SqliteJarvisMemoryStore';
 import type { ConversationHistoryStore } from '../../bot/memory/jarvis/conversationStore';
 import { LocalSTTProvider } from '../../bot/stt/LocalSTTProvider';
@@ -19,6 +20,8 @@ import { trySharedResearchRuntime } from '../research';
 import { isResearchResult, researchFactsFromResult } from '../research/researchFacts';
 import type { WorkspaceRuntime, WorkspaceSnapshot } from '../workspace';
 import { trySharedWorkspaceRuntime } from '../workspace';
+import { ownerConfirmationVisibleText, ownerDecisionSourceFrom } from '../security/ownerConfirmation';
+import { emptyPermissionRuntimeSnapshot, type PermissionRuntimeSnapshot } from '../security/permissionSnapshot';
 import { probeHostSecurity } from '../security/hostBaseline';
 import { sharedJarvisEventBus } from '../security/eventBus';
 import { PrivateResearchGateway } from '../research/private/privateGateway';
@@ -485,6 +488,54 @@ export class JarvisLabRuntime {
     return sharedJarvisEventBus().recent(40);
   }
 
+  public permissionSnapshot(sessionId = 'jarvis-lab'): PermissionRuntimeSnapshot {
+    const view = isActionHost(this.capabilityHost)
+      ? this.capabilityHost.runtimePermissionView?.()
+      : undefined;
+    const pending = view?.pending
+      || (!view && isActionHost(this.capabilityHost)
+        ? this.capabilityHost.hydratePendingConfirmation?.(sessionId)
+        : undefined);
+    const plan = this.plans?.latestForSession(sessionId) || this.plans?.list(1)[0] || null;
+    const lease = view?.lease
+      ?? sharedTrustedOperatorRuntime().leases.listInventory().find(item => item.state === 'ACTIVE')
+      ?? null;
+    const preview = sharedTrustedOperatorRuntime().devServers?.list().find(item => (
+      item.status === 'running' || item.status === 'starting' || item.status === 'unknown'
+    )) || null;
+    const stage = pending
+      ? 'PERMISSION'
+      : plan
+        ? ({
+            DRAFT: 'PLAN',
+            READY_FOR_REVIEW: 'REVIEW',
+            APPROVED: 'PERMISSION',
+            WAITING_PERMISSION: 'PERMISSION',
+            EXECUTING: 'SCAFFOLD',
+            VERIFYING: 'VERIFY',
+            COMPLETED: 'DONE',
+            FAILED: 'BUILD',
+          } as const)[plan.status] || 'PLAN'
+        : null;
+    if (!pending && !plan && !lease && !preview) return emptyPermissionRuntimeSnapshot();
+    return {
+      pendingPermission: pending || null,
+      permissionRecord: view?.record || null,
+      lease,
+      plan: plan ? {
+        id: plan.id,
+        goalId: plan.goalId,
+        title: plan.title,
+        slug: plan.slug,
+        status: plan.status,
+        summary: plan.summary,
+        updatedAt: plan.updatedAt,
+      } : null,
+      stage,
+      preview,
+    };
+  }
+
   public capabilities(): CapabilityHost | undefined {
     return this.capabilityHost;
   }
@@ -827,6 +878,7 @@ export class JarvisLabRuntime {
     speak?: boolean;
     actionSource?: 'text' | 'voice' | 'ui' | 'system';
     duration?: 'ONCE' | 'THIS_GOAL';
+    visibleText?: string;
   }): Promise<StandaloneTextTurnOutput & {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
@@ -837,6 +889,17 @@ export class JarvisLabRuntime {
       throw new Error('Action confirmation is unavailable.');
     }
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    const source = ownerDecisionSourceFrom(input.actionSource);
+    this.persistOwnerTurn(
+      sessionId,
+      ownerConfirmationVisibleText({
+        decision: 'allow',
+        duration: input.duration,
+        visibleText: input.visibleText,
+        source,
+      }),
+      source === 'voice' ? 'voice' : source === 'text' ? 'text' : 'ui_action',
+    );
     const waiting = this.workCenter()?.agent.store.active().find(task => (
       task.status === 'WAITING_PERMISSION'
       && task.plan.some(step => step.pendingConfirmation?.proposalId === input.proposalId)
@@ -856,7 +919,7 @@ export class JarvisLabRuntime {
       sessionId,
       duration: input.duration,
     });
-    return this.finishActionTurn(invoked, sessionId, input.speak);
+    return this.finalizeVisibleTurn(sessionId, await this.finishActionTurn(invoked, sessionId, input.speak));
   }
 
   public async denyAction(input: {
@@ -864,6 +927,7 @@ export class JarvisLabRuntime {
     sessionId?: string;
     speak?: boolean;
     actionSource?: 'text' | 'voice' | 'ui' | 'system';
+    visibleText?: string;
   }): Promise<StandaloneTextTurnOutput & {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
@@ -873,8 +937,18 @@ export class JarvisLabRuntime {
       throw new Error('Action confirmation is unavailable.');
     }
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    const source = ownerDecisionSourceFrom(input.actionSource);
+    this.persistOwnerTurn(
+      sessionId,
+      ownerConfirmationVisibleText({
+        decision: 'deny',
+        visibleText: input.visibleText,
+        source,
+      }),
+      source === 'voice' ? 'voice' : source === 'text' ? 'text' : 'ui_action',
+    );
     const invoked = await this.capabilityHost.denyProposal(input.proposalId, input.actionSource ?? 'ui');
-    return this.finishActionTurn(invoked, sessionId, input.speak);
+    return this.finalizeVisibleTurn(sessionId, await this.finishActionTurn(invoked, sessionId, input.speak));
   }
 
   private decideAskRoute(
@@ -902,7 +976,58 @@ export class JarvisLabRuntime {
     sessionId: string,
     kind: SelfKnowledgeAnswer['kind'],
   ) {
-    const snapshot = await this.selfKnowledgeSnapshot();
+  if (kind === 'MODEL_IDENTITY') {
+    const identity = trustedRuntimeModelIdentity({
+      profile: this.modelProfiles.get('qwen38-cyber'),
+      selectedId: 'qwen38-cyber',
+    });
+    const answer = {
+      kind: 'MODEL_IDENTITY' as const,
+      text: spokenTrustedModelIdentity(identity),
+      capabilityIds: [] as string[],
+      evidence: [`profile:${identity.id}`, `displayName:${identity.displayName}`, `alias:${identity.alias}`],
+    };
+    const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
+    const result: JarvisCoreResult = {
+      requestId: request.requestId,
+      answerIntent: 'self_knowledge',
+      verifiedFacts: [{
+        key: 'jarvis.modelIdentity',
+        value: identity,
+        sourceType: 'system',
+        sourceRef: `model-identity:${identity.id}`,
+        immutableForPresentation: true,
+      }],
+      unverifiedClaims: [],
+      toolResults: [],
+      memoryRefs: [],
+      actionResults: [],
+      uncertainty: [],
+      suggestedContent: answer.text,
+    };
+    const presented = await this.engine.render(
+      result,
+      this.sessions.resolveTurn(sessionId, input.oneTurn ? turnOverride(input) : undefined),
+      { sessionId },
+    );
+    const speech = await this.maybeSpeak(answer.text, request.requestId, presented.voiceProfileId, input.speak);
+    return {
+      request,
+      result,
+      presented: { ...presented, text: answer.text },
+      timings: { totalMs: 0 },
+      coreState: 'complete' as const,
+      presentation: await this.presentationStatus(sessionId),
+      research: this.researchSnapshot(),
+      workspace: this.workspaceSnapshot(),
+      intent: { stage: 'self_knowledge', detail: 'Trusted runtime model identity', kind: answer.kind },
+      route: { route: 'CONVERSATION' as const, socialAction: 'SPEAK' as const, agentic: false, reason: 'runtime_model_identity', confidence: 1 },
+      selfKnowledge: answer,
+      affectStyle: this.commandCenter?.affect.style(),
+      ...(speech ? { speech } : {}),
+    };
+  }
+  const snapshot = await this.selfKnowledgeSnapshot();
     const question = String(input.text || '');
     const gap = kind === 'CCTV_STATUS'
       ? await new CapabilityGapResolver().resolve({
@@ -1744,17 +1869,21 @@ export class JarvisLabRuntime {
     return this.memoryStore instanceof SqliteJarvisMemoryStore ? this.memoryStore.history : undefined;
   }
 
-  private persistOwnerTurn(sessionId: string, text: string, inputMode: 'voice' | 'text'): void {
+  private persistOwnerTurn(sessionId: string, text: string, inputMode: 'voice' | 'text' | 'ui_action'): void {
     const history = this.historyStore();
     if (!history || !text.trim()) return;
+    const plan = this.plans?.latestForSession(sessionId) || this.plans?.list(1)[0];
     const started = history.startTurn({
       sessionId,
       role: 'OWNER',
       visibleText: text,
-      inputMode,
+      inputMode: inputMode === 'voice' ? 'voice' : 'text',
       modelProfileId: 'qwen38-cyber',
+      goalId: plan?.goalId,
+      planId: plan?.id,
+      metadata: { source: inputMode },
     });
-    history.completeTurn(started.id, text);
+    history.completeTurn(started.id, text, { goalId: plan?.goalId, planId: plan?.id });
     const jarvis = history.startTurn({
       sessionId,
       role: 'JARVIS',

@@ -4,13 +4,16 @@ import { defaultRuntimeRoot } from '../storage/operationalDb';
 import { EmergencyStopController } from './emergencyStop';
 import { sharedJarvisEventBus, type JarvisEventBus } from './eventBus';
 import { PrivilegeLeaseStore } from './privilegeLease';
+import { PersistentPermissionStore, defaultPersistentPermissionPath } from './persistentPermission';
 import { RecoveryCheckpointStore } from '../recovery';
 import { ExecutionJournalCoordinator } from '../executionJournal';
 import { VerificationRegistry } from '../safety/verificationRegistry';
+import { DevServerRegistry } from '../project/devServer';
 
 export type TrustedOperatorRuntimeOptions = {
   events?: JarvisEventBus;
   leases?: PrivilegeLeaseStore;
+  permissions?: PersistentPermissionStore;
   now?: () => number;
   emergencyPersistPath?: string;
   runtimeRoot?: string;
@@ -28,16 +31,31 @@ export type TrustedOperatorSnapshot = {
 export class TrustedOperatorRuntime {
   public readonly events: JarvisEventBus;
   public readonly leases: PrivilegeLeaseStore;
+  public readonly permissions?: PersistentPermissionStore;
   public readonly emergency: EmergencyStopController;
   public readonly containment: FailureContainment;
   public readonly checkpoints?: RecoveryCheckpointStore;
   public readonly verification: VerificationRegistry;
   public readonly journal?: ExecutionJournalCoordinator;
+  public readonly devServers?: DevServerRegistry;
 
   public constructor(options: TrustedOperatorRuntimeOptions = {}) {
     this.events = options.events ?? sharedJarvisEventBus();
     this.verification = new VerificationRegistry();
     this.leases = options.leases ?? new PrivilegeLeaseStore({ now: options.now, events: this.events });
+    const runtimeRoot = options.runtimeRoot;
+    this.permissions = options.permissions ?? (runtimeRoot
+      ? new PersistentPermissionStore({
+          dbPath: defaultPersistentPermissionPath(runtimeRoot),
+          now: options.now,
+        })
+      : undefined);
+    this.devServers = runtimeRoot
+      ? new DevServerRegistry({
+          persistPath: path.join(runtimeRoot, 'dev-servers.json'),
+          now: options.now,
+        })
+      : undefined;
     this.emergency = new EmergencyStopController({
       leases: this.leases,
       events: this.events,

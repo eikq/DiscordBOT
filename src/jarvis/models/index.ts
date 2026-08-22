@@ -13,6 +13,8 @@ export {
 export { ModelCertificationRegistry } from './ModelCertificationRegistry';
 export { ModelProfileRegistry } from './ModelProfileRegistry';
 export { ModelRouter } from './ModelRouter';
+export { trustedRuntimeModelIdentity, spokenTrustedModelIdentity, isModelIdentityQuestion } from './runtimeIdentity';
+export type { TrustedRuntimeModelIdentity } from './runtimeIdentity';
 export type { ModelRoute, ModelRouteRequest } from './ModelRouter';
 export type {
   InferenceGenerateRequest,

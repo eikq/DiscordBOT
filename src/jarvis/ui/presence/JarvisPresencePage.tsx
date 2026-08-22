@@ -158,7 +158,10 @@ export default function JarvisPresencePage() {
     .catch(() => undefined), []);
   const refreshBuild = useCallback(async () => {
     const [ops, history] = await Promise.all([
-      readJson<{ events?: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }> }>('/api/jarvis/events').catch(() => ({ events: [] })),
+      readJson<{
+        events?: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>;
+        snapshot?: { pendingPermission?: LabPendingConfirmation | null; preview?: { url?: string } | null };
+      }>('/api/jarvis/events').catch(() => ({ events: [] as Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>, snapshot: undefined })),
       readJson<{ plans?: Array<{ title: string; slug: string; status: string; summary: string; updatedAt: number }> }>('/api/jarvis/history?sessionId=jarvis-lab').catch(() => ({ plans: [] })),
     ]);
     const events = (ops.events || []).filter(item => item.type).map(item => ({
@@ -167,7 +170,14 @@ export default function JarvisPresencePage() {
       payload: item.payload,
     }));
     buildEvents.current = events.slice(-24);
-    setBuildSurface(mergePresenceBuildSurface(buildEvents.current, history.plans || []));
+    const surface = mergePresenceBuildSurface(buildEvents.current, history.plans || []);
+    if (surface && ops.snapshot?.preview?.url?.startsWith('http://127.0.0.1')) {
+      surface.previewUrl = ops.snapshot.preview.url;
+    }
+    setBuildSurface(surface);
+    if (ops.snapshot?.pendingPermission?.proposalId && ops.snapshot.pendingPermission.token) {
+      setPendingConfirmation(ops.snapshot.pendingPermission);
+    }
   }, []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
   const refreshCommandCenter = useCallback(() => readJson<CommandCenterClientSnapshot>('/api/jarvis/command-center').then(setCommandCenter).catch(() => undefined), []);
@@ -236,6 +246,16 @@ export default function JarvisPresencePage() {
         const stage = latestResearchStage([typed]);
         if (stage) setResearchStage(stage);
         if (isResearchOperationType(payload.type) || stage) void refreshResearch();
+        if (payload.type === 'PERMISSION_SNAPSHOT') {
+          const pending = payload.payload?.pendingPermission as LabPendingConfirmation | undefined;
+          if (pending?.proposalId && pending.token) setPendingConfirmation(pending);
+          const previewUrl = typeof (payload.payload?.preview as { url?: string } | undefined)?.url === 'string'
+            ? (payload.payload?.preview as { url: string }).url
+            : undefined;
+          if (previewUrl?.startsWith('http://127.0.0.1')) {
+            setBuildSurface(current => current ? { ...current, previewUrl } : current);
+          }
+        }
         if (isBuildOperationType(payload.type) && payload.type !== 'MEMORY_UPDATED' && payload.type !== 'MODEL_STATUS_CHANGED') {
           buildEvents.current = [...buildEvents.current, typed].slice(-24);
           setBuildSurface(mergePresenceBuildSurface(buildEvents.current));
@@ -389,7 +409,11 @@ export default function JarvisPresencePage() {
           permissionScope: [commandCenter.permission.capability || 'task'],
         } : null;
 
-  const settleConfirm = async (decision: 'allow' | 'deny', duration: 'THIS_GOAL' | 'ONCE' = 'THIS_GOAL') => {
+  const settleConfirm = async (
+    decision: 'allow' | 'deny',
+    duration: 'THIS_GOAL' | 'ONCE' = 'THIS_GOAL',
+    origin?: { actionSource: 'ui' | 'text' | 'voice'; visibleText?: string },
+  ) => {
     if (!pendingConfirmation || confirming.current) return;
     confirming.current = true;
     setBusy(true);
@@ -404,7 +428,8 @@ export default function JarvisPresencePage() {
           duration,
           sessionId: 'jarvis-lab',
           speak: speakEnabled,
-          actionSource: 'ui',
+          actionSource: origin?.actionSource ?? 'ui',
+          visibleText: origin?.visibleText,
         }),
       });
       const payload = await reply.json() as AskResponse & { error?: string };
@@ -458,8 +483,12 @@ export default function JarvisPresencePage() {
     }
   };
 
-  const settleApproval = async (decision: 'allow' | 'deny', duration: 'THIS_GOAL' | 'ONCE' = 'THIS_GOAL') => {
-    if (approvalTarget.kind === 'confirm') return settleConfirm(decision, duration);
+  const settleApproval = async (
+    decision: 'allow' | 'deny',
+    duration: 'THIS_GOAL' | 'ONCE' = 'THIS_GOAL',
+    origin?: { actionSource: 'ui' | 'text' | 'voice'; visibleText?: string },
+  ) => {
+    if (approvalTarget.kind === 'confirm') return settleConfirm(decision, duration, origin);
     if (approvalTarget.kind === 'grant') return settleGrant(decision);
   };
 
@@ -641,7 +670,10 @@ export default function JarvisPresencePage() {
 
     const reply = interpretPresenceOwnerReply(payloadText, approvalTarget);
     if (reply.kind === 'allow' || reply.kind === 'deny') {
-      await settleApproval(reply.kind);
+      await settleApproval(reply.kind, 'THIS_GOAL', {
+        actionSource: spokenText ? 'voice' : 'text',
+        visibleText: payloadText,
+      });
       if (!spokenText) setText('');
       return;
     }

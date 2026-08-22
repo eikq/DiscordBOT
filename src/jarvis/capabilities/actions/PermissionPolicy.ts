@@ -31,6 +31,12 @@ import { processNameForUrl } from '../../desktop/windowsDisplayHost';
 import { classifyOpenUrl } from './urlSafety';
 import { RECOVERY_SANDBOX_MUTATE, RECOVERY_SANDBOX_ROLLBACK } from '../../recovery/sandboxCapability';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../../build/constants';
+import {
+  PROJECT_INSPECT_ARTIFACT,
+  PROJECT_LIST_FILES,
+  PROJECT_READ_FILE,
+  isProjectCapabilityId,
+} from '../../project/constants';
 
 export class PermissionPolicy {
   constructor(private readonly deps: { sessionWebGrants?: SessionWebGrantStore } = {}) {}
@@ -398,7 +404,29 @@ export class PermissionPolicy {
         ...base,
         decision: 'confirm',
         reasonCode: 'WRITE_PROJECT_REVIEW',
-        userMessage: 'ทำได้ครับ แต่ต้องขอสิทธิ์สร้าง/แก้ไฟล์และรัน build/test ในโฟลเดอร์โปรเจกต์นี้จนกว่างานนี้จะจบ',
+        userMessage: 'ทำได้ครับ แต่ต้องขอสิทธิ์สร้าง/แก้ไฟล์ ติดตั้ง dependencies รัน build/test และเปิด preview localhost ในโฟลเดอร์โปรเจกต์นี้จนกว่างานนี้จะจบ',
+        risk: 'CONFIRM_REQUIRED',
+      };
+    }
+    if (isProjectCapabilityId(proposal.capabilityId)) {
+      if (
+        proposal.capabilityId === PROJECT_READ_FILE
+        || proposal.capabilityId === PROJECT_LIST_FILES
+        || proposal.capabilityId === PROJECT_INSPECT_ARTIFACT
+      ) {
+        return {
+          ...base,
+          decision: 'allow',
+          reasonCode: 'READ_PROJECT',
+          userMessage: 'Read the goal-scoped project workspace.',
+          risk: 'READ_ONLY',
+        };
+      }
+      return {
+        ...base,
+        decision: 'confirm',
+        reasonCode: 'WRITE_PROJECT_REVIEW',
+        userMessage: 'ทำได้ครับ แต่ต้องขอสิทธิ์ทำรายการนี้ในโฟลเดอร์โปรเจกต์ที่ผูกกับงานนี้',
         risk: 'CONFIRM_REQUIRED',
       };
     }

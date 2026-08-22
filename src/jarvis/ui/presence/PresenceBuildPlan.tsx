@@ -18,6 +18,7 @@ export function PresenceBuildPlan(props: { surface: PresenceBuildSurface }) {
         ))}
       </ol>
       {surface.artifact ? <p className="jp-build__art">Artifact: {surface.artifact}</p> : null}
+      {surface.previewUrl ? <p className="jp-build__art">Preview {surface.previewUrl}</p> : null}
       {surface.tests ? <p className="jp-build__art">Tests: {surface.tests}</p> : null}
       {surface.evidence[0] ? (
         <p className="jp-build__ev">{surface.evidence[surface.evidence.length - 1]}</p>
