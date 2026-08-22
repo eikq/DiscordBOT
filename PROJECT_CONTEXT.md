@@ -15,6 +15,8 @@ A Jarvis-first addendum now takes priority: finish standalone Jarvis Core v1 bef
 
 Standalone desktop now has structured read-only SEE (`DesktopPerceptionProvider`), Jarvis-managed window identity after dedicated `--new-window` opens, and PLACE success only from observed display overlap. FOCUS is implemented for managed handles but is not fully live-verified. CLICK / TYPE / SUBMIT and continuous screen vision remain `PREPARE_CONTRACT`. Live A–I honesty is in `SESSION_STATE.md` on `local/jarvis-desktop-perception-v1-2026-08-22`.
 
+Standalone Jarvis now uses llama.cpp OpenAI-compatible `qwen38-cyber` at `http://127.0.0.1:8086/v1` (32768 context) as its canonical local model. Discord still uses Ollama `LLM_BASE_URL` / `LLM_MODEL`. Conversation history and durable memory stay SQLite-canonical (schema v3) with a rebuildable Obsidian view at `data/jarvis/obsidian/`. Permission-first outcomes and `BUILD_WEBSITE` / `BUILD_SOFTWARE` planning landed on `local/jarvis-qwen-memory-build-studio-v1-2026-08-22`. See `docs/JARVIS_QWEN_MEMORY_BUILD_STUDIO.md`. Qwen live inference was not verified in that session (llama.cpp `:8086` unreachable).
+
 Capability Intelligence now builds evidence-backed Self Knowledge from the existing CapabilityHost, model registries, provider/service observations, and CapabilitySelfModel. Registered, available, simulated, provider-contract, permission, local-acceptance, and distribution states remain separate. Capability graphs and structured gap plans support bounded WorkAgent replanning without creating a second registry or authority system. Verified outcomes alone increase proven competence. Assistant and Capability Explorer can answer capability, computer-control, CCTV, blocker, unavailable, and improvement questions without model imagination. CCTV remains owner-only `PREPARE_CONTRACT` plus SIMULATION; no real provider or LAN access is claimed. See `docs/JARVIS_CAPABILITY_INTELLIGENCE.md`.
 
 Natural owner objectives for the current research, workspace, basic indexed-text document, system health, reminder, and Self Knowledge workflows now resolve through one authoritative GoalCatalog plus exact trusted input adapters. Adapter output must validate against the registered capability schema and cannot create filesystem, credential, permission, capability, shell, risk, privilege, or confirmation authority. WorkAgent consumes the declared route and can use only bounded schema-compatible safe alternatives; goal outcome evidence stays separate from per-capability competence. Unknown or ambiguous goals ask for the smallest missing detail or remain unsupported. See `docs/JARVIS_GOAL_CATALOG_INPUT_ADAPTERS.md`.
@@ -23,7 +25,7 @@ Declared goals that need one more owner field now use an expiring, session-bound
 
 Mutating capability execution now has one persistent execution journal. Persistence is evidence, never permission. Interrupted mutation is reconciled without blind retry; ambiguous outcomes fail closed into containment. See `docs/JARVIS_EXECUTION_JOURNAL.md`.
 
-`PROJECT_STATUS.md` and `HANDOFF.md` were last verified **2026-08-09**. They are still useful for the verified-versus-unverified boundary of the Discord/GPU loop, but they do not describe the current local model stack. Since then the default LLM moved to **Ollama + Qwen3.8 27B**, STT defaulted to **Qwen3-ASR-1.7B**, and a **read-only world-intel research layer** was added. Qwen is the current owner profile, not a Core architecture requirement; model profiles may have unknown family/size/tool metadata until evidence-backed certification exists.
+`PROJECT_STATUS.md` and `HANDOFF.md` were last verified **2026-08-09**. They are still useful for the verified-versus-unverified boundary of the Discord/GPU loop, but they do not describe the current local model stack. Since then Discord still defaults to **Ollama + Qwen3.8 27B** at `:11434`. Standalone Jarvis’s canonical local runtime is now **llama.cpp OpenAI-compatible `qwen38-cyber`** at `:8086` (same backend OpenCode already uses). STT defaulted to **Qwen3-ASR-1.7B**, and a **read-only world-intel research layer** was added. Qwen is the current owner profile, not a Core architecture requirement; model profiles may have unknown family/size/tool metadata until evidence-backed certification exists.
 
 ---
 
@@ -70,7 +72,8 @@ Comments in `.env.example` are tuned for an **RTX 5090 Laptop 24 GB + 64 GB RAM*
 | Role | Current default | Where it runs |
 |---|---|---|
 | STT | `Qwen/Qwen3-ASR-1.7B`, fallback `Qwen3-ASR-0.6B` | `http://127.0.0.1:8765` |
-| LLM | Ollama model `digital-me-qwen38:27b-ad-q4km` (AtomicChat Qwen3.8 27B GGUF Q4_K_M) | `http://127.0.0.1:11434/v1` |
+| LLM (Discord / Digital Me) | Ollama model `digital-me-qwen38:27b-ad-q4km` (AtomicChat Qwen3.8 27B GGUF Q4_K_M) | `http://127.0.0.1:11434/v1` |
+| LLM (standalone Jarvis) | OpenAI-compatible llama.cpp alias `qwen38-cyber` (Qwen3.8 27B Cyber Abliterated Q4_K_M), context 32768 | `http://127.0.0.1:8086/v1` |
 | Embeddings | `Qwen3-Embedding-0.6B` HTTP, with CPU hash-vector fallback | `http://127.0.0.1:8767` |
 | Voice / RVC | Authenticated local RVC v2 service | `http://127.0.0.1:8766` |
 | Thai source TTS | JaiTTS-F5TTS preset `realtime`, Edge-TTS fallback for short reactions | `http://127.0.0.1:8768` |

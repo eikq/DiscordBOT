@@ -3,7 +3,54 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — Desktop perception and verified managed windows
+## This turn — Qwen runtime, conversation memory, permission-first build studio
+
+Branch: `local/jarvis-qwen-memory-build-studio-v1-2026-08-22` from exact
+perception HEAD `9c5605780124aaccf61d1f692b834bd5624ebcbb`.
+Did not modify `main`. Did not push. Cursor remains the development agent;
+the local Qwen coding worker was not substituted.
+
+Verification: `npx tsc --noEmit` PASS; focused qwen/memory/build + previously
+failing presentation/speech/cinematic tests PASS; `npm run test:cloud`
+**703 / 703** PASS (was 695 on the source HEAD); `npm run build` PASS
+(same Vite/`import.meta` warnings as before).
+
+Architecture (see `docs/JARVIS_QWEN_MEMORY_BUILD_STUDIO.md`):
+
+- Canonical **Jarvis** runtime is OpenAI-compatible llama.cpp
+  `http://127.0.0.1:8086/v1` model alias `qwen38-cyber`, context 32768,
+  max output 4096. Auth from `LOCAL_QWEN_API_KEY` /
+  `JARVIS_QWEN_API_KEY` / `LLM_API_KEY`. Keys are never logged or stored.
+- Discord/Digital Me `new LocalLlmProvider()` still defaults to Ollama
+  `http://127.0.0.1:11434/v1` / `digital-me-qwen38:27b-ad-q4km`.
+- Health is explicit (`MODEL_READY` / `OFFLINE` / `UNREACHABLE` /
+  `NOT_FOUND` / `AUTH_FAILED`). Offline owner copy:
+  `Qwen local ยังไม่พร้อม ผมยังไม่ได้เริ่มงานนี้`. No silent model switch.
+- `reasoning_content` / `<think>` are stripped from visible answers,
+  history, and Obsidian.
+- SQLite schema v3: `conversation_sessions`, `conversation_turns`,
+  `build_plans`. OWNER turn persists before work; JARVIS completes or
+  stays `incomplete` after crash. Obsidian at `data/jarvis/obsidian/`
+  is a rebuildable view (`OBSIDIAN != AUTHORITY`).
+- ContextBuilder budgets **19000** dynamic tokens of the 32768 window.
+- Permission-first outcomes: EXECUTE / ASK_PERMISSION / NEED_INPUT /
+  REFUSE last. Goal-scoped leases. Presence card is short Thai +
+  `[อนุญาตงานนี้] [ครั้งเดียว] [ไม่]`.
+- Goals `BUILD_WEBSITE` / `BUILD_SOFTWARE` plan first (`software.planBuild`);
+  files only after plan approval + ActionGate, under
+  `data/jarvis/builds/<slug>/`. No unrestricted shell.
+- `/jarvis` Presence adds Build/Plan surface, history HUD, Qwen status
+  from real SSE events.
+
+Local LIVE: llama.cpp at `:8086` was **unreachable** on this host during
+acceptance (`Unable to connect to the remote server`). Do **not** mark
+Qwen inference, history UI restart, or build-from-voice as
+`LIVE_VERIFIED`. Persistence/planning/permission behavior is
+`UNIT_VERIFIED` / `OFFLINE_VERIFIED` only.
+
+CLICK / TYPE / SUBMIT remain `PREPARE_CONTRACT`.
+
+## Previous — Desktop perception and verified managed windows
 
 Branch: `local/jarvis-desktop-perception-v1-2026-08-22` from exact
 context-runtime HEAD `081dc82d8acbf358b91dd0095d8457fe8772695e`.
