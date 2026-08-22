@@ -20,6 +20,11 @@ export {
   listOwnerAliases,
   rememberOwnerAlias,
   rememberOwnerPreference,
+  listOwnerPreferences,
+  formatOwnerPreferenceAnswer,
 } from './ownerSemantics';
 export { applyOpenedResource, MEMORY_TURN_BUDGET } from './workingContext';
 export { mergeResearchIntoContext, pickSourceByMention, referentStillValid, resolveThatSource, sourcesFromResearch } from './activeContext';
+export { buildJarvisContext, CONTEXT_DYNAMIC_BUDGET_TOKENS } from './contextBuilder';
+export { projectObsidianVault, defaultObsidianVaultPath } from './obsidianProjection';
+export { extractDurableOwnerMemory } from './durableExtract';

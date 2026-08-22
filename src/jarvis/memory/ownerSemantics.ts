@@ -114,6 +114,23 @@ export function formatAliasAnswer(aliases: OwnerAliasRecord[]): string {
   return displays.map(item => `“${item.phrase}” means ${item.target}.`).join(' ');
 }
 
+export function listOwnerPreferences(store: JarvisMemoryStore | undefined): Array<{ factKey: string; key: string; value: string }> {
+  if (!store) return [];
+  return store.listFacts({ limit: 80 })
+    .filter(item => item.status === 'active' && item.factKey.startsWith(OWNER_PREF_PREFIX))
+    .map(item => ({ factKey: item.factKey, key: item.predicate, value: item.objectValue }));
+}
+
+export function formatOwnerPreferenceAnswer(store: JarvisMemoryStore | undefined, query = ''): string {
+  const prefs = listOwnerPreferences(store);
+  if (!prefs.length) return 'I do not have an owner reply-style preference stored yet.';
+  const focused = /ตอบ|short|style|prefer|ชอบ/iu.test(query)
+    ? prefs.filter(item => /style|short|ตอบ|prefer|note/iu.test(`${item.key} ${item.value}`))
+    : prefs;
+  const used = focused.length ? focused : prefs;
+  return used.map(item => `You asked me to remember: ${item.value}`).join(' ');
+}
+
 export function normalizeAliasTarget(target: string): string {
   const trimmed = target.trim();
   if (trimmed.startsWith('display.fp:') || trimmed.startsWith('{')) return trimmed;

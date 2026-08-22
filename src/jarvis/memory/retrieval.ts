@@ -1,6 +1,7 @@
 import type { MemoryKind, MemoryStatus, SemanticFactRecord } from '../../bot/memory/jarvis/types';
 import type { JarvisMemoryStore, MemoryListFilter } from '../../bot/memory/jarvis/store';
 import { compactMemoryTokens, extractFactKeys, memoryIntentFor, wantsSupersededHistory } from './intent';
+import { OWNER_PREF_PREFIX } from './ownerSemantics';
 import {
   DEFAULT_MEMORY_TURN_LIMIT,
   formatMemoryPromptBlock,
@@ -97,6 +98,13 @@ export class JarvisMemoryRetrieval implements JarvisMemoryService {
 
     for (const factKey of extractFactKeys(query.text)) {
       pushAll(this.retrieve({ factKey, includeSuperseded, limit }));
+    }
+    if (/ชอบ|prefer|ตอบแบบ|reply.?style|how do i like/iu.test(query.text)) {
+      for (const fact of this.store.listFacts({ limit: 20 })) {
+        if (fact.status !== 'active' || !fact.factKey.startsWith(OWNER_PREF_PREFIX)) continue;
+        const mapped = mapRecord('fact', fact);
+        if (mapped) pushAll([mapped]);
+      }
     }
     const tokens = compactMemoryTokens(query.text);
     if (collected.length === 0 && tokens.length > 0) {
