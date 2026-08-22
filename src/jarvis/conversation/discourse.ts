@@ -296,7 +296,7 @@ function isTest(text: string): boolean {
 function isBuild(text: string, state: ConversationState | null | undefined): boolean {
   if (/create workspace|สร้างโฟลเดอร์โปรเจกต์/iu.test(text)) return false;
   if (/^(build|rebuild|build ใหม่)$/iu.test(text)) return Boolean(state?.activeProjectSlug);
-  return /build ใหม่|rebuild|รัน build|then build|ก็ build|ดู build|check (?:the )?build/iu.test(text) && Boolean(state?.activeProjectSlug);
+  return /build ใหม่|rebuild|รัน build|then build|แล้ว build|ก็ build|ดู build|check (?:the )?build/iu.test(text) && Boolean(state?.activeProjectSlug);
 }
 
 function isRerun(text: string): boolean {

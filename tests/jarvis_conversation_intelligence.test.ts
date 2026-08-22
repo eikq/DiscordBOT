@@ -846,6 +846,7 @@ test('then-test and look-at-build bind operations, and a blank-page hypothetical
   });
   assert.equal(interpretDiscourse('แล้ว test', state).act, 'TEST');
   assert.equal(interpretDiscourse('ดู build ก่อน', state).act, 'BUILD');
+  assert.equal(interpretDiscourse('แล้ว build', state).act, 'BUILD');
   const hypo = bindDiscourseToIntent(
     interpretDiscourse('สมมติผมบอกว่าหน้าเว็บเปิดแล้วขาวหมด คุณจะทำยังไง', state),
     state,
