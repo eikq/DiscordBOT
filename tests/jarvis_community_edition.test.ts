@@ -37,6 +37,7 @@ import {
   resetPrivateProviderConstructions,
   resolveJarvisEdition,
 } from '../src/jarvis/edition';
+import { createBuildPlan } from '../src/jarvis/build/planner';
 import { bindDiscourseToIntent, emptyConversationState, interpretDiscourse } from '../src/jarvis/conversation';
 import { interpretSemanticIntent } from '../src/jarvis/intent/semanticIntent';
 import { parseJarvisPage, visibleJarvisPages } from '../src/jarvis/ui/operating/JarvisOperatingShell';
@@ -301,6 +302,17 @@ test('community demo history and memory phrases bind without a model', () => {
   const memory = bindDiscourseToIntent(interpretDiscourse(recall, state), state, recall);
   assert.match(String(memory?.userMessage || ''), /clean futuristic/i);
   assert.equal(interpretSemanticIntent(recall).action, 'ASK_MEMORY');
+});
+
+test('community build plans advertise the community workspace, not owner builds', () => {
+  withEnv({ JARVIS_EDITION: 'community' }, () => {
+    const plan = createBuildPlan({ brief: 'สร้างเว็บ todo แบบ modern ให้ผม' });
+    assert.equal(plan.slug, 'todo-modern');
+    assert.match(plan.assumptions.join('\n'), /data\/community\/workspaces\/<slug>/);
+    assert.doesNotMatch(plan.assumptions.join('\n'), /data\/jarvis\/builds/);
+    assert.match(plan.acceptanceCriteria.join('\n'), /data\/community\/workspaces/);
+    assert.doesNotMatch(plan.acceptanceCriteria.join('\n'), /data\/jarvis\/builds/);
+  });
 });
 
 test('community documentation and launcher artifacts exist', () => {

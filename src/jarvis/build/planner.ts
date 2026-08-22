@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { resolveJarvisEdition } from '../edition/resolve';
+import { workspaceLogicalPath, workspaceRootLogicalPath } from '../edition/types';
 import type { BuildPlan, BuildProjectType, BuildStage } from './types';
 
 export function inferProjectType(brief: string): BuildProjectType {
@@ -45,6 +47,7 @@ export function createBuildPlan(input: {
   const title = titleFrom(brief, projectType);
   const now = Date.now();
   const stages = defaultStages(projectType);
+  const edition = resolveJarvisEdition();
   return {
     id: `plan_${randomUUID()}`,
     goalId: input.goalId || (projectType === 'WEBSITE' ? 'BUILD_WEBSITE' : 'BUILD_SOFTWARE'),
@@ -56,7 +59,7 @@ export function createBuildPlan(input: {
     requirements: requirementsFor(brief, projectType),
     assumptions: [
       'React/Vite starter unless the owner names another stack.',
-      'Files stay inside data/jarvis/builds/<slug>/ until a later export task.',
+      `Files stay inside ${workspaceLogicalPath('<slug>', edition)} until a later export task.`,
       'Install, build, test, and localhost preview use typed project capabilities. No unrestricted shell.',
     ],
     projectType,
@@ -66,7 +69,7 @@ export function createBuildPlan(input: {
     artifactsExpected: [`${slug}/`, `${slug}/package.json`, `${slug}/src/App.jsx`, `${slug}/tests/smoke.test.mjs`],
     acceptanceCriteria: [
       'Owner can review the plan before any files exist.',
-      'After approval and a bounded lease, sandbox files exist under data/jarvis/builds/.',
+      `After approval and a bounded lease, sandbox files exist under ${workspaceRootLogicalPath(edition)}/.`,
       'CLICK / TYPE / SUBMIT remain unavailable.',
     ],
     risks: [

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { JarvisEdition } from './types';
+import { workspaceLogicalPath, type JarvisEdition } from './types';
 
 export function resolveJarvisEdition(env: NodeJS.ProcessEnv = process.env): JarvisEdition {
   const raw = String(env.JARVIS_EDITION || '').trim().toLowerCase();
@@ -29,10 +29,7 @@ export function jarvisWorkspaceDirName(env: NodeJS.ProcessEnv = process.env): st
 }
 
 export function jarvisWorkspaceLogicalPath(slug: string, env: NodeJS.ProcessEnv = process.env): string {
-  const safe = slug.replace(/\\/gu, '/').replace(/^\/+|\/+$/gu, '');
-  return resolveJarvisEdition(env) === 'community'
-    ? `data/community/workspaces/${safe}`
-    : `data/jarvis/builds/${safe}`;
+  return workspaceLogicalPath(slug, resolveJarvisEdition(env));
 }
 
 export function ensureJarvisDataRoot(workspaceRoot = process.cwd(), env: NodeJS.ProcessEnv = process.env): string {

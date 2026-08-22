@@ -53,3 +53,12 @@ export const COMMUNITY_SAMPLE_PROMPTS = [
 
 export const COMMUNITY_MODEL_OFFLINE_MESSAGE =
   'LOCAL MODEL OFFLINE. Configure an OpenAI-compatible local model to begin.';
+
+export function workspaceRootLogicalPath(edition: JarvisEdition): string {
+  return edition === 'community' ? 'data/community/workspaces' : 'data/jarvis/builds';
+}
+
+export function workspaceLogicalPath(slug: string, edition: JarvisEdition): string {
+  const safe = slug.replace(/\\/gu, '/').replace(/^\/+|\/+$/gu, '');
+  return `${workspaceRootLogicalPath(edition)}/${safe}`;
+}
