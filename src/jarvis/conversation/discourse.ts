@@ -60,6 +60,8 @@ export function interpretDiscourse(
 
   const conditional = parseConditional(raw);
   if (conditional) return conditional;
+  const chain = parseOperationChain(raw);
+  if (chain) return chain;
 
   if (isStopPreview(raw)) return act('STOP_PREVIEW');
   if (isRestartPreview(raw)) return act('RESTART_PREVIEW');
@@ -168,7 +170,8 @@ function isPause(text: string): boolean {
 
 function isContinue(text: string): boolean {
   return /^(ทำต่อ|ไปต่อ|ต่อ|continue|resume|keep going)$/iu.test(text)
-    || /กลับไปทำ(?:เว็บ)?ต่อ|ทำงานเดิมต่อ|finish this task|resume the task/iu.test(text);
+    || /กลับไปทำ(?:เว็บ)?ต่อ|ทำงานเดิมต่อ|finish this task|resume the task/iu.test(text)
+    || /มาทำเว็บต่อ|กลับมาที่เว็บไซต์|กลับมาทำเว็บ/iu.test(text);
 }
 
 function isExecuteNow(text: string): boolean {
@@ -239,6 +242,7 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
 
 function isInspect(text: string, state: ConversationState | null | undefined): boolean {
   if (/\.(jsx?|tsx?|css|json)\b/.test(text)) return true;
+  if (/function ไหน|ฟังก์ชันไหน|which function|ไฟล์ไหน.*(จัดการ|todo)|where (?:is|does)/iu.test(text)) return true;
   if (!hasActiveSoftware(state) && !/โปรเจกต์นี้|เว็บนี้/iu.test(text)) return false;
   return /มีหน้าอะไร|ไฟล์อะไรหลัก|package อะไร|ติดตั้งแล้วหรือยัง|ไฟล์ไหนเปลี่ยน|เมื่อกี้แก้อะไร|เปิดดู .+\.(jsx?|tsx?|css|json)/iu.test(text);
 }
@@ -317,8 +321,8 @@ function isAccumulate(text: string, state: ConversationState | null | undefined)
 }
 
 function isModify(text: string, state: ConversationState | null | undefined): boolean {
-  if (!hasActiveSoftware(state) && !/เว็บนี้|โปรเจกต์นี้|มัน|อันนี้/iu.test(text)) return false;
-  return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|hover|animation|dark mode|ทำตามนั้น|ให้มันดู|layout|column/iu.test(text);
+  if (!hasActiveSoftware(state) && !/เว็บนี้|โปรเจกต์นี้|มัน|อันนี้|ตรงนั้น|ตรงนี้/iu.test(text)) return false;
+  return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|hover|animation|dark mode|ทำตามนั้น|ให้มันดู|layout|column|ตรงนั้นแหละ|ตรงนี้แหละ/iu.test(text);
 }
 
 function isDestructiveAmbiguous(text: string): boolean {
@@ -349,31 +353,42 @@ function isMostlyOrdinal(text: string): boolean {
 
 function parseConditional(text: string): DiscourseInterpretation | null {
   if (!/ถ้า/.test(text) && !/\bif\b/iu.test(text)) return null;
-  const testThenBuild = /test/.test(text.toLocaleLowerCase()) && /build/iu.test(text);
-  const buildThenPreview = /build/iu.test(text) && /preview|เปิด/iu.test(text);
-  if (testThenBuild) {
-    return {
-      act: 'CONDITIONAL',
-      ifKind: 'test',
-      thenAct: 'BUILD',
-      confidence: 'HIGH',
-      requiresClarification: false,
-      source: 'discourse',
-      change: text,
-    };
+  return chainInterpretation(text);
+}
+
+function parseOperationChain(text: string): DiscourseInterpretation | null {
+  if (!/แล้ว|then|เสร็จแล้ว|ผ่านแล้วให้|and then/iu.test(text)) return null;
+  const acts = chainActs(text);
+  if (acts.length < 2) return null;
+  return chainInterpretation(text, acts);
+}
+
+function chainActs(text: string): DiscourseAct[] {
+  const acts: DiscourseAct[] = [];
+  const lower = text.toLocaleLowerCase();
+  if (/เพิ่ม|แก้|dark mode|filter|animation|ปรับ/iu.test(text)
+    && (/\btests?\b/iu.test(lower) || /\bbuild\b/iu.test(lower) || /preview|เปิดให้ดู|เปิดดู/iu.test(text))) {
+    acts.push('MODIFY_PROJECT');
   }
-  if (buildThenPreview) {
-    return {
-      act: 'CONDITIONAL',
-      ifKind: 'build',
-      thenAct: 'PREVIEW',
-      confidence: 'HIGH',
-      requiresClarification: false,
-      source: 'discourse',
-      change: text,
-    };
-  }
-  return null;
+  if (/\btests?\b/iu.test(lower) || /รัน test/iu.test(text)) acts.push('TEST');
+  if (/\bbuild\b/iu.test(lower)) acts.push('BUILD');
+  if ((/preview/iu.test(lower) || /เปิดให้ดู|เปิดดู/iu.test(text)) && acts.length) acts.push('PREVIEW');
+  return acts;
+}
+
+function chainInterpretation(text: string, acts = chainActs(text)): DiscourseInterpretation | null {
+  if (acts.length < 2) return null;
+  const ifKind = acts.includes('TEST') ? 'test' as const : 'build' as const;
+  return {
+    act: 'CONDITIONAL',
+    ifKind,
+    thenAct: acts[acts.length - 1],
+    thenActs: acts,
+    confidence: 'HIGH',
+    requiresClarification: false,
+    source: 'discourse',
+    change: text,
+  };
 }
 
 function parseQueue(text: string): string[] | null {

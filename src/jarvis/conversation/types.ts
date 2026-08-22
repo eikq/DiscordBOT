@@ -149,6 +149,7 @@ export type DiscourseInterpretation = {
   researchQuery?: string;
   recommend?: boolean;
   thenAct?: DiscourseAct;
+  thenActs?: DiscourseAct[];
   ifKind?: 'test' | 'build';
   queueItems?: string[];
   queueOp?: {

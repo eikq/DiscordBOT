@@ -548,6 +548,9 @@ export class JarvisLabRuntime {
     const conversation = {
       ...conversationView(conversationState),
       debug: conversationDebugView(conversationState, {
+        intent: this.lastConversationBind?.sessionId === sessionId
+          ? this.lastConversationBind.discourse.act
+          : conversationState.lastDiscourse,
         capabilityId: this.lastConversationBind?.sessionId === sessionId
           ? this.lastConversationBind.resolution.capabilityId
           : conversationState.lastJarvisAction,
@@ -803,6 +806,8 @@ export class JarvisLabRuntime {
       return this.finalizeVisibleTurn(sessionId, await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind));
     }
     const prepared = await this.prepareAsk(input);
+    const granted = await this.grantPendingFromText(input, prepared);
+    if (granted) return this.finalizeVisibleTurn(sessionId, granted);
     const memoryTurn = await this.finishOwnerMemoryTurn(input, prepared);
     if (memoryTurn) return this.finalizeVisibleTurn(sessionId, memoryTurn);
     if (prepared.continuedTask) {
@@ -869,6 +874,8 @@ export class JarvisLabRuntime {
       return emitFinal(await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind));
     }
     const prepared = await this.prepareAsk(input);
+    const granted = await this.grantPendingFromText(input, prepared);
+    if (granted) return emitFinal(granted);
     const memoryTurn = await this.finishOwnerMemoryTurn(input, prepared);
     if (memoryTurn) return emitFinal(memoryTurn);
     if (prepared.continuedTask) {
@@ -919,27 +926,32 @@ export class JarvisLabRuntime {
     actionSource?: 'text' | 'voice' | 'ui' | 'system';
     duration?: 'ONCE' | 'THIS_GOAL';
     visibleText?: string;
+    alreadyPersisted?: boolean;
   }): Promise<StandaloneTextTurnOutput & {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
     speech?: VoiceOutputResult;
     pendingConfirmation?: PendingConfirmation;
+    research: ResearchSnapshot;
+    workspace: WorkspaceSnapshot;
   }> {
     if (!this.capabilityHost || !isActionHost(this.capabilityHost)) {
       throw new Error('Action confirmation is unavailable.');
     }
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
     const source = ownerDecisionSourceFrom(input.actionSource);
-    this.persistOwnerTurn(
-      sessionId,
-      ownerConfirmationVisibleText({
-        decision: 'allow',
-        duration: input.duration,
-        visibleText: input.visibleText,
-        source,
-      }),
-      source === 'voice' ? 'voice' : source === 'text' ? 'text' : 'ui_action',
-    );
+    if (!input.alreadyPersisted) {
+      this.persistOwnerTurn(
+        sessionId,
+        ownerConfirmationVisibleText({
+          decision: 'allow',
+          duration: input.duration,
+          visibleText: input.visibleText,
+          source,
+        }),
+        source === 'voice' ? 'voice' : source === 'text' ? 'text' : 'ui_action',
+      );
+    }
     const waiting = this.workCenter()?.agent.store.active().find(task => (
       task.status === 'WAITING_PERMISSION'
       && task.plan.some(step => step.pendingConfirmation?.proposalId === input.proposalId)
@@ -1992,7 +2004,10 @@ export class JarvisLabRuntime {
     this.activeJarvisTurnId = undefined;
     this.projectMemoryView(sessionId);
     this.recordConversationTurn(sessionId, output);
-    return output;
+    return {
+      ...output,
+      conversation: this.permissionSnapshot(sessionId).conversation,
+    };
   }
 
   private projectMemoryView(sessionId: string): void {
@@ -2086,6 +2101,30 @@ export class JarvisLabRuntime {
     } catch {
       return undefined;
     }
+  }
+
+  private async grantPendingFromText(
+    input: JarvisLabAskInput,
+    prepared: {
+      sessionId: string;
+      resolution: IntentResolution;
+    },
+  ) {
+    if (prepared.resolution.reasonCode !== 'GRANT_PENDING_PERMISSION') return undefined;
+    if (!this.capabilityHost || !isActionHost(this.capabilityHost)) return undefined;
+    const pending = this.capabilityHost.hydratePendingConfirmation?.(prepared.sessionId)
+      || this.capabilityHost.runtimePermissionView?.()?.pending;
+    if (!pending?.proposalId || !pending.token) return undefined;
+    return await this.confirmAction({
+      proposalId: pending.proposalId,
+      token: pending.token,
+      sessionId: prepared.sessionId,
+      speak: input.speak,
+      actionSource: input.actionSource === 'voice' ? 'voice' : 'text',
+      duration: 'THIS_GOAL',
+      visibleText: String(input.text || ''),
+      alreadyPersisted: true,
+    });
   }
 
   private async continueApprovedPlan(input: JarvisLabAskInput, sessionId: string) {

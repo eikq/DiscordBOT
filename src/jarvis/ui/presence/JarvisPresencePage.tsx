@@ -86,6 +86,7 @@ type AskResponse = {
   pendingConfirmation?: LabPendingConfirmation;
   coreState: string;
   research?: LabResearchSnapshot;
+  conversation?: ConversationStrip | null;
   speech?: {
     status?: string;
     turnId?: string;
@@ -738,6 +739,7 @@ export default function JarvisPresencePage() {
     try {
       const payload = await askStream(payloadText, Boolean(spokenText)) ?? await askOnce(payloadText, Boolean(spokenText));
       setResponse(payload);
+      if (payload.conversation) setConversation(payload.conversation);
       setPendingConfirmation(payload.pendingConfirmation ?? null);
       setResearch(payload.research ?? research);
       setDraft(null);

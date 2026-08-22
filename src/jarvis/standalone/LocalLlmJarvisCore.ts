@@ -381,17 +381,31 @@ export class LocalLlmJarvisCore implements JarvisCore {
       toolResults.push(capabilityResultToToolRef(result));
       if (isResearchResult(result.structured?.research)) {
         researchFacts.push(...researchFactsFromResult(result.structured.research));
+        const synthesis = result.structured.summary || result.content;
+        if (synthesis) summaries.push(String(synthesis));
       }
       if (isWorkspaceResult(result.structured?.workspace)) {
         researchFacts.push(...workspaceFactsFromResult(result.structured.workspace));
         documentRefs.push(...result.structured.workspace.documentRefs);
       }
-      if (isGatedCapabilityId(call.id) || result.status === 'confirmation_required' || result.structured?.proposalId) {
+      const gated = isGatedCapabilityId(call.id) || result.status === 'confirmation_required' || Boolean(result.structured?.proposalId);
+      if (gated) {
         const action = capabilityResultToActionResult(result);
         actionResults.push(action);
-        if (action.summary) summaries.push(action.summary);
+        if (action.summary && !summaries.includes(action.summary)) summaries.push(action.summary);
         pendingConfirmation ??= pendingConfirmationOf(result);
+      } else if (result.status === 'ok' && actionResults.length === 0 && result.content) {
+        const action = capabilityResultToActionResult(result);
+        actionResults.push(action);
+        if (action.summary && !summaries.includes(action.summary)) summaries.push(action.summary);
       }
+      const stop = result.status === 'error'
+        || result.status === 'rejected'
+        || result.status === 'unavailable'
+        || result.status === 'timeout'
+        || result.status === 'confirmation_required'
+        || Boolean(result.structured?.proposalId);
+      if (stop) break;
     }
     timings.capabilityExecutionMs = Date.now() - started;
     return {

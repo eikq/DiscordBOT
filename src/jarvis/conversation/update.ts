@@ -172,8 +172,12 @@ export function applyTurnToConversation(
   }
   const slug = typeof input.resolution.arguments?.slug === 'string' ? String(input.resolution.arguments.slug) : undefined;
   const planId = typeof input.resolution.arguments?.planId === 'string' ? String(input.resolution.arguments.planId) : undefined;
+  const relativePath = typeof input.resolution.arguments?.relativePath === 'string'
+    ? String(input.resolution.arguments.relativePath)
+    : undefined;
   if (slug) next.activeProjectSlug = slug;
   if (planId) next.activePlanId = planId;
+  if (relativePath) next.referents.this_file = relativePath;
   if (input.preview) {
     next.activePreview = input.preview;
     next.referents.this_preview = input.preview.url;

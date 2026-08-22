@@ -7,7 +7,17 @@ export function writeWebsite(plan: BuildPlan, workspace: ProjectWorkspace, mode:
   const written: string[] = [];
   for (const [relative, contents] of files) {
     if (mode === 'revise' && relative === 'package.json' && workspace.exists(plan.slug)) continue;
-    workspace.writeFile(plan.slug, relative, contents);
+    let next = contents;
+    if (mode === 'revise') {
+      try {
+        const existing = workspace.readFile(plan.slug, relative);
+        next = preserveConstrained(relative, contents, existing, plan);
+        if (next === existing && constrainedSkip(relative, plan)) continue;
+      } catch {
+        // File may not exist yet on first revise of a new path.
+      }
+    }
+    workspace.writeFile(plan.slug, relative, next);
     written.push(relative);
   }
   return written;
@@ -73,7 +83,29 @@ function wantsDark(plan: BuildPlan): boolean {
 }
 
 function constraintsOf(plan: BuildPlan): string[] {
-  return plan.requirements.filter(item => /อย่าแตะ|ไม่ต้องเปลี่ยนสี|ไม่เอาส่วน|navbar ยัง/iu.test(item));
+  return plan.requirements.filter(item => /อย่าแตะ|ไม่ต้องเปลี่ยนสี|ไม่เอาส่วน|navbar ยัง|ไม่เอาหน้า/iu.test(item));
+}
+
+function constrainedSkip(relative: string, plan: BuildPlan): boolean {
+  const blob = constraintsOf(plan).join('\n');
+  if (/navbar/iu.test(blob) && relative === 'src/App.jsx') return true;
+  if (/ไม่ต้องเปลี่ยนสี|อย่าเปลี่ยนสี/iu.test(blob) && relative === 'src/styles.css') return true;
+  return false;
+}
+
+function preserveConstrained(relative: string, generated: string, existing: string, plan: BuildPlan): string {
+  const blob = constraintsOf(plan).join('\n');
+  if (relative === 'src/App.jsx' && /navbar|อย่าแตะ nav/iu.test(blob)) {
+    const nav = existing.match(/<nav[\s\S]*?<\/nav>/iu)?.[0];
+    if (nav && /<nav[\s\S]*?<\/nav>/iu.test(generated)) {
+      return generated.replace(/<nav[\s\S]*?<\/nav>/iu, nav);
+    }
+    if (nav) return existing;
+  }
+  if (relative === 'src/styles.css' && /ไม่ต้องเปลี่ยนสี|อย่าเปลี่ยนสี/iu.test(blob)) {
+    return existing;
+  }
+  return generated;
 }
 
 function readme(plan: BuildPlan): string {

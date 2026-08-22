@@ -44,17 +44,24 @@ function render(
   observations: string[],
 ): string {
   const planSpeak = task.toolResults.find(item => item.capability === 'software.planBuild' && item.status === 'ok')?.summary;
-  if (planSpeak && !planSpeak.startsWith('untrusted')) return planSpeak;
+  if (planSpeak && !planSpeak.startsWith('untrusted') && !isInternalSpeak(planSpeak)) return compactSpeak(planSpeak);
   const applySpeak = task.toolResults.find(item => item.capability === 'software.applyBuild' && item.status === 'ok')?.summary;
-  if (applySpeak && !applySpeak.startsWith('untrusted')) return applySpeak;
-  const objective = task.objective.slice(0, 160);
+  if (applySpeak && !applySpeak.startsWith('untrusted') && !isInternalSpeak(applySpeak)) return compactSpeak(applySpeak);
+  const testSpeak = task.toolResults.find(item => /runTests|\.test/i.test(item.capability) && item.status === 'ok')?.summary;
+  if (outcome === 'SUCCESS' && task.verification?.summary && !isInternalSpeak(task.verification.summary)) {
+    return compactSpeak(task.verification.summary);
+  }
+  if (outcome === 'SUCCESS' && testSpeak && !isInternalSpeak(testSpeak)) {
+    return compactSpeak(testSpeak);
+  }
+  const objective = task.objective.slice(0, 80);
   const lines = [`${label(outcome)} for “${objective}”.`];
   if (task.verification?.summary) lines.push(task.verification.summary);
-  if (observations[0]) lines.push(observations[0]);
-  if (evidence[0] && evidence[0] !== observations[0]) lines.push(`Evidence: ${evidence[0]}`);
+  if (observations[0] && outcome !== 'SUCCESS') lines.push(observations[0]);
   if (outcome === 'BLOCKED' && task.permissionRequirements[0]) {
-    lines.push(`Waiting on owner permission for ${task.permissionRequirements[0]}.`);
+    lines.push('ทำได้ครับ แต่ต้องขอสิทธิ์ก่อน');
   }
+  if (outcome === 'FAILED' && evidence[0]) lines.push(evidence[0]);
   if (task.status === 'WAITING_INPUT' && task.waitingInput) {
     lines.push(`Waiting for owner input: ${task.waitingInput.question}`);
   }
@@ -70,6 +77,15 @@ function render(
   }
   if (task.simulated) lines.push('This run was labeled SIMULATION.');
   return lines.join(' ').replace(/\s+/gu, ' ').trim();
+}
+
+function isInternalSpeak(text: string): boolean {
+  return /postcondition|mutation postcondition|no mutation/i.test(text);
+}
+
+function compactSpeak(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length > 180 ? `${clean.slice(0, 177)}…` : clean;
 }
 
 function label(outcome: SynthesizedTaskResponse['outcome']): string {

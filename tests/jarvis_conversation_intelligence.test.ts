@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
+  applyTurnToConversation,
   bindDiscourseToIntent,
   ConversationStateStore,
   discoursePreemptsPendingGoal,
@@ -15,7 +16,7 @@ import {
 } from '../src/jarvis/conversation';
 import type { ConversationState } from '../src/jarvis/conversation';
 import { DESKTOP_OPEN_SCOPED_RESOURCE } from '../src/jarvis/capabilities/actions/constants';
-import { PROJECT_BUILD, PROJECT_RUN_TESTS, PROJECT_START_DEV_SERVER } from '../src/jarvis/project/constants';
+import { PROJECT_BUILD, PROJECT_READ_FILE, PROJECT_RUN_TESTS, PROJECT_START_DEV_SERVER } from '../src/jarvis/project/constants';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../src/jarvis/build/constants';
 import { resolveUserIntent } from '../src/jarvis/intent';
 import { compactCapabilityCatalog } from '../src/jarvis/intent/catalog';
@@ -560,4 +561,79 @@ test('negation plus a positive edit is a constrained modification, not a new goa
   const discourse = interpretDiscourse('เพิ่ม animation แต่ไม่เอาหน้า contact', state);
   assert.equal(discourse.act, 'MODIFY_PROJECT');
   assert.match(String(discourse.constraint || ''), /contact/i);
+});
+
+test('natural text grant binds the pending proposal instead of card-only talk', () => {
+  const state = softwareState({
+    pendingPermission: { proposalId: 'ap-grant-1', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio' },
+  });
+  for (const phrase of ['อนุญาตงานนี้', 'allow this goal', 'อนุญาต']) {
+    const bound = bindDiscourseToIntent(interpretDiscourse(phrase, state), state, phrase);
+    assert.equal(bound?.reasonCode, 'GRANT_PENDING_PERMISSION', phrase);
+    assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
+  }
+});
+
+test('conditional chains bind test then build then preview and stop after a failed test', () => {
+  const held = bindDiscourseToIntent(
+    interpretDiscourse('ถ้า test ผ่านให้ build แล้วถ้า build ผ่านเปิด preview', softwareState({
+      recentVerification: { kind: 'test', ok: false, summary: 'failed', at: 9, slug: 'portfolio' },
+    })),
+    softwareState({ recentVerification: { kind: 'test', ok: false, summary: 'failed', at: 9, slug: 'portfolio' } }),
+    'ถ้า test ผ่านให้ build แล้วถ้า build ผ่านเปิด preview',
+  );
+  assert.equal(held?.reasonCode, 'CONDITIONAL_HELD');
+  assert.equal(held?.extraCalls, undefined);
+
+  const chain = bindDiscourseToIntent(
+    interpretDiscourse('ถ้า test ผ่านให้ build แล้วถ้า build ผ่านเปิด preview', softwareState()),
+    softwareState(),
+    'ถ้า test ผ่านให้ build แล้วถ้า build ผ่านเปิด preview',
+  );
+  assert.equal(chain?.capabilityId, PROJECT_RUN_TESTS);
+  assert.equal(chain?.extraCalls?.[0]?.id, PROJECT_BUILD);
+  assert.equal(chain?.extraCalls?.[1]?.id, PROJECT_START_DEV_SERVER);
+
+  for (const phrase of ['เสร็จแล้ว test build แล้วเปิดให้ดู', 'test then build then preview']) {
+    const bound = bindDiscourseToIntent(interpretDiscourse(phrase, softwareState()), softwareState(), phrase);
+    assert.equal(bound?.capabilityId, PROJECT_RUN_TESTS, phrase);
+    assert.ok((bound?.extraCalls || []).some(item => item.id === PROJECT_BUILD), phrase);
+    assert.ok((bound?.extraCalls || []).some(item => item.id === PROJECT_START_DEV_SERVER), phrase);
+  }
+});
+
+test('code referents let a later edit target the inspected file', () => {
+  const state = softwareState({
+    activeProjectSlug: 'todo-modern',
+    projects: [{ slug: 'todo-modern', label: 'Todo App', kind: 'website', goalId: 'BUILD_WEBSITE', planId: 'plan_todo' }],
+    referents: { this_project: 'todo-modern', this_app: 'todo-modern' },
+  });
+  const inspect = bindDiscourseToIntent(interpretDiscourse('function ไหนจัดการ todo', state), state, 'function ไหนจัดการ todo');
+  assert.equal(inspect?.capabilityId, PROJECT_READ_FILE);
+  assert.equal(inspect?.arguments?.relativePath, 'src/App.jsx');
+  const next = applyTurnToConversation(state, {
+    ownerText: 'function ไหนจัดการ todo',
+    discourse: interpretDiscourse('function ไหนจัดการ todo', state),
+    resolution: inspect!,
+  });
+  assert.equal(next.referents.this_file, 'src/App.jsx');
+  const edit = bindDiscourseToIntent(interpretDiscourse('ตรงนั้นแหละ เพิ่ม filter completed', next), next, 'ตรงนั้นแหละ เพิ่ม filter completed');
+  assert.equal(edit?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.match(String(edit?.arguments?.brief || ''), /filter completed/i);
+  assert.match(String(edit?.arguments?.brief || ''), /App\.jsx/i);
+});
+
+test('resume-the-site wording stays on the active project across paraphrases', () => {
+  const state = softwareState({
+    projects: [
+      { slug: 'todo-modern', label: 'Todo App', kind: 'website' },
+      { slug: 'portfolio', label: 'Portfolio', kind: 'website', planId: 'plan_portfolio' },
+    ],
+  });
+  for (const phrase of ['กลับไปทำเว็บต่อ', 'กลับมาที่เว็บไซต์', 'มาทำเว็บต่อ']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'CONTINUE', phrase);
+    const bound = bindDiscourseToIntent(discourse, state, phrase);
+    assert.doesNotMatch(String(bound?.userMessage || ''), /Todo/i, phrase);
+  }
 });

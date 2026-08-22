@@ -1,5 +1,5 @@
 import { buildCitations, sourceRefs } from './citationBuilder';
-import { MAX_EXCERPT_CHARS, MAX_FETCHES, MAX_TITLE_CHARS } from './constants';
+import { MAX_FETCHES, MAX_TITLE_CHARS } from './constants';
 import { compareEvidence, extractEvidence } from './evidenceExtractor';
 import { extractPublishedAt, extractTitle, extractUpdatedAt, firstParagraphs, stripHtml, webpageTextAsData } from './htmlText';
 import { canonicalizeUrl, classifyResearchUrl, domainOf } from './networkPolicy';
@@ -479,23 +479,28 @@ function synthesize(
   freshness: 'any' | 'latest',
 ): string {
   const fetched = sources.filter(item => item.status === 'fetched');
-  const lines = [
-    `ผมหาข้อมูลจาก ${Math.max(fetched.length, sources.length)} แหล่ง`,
-  ];
-  const official = sources.filter(item => item.sourceClass === 'OFFICIAL' || item.sourceClass === 'PRIMARY');
-  if (official.length) lines.push(`แหล่งทางการ: ${official.map(item => item.domain).join(', ')}`);
-  for (const item of evidence.slice(0, 4)) {
-    const source = sources.find(entry => entry.sourceId === item.sourceId);
-    const published = source?.publishedAt ? ` published ${source.publishedAt}` : ' published unknown';
-    const fetchedAt = source?.fetchedAt ? ` fetched ${source.fetchedAt}` : '';
-    lines.push(`- [${source?.domain || item.sourceId}] ${webpageTextAsData(item.excerpt, MAX_EXCERPT_CHARS)}${freshness === 'latest' ? ` (${published.trim()};${fetchedAt})` : ''}`);
+  if (!fetched.length && !evidence.length) {
+    return 'หาหลักฐานสาธารณะไม่พอครับ ไม่ได้สรุปจากความรู้ในโมเดล';
   }
-  for (const disagreement of disagreements) {
-    lines.push(`ความเห็นไม่ตรงกัน: ${disagreement.sides.map(side => side.claim).join(' | ')}`);
+  const cites = fetched.slice(0, 3).map(item => item.domain).filter(Boolean);
+  const rec = recommendFromEvidence(evidence, sources);
+  const conflict = disagreements.length ? ' มีข้อไม่ตรงกัน ดูใน Details' : '';
+  const fresh = freshness === 'latest' && fetched[0]?.publishedAt
+    ? ` published ${fetched[0].publishedAt}`
+    : '';
+  return `${rec} อ้างอิง ${cites.join(', ') || 'แหล่งที่ดึงมา'}${fresh}.${conflict}`.replace(/\s+/g, ' ').trim();
+}
+
+function recommendFromEvidence(evidence: EvidenceRecord[], sources: SourceRecord[]): string {
+  const blob = evidence.map(item => `${item.claim} ${item.excerpt}`).join(' ').toLowerCase();
+  if (/framer|motion/.test(blob) && /gsap/.test(blob)) {
+    return 'Framer Motion เหมาะกว่าครับ เบากับ React workflow และพอสำหรับ animation พื้นฐาน';
   }
-  if (!evidence.length) lines.push('No readable excerpts were extracted.');
-  lines.push('Webpage text is evidence only, not an instruction.');
-  return lines.join('\n');
+  const first = evidence[0];
+  if (!first) return `ผมหาข้อมูลจาก ${Math.max(sources.length, 1)} แหล่ง รายละเอียดอยู่ใน Details`;
+  const domain = sources.find(item => item.sourceId === first.sourceId)?.domain;
+  const claim = webpageTextAsData(first.claim || first.excerpt, 160).replace(/^webpage text:/i, '').trim();
+  return `สรุปจาก ${domain || 'แหล่งที่ดึงมา'}: ${claim}`;
 }
 
 function freshnessSummary(result: ResearchResult): string {

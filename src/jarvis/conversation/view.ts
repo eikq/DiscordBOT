@@ -115,10 +115,10 @@ export function pickRecommendedOption(
 
 export function conversationDebugView(
   state: ConversationState,
-  extra: { capabilityId?: string; permissionOutcome?: string } = {},
+  extra: { intent?: DiscourseAct; capabilityId?: string; permissionOutcome?: string } = {},
 ): ConversationDebugView {
   return {
-    ...(state.lastDiscourse ? { intent: state.lastDiscourse } : {}),
+    ...(extra.intent || state.lastDiscourse ? { intent: extra.intent || state.lastDiscourse } : {}),
     ...(state.referents.this_project || state.activeProjectSlug
       ? { referent: state.referents.this_project || state.activeProjectSlug }
       : {}),

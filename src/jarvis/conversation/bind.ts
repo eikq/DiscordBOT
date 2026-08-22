@@ -70,7 +70,7 @@ export function bindDiscourseToIntent(
     case 'START_FRESH':
       return talk(startFreshLine(state), 'START_FRESH');
     case 'GRANT_PERMISSION':
-      return talk('กดอนุญาตบนการ์ดได้เลยครับ หรือบอกว่าอนุญาตงานนี้', 'GRANT_PERMISSION');
+      return grantPending(state);
     case 'APPROVE_PLAN':
       return approve(state);
     case 'PLAN_REQUEST':
@@ -275,6 +275,10 @@ function inspect(state: ConversationState, text: string): IntentResolution {
   if (/package\.json|package อะไร/iu.test(text)) {
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: 'package.json' }, 'CONVERSATION_READ_PACKAGE');
   }
+  if (/function ไหน|ฟังก์ชันไหน|which function|ไฟล์ไหน.*(จัดการ|todo)/iu.test(text)) {
+    const file = state.referents.this_file || 'src/App.jsx';
+    return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_SYMBOL');
+  }
   if (/\.jsx?|\.tsx?|\.css|\.json|App\.jsx/iu.test(text)) {
     const file = text.match(/([\w./-]+\.(?:jsx?|tsx?|css|json))/iu)?.[1] || 'src/App.jsx';
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_FILE');
@@ -330,14 +334,74 @@ function selectOrdinal(state: ConversationState, ordinal: number | undefined): I
 function bindConditional(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution {
   const last = state.recentVerification;
   if (discourse.ifKind === 'test' && last?.kind === 'test' && last.ok === false) {
-    return talk('test ยังไม่ผ่าน เลยยังไม่ build ครับ', 'CONDITIONAL_HELD');
+    return talk('test ยังไม่ผ่าน เลยยังไม่ทำขั้นตอนถัดไปครับ', 'CONDITIONAL_HELD');
   }
-  if (discourse.ifKind === 'test' && (last?.kind === 'test' ? last.ok !== false : true)) {
-    if (last?.kind === 'test' && last.ok) return projectCall(state, PROJECT_BUILD, 'CONDITIONAL_BUILD');
-    return projectCall(state, PROJECT_RUN_TESTS, 'CONDITIONAL_TEST_FIRST');
+  if (discourse.ifKind === 'build' && last?.kind === 'build' && last.ok === false) {
+    return talk('build ยังไม่ผ่าน เลยยังไม่เปิด preview ครับ', 'CONDITIONAL_HELD');
   }
-  if (discourse.thenAct === 'PREVIEW') return projectCall(state, PROJECT_START_DEV_SERVER, 'CONDITIONAL_PREVIEW');
-  return talk('จำเงื่อนไขนั้นไว้ครับ', 'CONDITIONAL_STORED');
+  const resolved = uniqueSlugOrClarify(state);
+  if ('message' in resolved) return clarify(resolved.message, 'NEED_PROJECT');
+  let acts = nextActsForConditional(discourse);
+  if (discourse.ifKind === 'test' && last?.kind === 'test' && last.ok) {
+    acts = acts.filter(item => item !== 'TEST');
+  }
+  if (discourse.ifKind === 'build' && last?.kind === 'build' && last.ok) {
+    acts = acts.filter(item => item !== 'BUILD');
+  }
+  const calls = acts
+    .map(act => callForAct(act, state, resolved.slug, discourse))
+    .filter((item): item is { id: string; input: Record<string, unknown> } => Boolean(item));
+  if (!calls.length) return talk('จำเงื่อนไขนั้นไว้ครับ', 'CONDITIONAL_STORED');
+  return {
+    kind: 'CAPABILITY',
+    capabilityId: calls[0]!.id,
+    arguments: calls[0]!.input,
+    extraCalls: calls.slice(1),
+    confidence: 'HIGH',
+    reasonCode: 'CONDITIONAL_CHAIN',
+    consumed: true,
+    source: 'context',
+    actionClass: 'ACTIONABLE',
+    contextEvidence: { contextSource: 'working-memory', resolvedReferent: resolved.slug },
+  };
+}
+
+function callForAct(
+  act: DiscourseAct,
+  state: ConversationState,
+  slug: string,
+  discourse: DiscourseInterpretation,
+): { id: string; input: Record<string, unknown> } | undefined {
+  if (act === 'MODIFY_PROJECT' || act === 'EXECUTE_NOW') {
+    return {
+      id: SOFTWARE_APPLY_BUILD,
+      input: {
+        planId: state.activePlanId,
+        goalId: state.activeGoalId,
+        brief: changeBrief(state, discourse.change || '', discourse),
+        merge: true,
+      },
+    };
+  }
+  if (act === 'TEST') return { id: PROJECT_RUN_TESTS, input: { slug } };
+  if (act === 'BUILD') return { id: PROJECT_BUILD, input: { slug } };
+  if (act === 'PREVIEW') return { id: PROJECT_START_DEV_SERVER, input: { slug } };
+  return undefined;
+}
+
+function grantPending(state: ConversationState): IntentResolution {
+  if (!state.pendingPermission) {
+    return talk('ตอนนี้ไม่มีคำขอสิทธิ์ค้างครับ', 'NO_PENDING_PERMISSION');
+  }
+  return {
+    kind: 'CONVERSATION',
+    confidence: 'HIGH',
+    reasonCode: 'GRANT_PENDING_PERMISSION',
+    consumed: true,
+    source: 'context',
+    actionClass: 'CONVERSATION',
+    userMessage: 'อนุญาตงานนี้ตามคำขอที่ค้างอยู่ครับ',
+  };
 }
 
 function restore(state: ConversationState, text = ''): IntentResolution {
@@ -550,7 +614,10 @@ function changeBrief(
   discourse: DiscourseInterpretation,
 ): string {
   const selected = state.selectedOption?.payload || state.selectedOption?.label;
-  return [discourse.change || state.pendingChange || text, selected, ...state.constraints].filter(Boolean).join('\n');
+  const here = /ตรงนั้น|ตรงนี้|this file|that function|ตรงนั้นแหละ/iu.test(text) && state.referents.this_file
+    ? `in ${state.referents.this_file}`
+    : '';
+  return [discourse.change || state.pendingChange || text, selected, here, ...state.constraints].filter(Boolean).join('\n');
 }
 
 function researchQuery(
@@ -593,7 +660,13 @@ function recommendResearch(
   return capability(RESEARCH_CURRENT, { query: researchQuery(state, text, discourse) }, 'CONVERSATION_RESEARCH');
 }
 
-export function nextActsForConditional(act: DiscourseAct): DiscourseAct[] {
-  if (act === 'CONDITIONAL') return ['TEST', 'BUILD', 'PREVIEW'];
-  return [act];
+export function nextActsForConditional(discourse: DiscourseInterpretation | DiscourseAct): DiscourseAct[] {
+  if (typeof discourse === 'string') {
+    return discourse === 'CONDITIONAL' ? ['TEST', 'BUILD', 'PREVIEW'] : [discourse];
+  }
+  if (discourse.thenActs?.length) return discourse.thenActs;
+  if (discourse.ifKind === 'test' && discourse.thenAct === 'PREVIEW') return ['TEST', 'BUILD', 'PREVIEW'];
+  if (discourse.ifKind === 'test') return ['TEST', discourse.thenAct || 'BUILD'];
+  if (discourse.ifKind === 'build') return ['BUILD', discourse.thenAct || 'PREVIEW'];
+  return ['TEST', 'BUILD'];
 }
