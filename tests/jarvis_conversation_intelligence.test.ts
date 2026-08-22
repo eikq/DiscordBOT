@@ -18,7 +18,7 @@ import {
 } from '../src/jarvis/conversation';
 import type { ConversationState } from '../src/jarvis/conversation';
 import { DESKTOP_OPEN_SCOPED_RESOURCE } from '../src/jarvis/capabilities/actions/constants';
-import { PROJECT_BUILD, PROJECT_READ_FILE, PROJECT_RUN_TESTS, PROJECT_START_DEV_SERVER } from '../src/jarvis/project/constants';
+import { PROJECT_BUILD, PROJECT_READ_FILE, PROJECT_RUN_TESTS, PROJECT_START_DEV_SERVER, PROJECT_STOP_DEV_SERVER } from '../src/jarvis/project/constants';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from '../src/jarvis/build/constants';
 import { resolveUserIntent } from '../src/jarvis/intent';
 import { compactCapabilityCatalog } from '../src/jarvis/intent/catalog';
@@ -829,4 +829,32 @@ test('install-if-missing and page inspect stay on the active project files', () 
   const pages = bindDiscourseToIntent(interpretDiscourse('ตอนนี้โปรเจกต์นี้มีหน้าอะไรบ้าง', state), state, 'ตอนนี้โปรเจกต์นี้มีหน้าอะไรบ้าง');
   assert.equal(pages?.capabilityId, PROJECT_READ_FILE);
   assert.equal(pages?.arguments?.relativePath, 'src/App.jsx');
+});
+
+test('preview-of-it follows the restored project, and a clarified old-preview delete stops the process', () => {
+  const restored = softwareState({ lastDiscourse: 'RESTORE_TOPIC' });
+  for (const phrase of ['เปิด preview ของมัน', 'open its preview']) {
+    const discourse = interpretDiscourse(phrase, restored);
+    assert.equal(discourse.act, 'PREVIEW', phrase);
+    const bound = bindDiscourseToIntent(discourse, restored, phrase);
+    assert.equal(bound?.capabilityId, PROJECT_START_DEV_SERVER, phrase);
+  }
+
+  const ambiguous = softwareState({
+    lastDiscourse: 'AMBIGUOUS',
+    activePreview: { url: 'http://127.0.0.1:4174', port: 4174, slug: 'portfolio' },
+  });
+  const stopped = bindDiscourseToIntent(
+    interpretDiscourse('หมายถึง preview process เก่า ไม่ใช่ project', ambiguous),
+    ambiguous,
+    'หมายถึง preview process เก่า ไม่ใช่ project',
+  );
+  assert.equal(stopped?.capabilityId, PROJECT_STOP_DEV_SERVER);
+
+  const halt = bindDiscourseToIntent(
+    interpretDiscourse('ถ้าตรงไหน fail ให้หยุดก่อนแล้วบอกผม', softwareState()),
+    softwareState(),
+    'ถ้าตรงไหน fail ให้หยุดก่อนแล้วบอกผม',
+  );
+  assert.equal(halt?.reasonCode, 'CONDITIONAL_STOP_ON_FAIL');
 });

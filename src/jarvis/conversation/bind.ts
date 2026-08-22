@@ -381,6 +381,9 @@ function bindConditional(state: ConversationState, discourse: DiscourseInterpret
     if (!problem) return talk('ยังไม่เจอปัญหาที่ต้องแก้ครับ', 'CONDITIONAL_HELD');
     return applyChange(state, discourse.change || '', discourse);
   }
+  if (thenActs.includes('PAUSE') || discourse.thenAct === 'PAUSE') {
+    return talk('จำไว้ครับ ถ้าขั้นตอนไหน fail จะหยุดแล้วบอกสาเหตุ', 'CONDITIONAL_STOP_ON_FAIL');
+  }
   if (discourse.ifKind === 'test' && last?.kind === 'test' && last.ok === false) {
     return talk('test ยังไม่ผ่าน เลยยังไม่ทำขั้นตอนถัดไปครับ', 'CONDITIONAL_HELD');
   }

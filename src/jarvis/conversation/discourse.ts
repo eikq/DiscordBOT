@@ -83,7 +83,12 @@ export function interpretDiscourse(
     return { ...act('MODIFY_PROJECT'), change: raw, constraint: raw };
   }
   if (isNegate(raw)) return { ...act('NEGATE'), constraint: raw, change: raw };
-  if (isCorrect(raw)) return { ...act('CORRECT'), change: raw };
+  if (isCorrect(raw)) {
+    if (state?.lastDiscourse === 'AMBIGUOUS' && /preview process|preview เก่า|dev server/iu.test(raw)) {
+      return act('STOP_PREVIEW');
+    }
+    return { ...act('CORRECT'), change: raw };
+  }
   if (isPlanRequest(raw) && !hasActiveQueue(state)) return act('PLAN_REQUEST');
 
   const queueItems = parseQueue(raw);
@@ -204,7 +209,7 @@ function isRestartPreview(text: string): boolean {
 function isPreview(text: string, state: ConversationState | null | undefined): boolean {
   if (/\.(jsx?|tsx?|css|json)\b|history|ประวัติ/iu.test(text)) return false;
   if (/อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return false;
-  if (/เปิดให้ดู|เปิดดู|show me(?: the site)?|open (?:the )?preview|preview(?: หน่อย)?$/iu.test(text)) return true;
+  if (/เปิดให้ดู|เปิดดู|show me(?: the site)?|open (?:the |its )?preview|เปิด preview|preview ของมัน|preview(?: หน่อย)?$/iu.test(text)) return true;
   if (/^preview$/iu.test(text)) return true;
   if (hasActiveSoftware(state) && /เปิด(?:ของ)?(?:อันนี้|มัน)|open (?:it|this|that)/iu.test(text) && !/chrome|youtube|notepad|cursor|vscode/iu.test(text)) {
     return true;
@@ -334,7 +339,7 @@ function isAccumulate(text: string, state: ConversationState | null | undefined)
 
 function isModify(text: string, state: ConversationState | null | undefined): boolean {
   if (!hasActiveSoftware(state) && !/เว็บนี้|โปรเจกต์นี้|มัน|อันนี้|ตรงนั้น|ตรงนี้/iu.test(text)) return false;
-  return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|hover|animation|dark mode|ทำตามนั้น|ให้มันดู|layout|column|ตรงนั้นแหละ|ตรงนี้แหละ|โล่ง|ว่างไป|แน่นขึ้น|navbar|footer|ใช้สีเดิม|สีเดิม/iu.test(text);
+  return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|hover|animation|dark mode|ทำตามนั้น|ให้มันดู|layout|column|ตรงนั้นแหละ|ตรงนี้แหละ|โล่ง|ว่างไป|แน่นขึ้น|navbar|footer|ใช้สีเดิม|สีเดิม|อยู่ก่อน|before /iu.test(text);
 }
 
 function hasPositiveEdit(text: string): boolean {
@@ -418,6 +423,18 @@ function parseConditional(text: string): DiscourseInterpretation | null {
       ifKind: 'test',
       thenAct: 'MODIFY_PROJECT',
       thenActs: ['MODIFY_PROJECT'],
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+      change: text,
+    };
+  }
+  if (/fail|พัง/.test(text) && /หยุด|stop/.test(text)) {
+    return {
+      act: 'CONDITIONAL',
+      ifKind: 'test',
+      thenAct: 'PAUSE',
+      thenActs: ['PAUSE'],
       confidence: 'HIGH',
       requiresClarification: false,
       source: 'discourse',
