@@ -331,7 +331,7 @@ test('file inspect does not bind preview, and history is not a preview request',
   const state = softwareState();
   const file = bindDiscourseToIntent(interpretDiscourse('เปิดดู App.jsx', state), state, 'เปิดดู App.jsx');
   assert.equal(file?.capabilityId, 'project.readFile');
-  assert.equal(file?.arguments?.relativePath, 'App.jsx');
+  assert.equal(file?.arguments?.relativePath, 'src/App.jsx');
   const history = interpretDiscourse('เปิด history ให้ดู', state);
   assert.notEqual(history.act, 'PREVIEW');
 });
@@ -1140,14 +1140,27 @@ test('fail-stop annotates a stored chain instead of replacing it', () => {
   assert.deepEqual(next.pendingConditional?.thenActs, ['TEST', 'BUILD', 'PREVIEW']);
 });
 
-test('code-file inspect plus that-spot edit stays on the inspected file', () => {
-  const opened = bindDiscourseToIntent(
-    interpretDiscourse('เปิดดู App.jsx หน่อย', softwareState({ activeProjectSlug: 'todo-modern', projects: [{ slug: 'todo-modern', label: 'Todo App', kind: 'website' }] })),
-    softwareState({ activeProjectSlug: 'todo-modern', projects: [{ slug: 'todo-modern', label: 'Todo App', kind: 'website' }] }),
-    'เปิดดู App.jsx หน่อย',
-  );
-  assert.equal(opened?.capabilityId, PROJECT_READ_FILE);
-  assert.match(String(opened?.arguments?.relativePath), /App\.jsx/i);
+test('opening App.jsx by basename reads src/App.jsx in the active project', () => {
+  const state = softwareState({
+    activeProjectSlug: 'todo-app',
+    projects: [{ slug: 'todo-app', label: 'Todo App', kind: 'website' }],
+  });
+  const bound = bindDiscourseToIntent(interpretDiscourse('เปิดดู App.jsx หน่อย', state), state, 'เปิดดู App.jsx หน่อย');
+  assert.equal(bound?.capabilityId, PROJECT_READ_FILE);
+  assert.equal(bound?.arguments?.relativePath, 'src/App.jsx');
+});
+
+test('ok-do-it executes a pending change even when a queue is waiting', () => {
+  const state = softwareState({
+    pendingChange: 'เพิ่ม filter completed',
+    queue: [{ id: 'q1', text: 'build', status: 'pending', act: 'BUILD' }],
+  });
+  for (const phrase of ['โอเคทำ', 'ทำ']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'EXECUTE_NOW', phrase);
+    const bound = bindDiscourseToIntent(discourse, state, phrase);
+    assert.equal(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
+  }
 });
 
 test('short-answer preference compresses successful speak but keeps failure causes', () => {

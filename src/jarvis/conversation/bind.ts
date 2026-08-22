@@ -346,7 +346,8 @@ function inspect(state: ConversationState, text: string): IntentResolution {
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_SYMBOL');
   }
   if (/\.jsx?|\.tsx?|\.css|\.json|App\.jsx/iu.test(text)) {
-    const file = text.match(/([\w./-]+\.(?:jsx?|tsx?|css|json))/iu)?.[1] || 'src/App.jsx';
+    const matched = text.match(/([\w./-]+\.(?:jsx?|tsx?|css|json))/iu)?.[1] || 'src/App.jsx';
+    const file = matched.includes('/') ? matched : `src/${matched}`;
     return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_FILE');
   }
   return capability(PROJECT_LIST_FILES, { slug: resolved.slug }, 'CONVERSATION_LIST_FILES');

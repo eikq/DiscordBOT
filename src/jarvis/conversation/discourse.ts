@@ -86,6 +86,7 @@ export function interpretDiscourse(
     };
   }
   if (isExecuteNow(raw)) {
+    if (state?.pendingChange) return act('EXECUTE_NOW');
     if (state?.pendingConditional?.thenActs?.length) return act('EXECUTE_NOW');
     if (hasActiveQueue(state)) return act('CONTINUE');
     return act(state?.pendingPlanReview ? 'APPROVE_PLAN' : 'EXECUTE_NOW');
@@ -256,7 +257,7 @@ function isContinue(text: string): boolean {
 }
 
 function isExecuteNow(text: string): boolean {
-  return /^(ทำเลย|เอาเลย|ทำ|do it|go ahead|เริ่มได้|เริ่มเลย|โอเคเริ่ม|เริ่ม|ตามนั้น|โอเคตามนั้น)$/iu.test(text);
+  return /^(ทำเลย|เอาเลย|ทำ|โอเคทำ|do it|go ahead|เริ่มได้|เริ่มเลย|โอเคเริ่ม|เริ่ม|ตามนั้น|โอเคตามนั้น)$/iu.test(text);
 }
 
 function isApprovePlan(text: string): boolean {
