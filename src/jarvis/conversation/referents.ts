@@ -85,27 +85,50 @@ export function uniqueSlugOrClarify(state: ConversationState): { slug: string; p
   return { message: 'ตอนนี้ยังไม่มีโปรเจกต์ที่คุยค้างไว้ บอกชื่อโปรเจกต์หรือให้ผมวางแผนก่อนได้ครับ' };
 }
 
-export function restoreProject(state: ConversationState, text: string): ProjectRecord | undefined {
-  const mentioned = state.projects.find(item => (
-    (item.slug && text.toLocaleLowerCase().includes(item.slug.toLocaleLowerCase()))
-    || (item.label && text.toLocaleLowerCase().includes(item.label.toLocaleLowerCase()))
-    || (/todo/iu.test(text) && /todo/iu.test(`${item.slug} ${item.label}`))
-    || (/portfolio/iu.test(text) && /portfolio/iu.test(`${item.slug} ${item.label}`))
+export function mentionedProject(state: ConversationState | null | undefined, text: string): ProjectRecord | undefined {
+  if (!state?.projects.length) return undefined;
+  const lower = text.toLocaleLowerCase();
+  const identity = state.projects.filter(item => (
+    (item.slug && lower.includes(item.slug.toLocaleLowerCase()))
+    || (item.label && lower.includes(item.label.toLocaleLowerCase()))
   ));
+  if (identity.length === 1) return identity[0];
+  if (/portfolio/iu.test(text)) {
+    return identity.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`))
+      || state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`));
+  }
+  if (/todo/iu.test(text)) {
+    return identity.find(item => /todo/iu.test(`${item.slug} ${item.label}`))
+      || state.projects.find(item => item.slug === state.activeProjectSlug && /todo/iu.test(`${item.slug} ${item.label}`))
+      || state.projects.find(item => /todo/iu.test(`${item.slug} ${item.label}`));
+  }
+  return identity[0];
+}
+
+export function restoreProject(state: ConversationState, text: string): ProjectRecord | undefined {
+  const mentioned = mentionedProject(state, text);
   if (mentioned) return mentioned;
   if (/อันแรก|the first/iu.test(text) && state.projects.length > 1) {
     const previous = [...state.topicStack].reverse().find(frame => (
       frame.projectSlug && frame.projectSlug !== state.activeProjectSlug
     ));
     return state.projects.find(item => item.slug === previous?.projectSlug)
+      || state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`))
       || state.projects.find(item => item.kind === 'website' && item.slug !== state.activeProjectSlug)
       || state.projects.find(item => item.slug !== state.activeProjectSlug)
       || state.projects[0];
   }
-  if (/(?:portfolio|เว็บ)/iu.test(text)) {
-    return state.projects.find(item => item.slug === state.activeProjectSlug)
-      || state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`))
-      || state.projects.find(item => item.kind === 'website' && item.slug === state.activeProjectSlug)
+  if (/(?:เว็บ|site|website)/iu.test(text) && !/todo/iu.test(text)) {
+    if (/portfolio/iu.test(`${state.activeProjectSlug || ''} ${activeProject(state)?.label || ''}`)) {
+      return activeProject(state);
+    }
+    const stacked = [...state.topicStack].reverse().find(frame => (
+      frame.projectSlug && frame.projectSlug !== state.activeProjectSlug
+    ));
+    return state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`))
+      || state.projects.find(item => item.slug === stacked?.projectSlug)
+      || state.projects.find(item => item.kind === 'website' && !/todo/iu.test(`${item.slug} ${item.label}`))
+      || activeProject(state)
       || state.projects.find(item => item.kind === 'website');
   }
   return state.projects.find(item => item.slug === state.activeProjectSlug) || state.projects[0];

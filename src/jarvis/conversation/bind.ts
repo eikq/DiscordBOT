@@ -157,7 +157,7 @@ function continueWork(
   text: string,
   discourse: DiscourseInterpretation,
 ): IntentResolution | null {
-  if (state.pendingPermission) {
+  if (permissionBlocksCurrentWork(state)) {
     if (discourse.act === 'MODIFY_PROJECT' || discourse.act === 'ACCUMULATE_REQUIREMENTS' || discourse.change) {
       return talk(
         `จำไว้แล้วครับ: ${discourse.change || text} — งานนี้ยังรออนุญาตอยู่ กดอนุญาตงานนี้ได้เลย`,
@@ -390,12 +390,7 @@ function selectOrdinal(state: ConversationState, discourse: DiscourseInterpretat
       return talk(`เอา${labels.join(' และ ')} ครับ`, 'ORDINAL_NOTED');
     }
     if (state.activeProjectSlug || state.activePlanId) {
-      return capability(SOFTWARE_APPLY_BUILD, {
-        planId: state.activePlanId,
-        goalId: state.activeGoalId,
-        brief: [...picked.map(item => item.payload || item.label), ...state.constraints].filter(Boolean).join('\n'),
-        merge: true,
-      }, 'CONVERSATION_ORDINAL_APPLY');
+      return talk(`เอา${labels.join(' และ ')} ครับ`, 'ORDINAL_NOTED');
     }
     return talk(`เอา${labels.join(' และ ')} ครับ`, 'ORDINAL_NOTED');
   }
@@ -857,6 +852,14 @@ function bindQueue(
 
 function interpretQueueItemAct(text: string, state: ConversationState): DiscourseAct {
   return interpretDiscourse(text, { ...state, queue: [] }).act;
+}
+
+function permissionBlocksCurrentWork(state: ConversationState): boolean {
+  const pending = state.pendingPermission;
+  if (!pending) return false;
+  if (pending.goalId && state.activeGoalId && pending.goalId !== state.activeGoalId) return false;
+  if (pending.planId && state.activePlanId && pending.planId !== state.activePlanId) return false;
+  return true;
 }
 
 function queuePreview(items: string[]): string {

@@ -5,6 +5,7 @@
  */
 
 import type { ConversationState, DiscourseAct, DiscourseInterpretation } from './types';
+import { mentionedProject } from './referents';
 
 const ADDRESS = /^\s*((?:hey\s+)?jarvis[,.!?]*\s*|จาร์วิส[,.!?]*\s*)+/iu;
 
@@ -71,7 +72,7 @@ export function interpretDiscourse(
     return hasPendingWork(state) ? act('CONTINUE') : { ...act('STATUS_QUERY'), statusFocus: 'pending' };
   }
   if (isSwitchTopic(raw)) return act('SWITCH_TOPIC');
-  if (isRestoreTopic(raw, state)) return act('RESTORE_TOPIC');
+  if (isNamedProjectResume(raw, state) || isRestoreTopic(raw, state)) return act('RESTORE_TOPIC');
   if (isStartFresh(raw)) return act('START_FRESH');
   if (isGrant(raw)) return act(state?.pendingPermission ? 'GRANT_PERMISSION' : 'EXECUTE_NOW');
   if (isApprovePlan(raw) && state?.pendingPlanReview) return act('APPROVE_PLAN');
@@ -128,7 +129,7 @@ export function interpretDiscourse(
     }
     return { ...act('CORRECT'), change: raw };
   }
-  if (isPlanRequest(raw) && !hasActiveQueue(state)) return act('PLAN_REQUEST');
+  if (isPlanRequest(raw)) return act('PLAN_REQUEST');
 
   if (isDestructiveAmbiguous(raw)) {
     return {
@@ -368,7 +369,16 @@ function isStartFresh(text: string): boolean {
     && !/^(เริ่มได้|เริ่มเลย|เริ่ม)$/iu.test(text);
 }
 
+function isNamedProjectResume(text: string, state: ConversationState | null | undefined): boolean {
+  const named = mentionedProject(state, text);
+  if (!named?.slug) return false;
+  if (named.slug === state?.activeProjectSlug && !/กลับ|สลับ|resume|back to/iu.test(text)) return false;
+  return /กลับ(?:ไป)?|มาทำ|ต่อกัน|สลับไป|switch to|resume|back to/iu.test(text)
+    && !/สร้าง(?:เว็บ|โปรเจกต์)|อีกอัน|โปรเจกต์ใหม่|create (?:a )?(?:new )?(?:site|app|project)/iu.test(text);
+}
+
 function isRestoreTopic(text: string, state: ConversationState | null | undefined): boolean {
+  if (isNamedProjectResume(text, state)) return true;
   if (isContinue(text)) return false;
   if (/กลับไปเว็บ|กลับไปอันแรก|back to (?:the )?(?:site|web|portfolio)/iu.test(text)) return true;
   if (state?.projects && state.projects.length > 1 && /สลับไป|switch to/iu.test(text)) return true;

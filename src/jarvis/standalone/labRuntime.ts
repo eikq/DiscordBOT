@@ -140,6 +140,7 @@ import {
   conversationView,
   defaultConversationStatePath,
   interpretDiscourse,
+  restoreProject,
   discoursePreemptsPendingGoal,
   isOperationalNoise,
   slugFromWorkspacePath,
@@ -2288,15 +2289,20 @@ export class JarvisLabRuntime {
       pendingPlanReview: plan && (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT')
         ? { planId: plan.id, goalId: plan.goalId, title: plan.title }
         : null,
-      project: plan
-        ? {
-          slug: plan.slug,
-          label: plan.title,
-          kind: (this.plans?.get(plan.id)?.projectType === 'WEBSITE' ? 'website' : 'software'),
-          goalId: plan.goalId,
-          planId: plan.id,
-        }
-        : undefined,
+      project: (() => {
+        const restored = discourse.act === 'RESTORE_TOPIC'
+          ? restoreProject(current, ownerText)
+          : undefined;
+        const chosen = restored || plan;
+        if (!chosen) return undefined;
+        return {
+          slug: restored?.slug || plan!.slug,
+          label: restored?.label || plan!.title,
+          kind: restored?.kind || (this.plans?.get(plan!.id)?.projectType === 'WEBSITE' ? 'website' : 'software'),
+          goalId: restored?.goalId || plan!.goalId,
+          planId: restored?.planId || plan!.id,
+        };
+      })(),
     }));
   }
 

@@ -78,11 +78,21 @@ test('ordinal follow-ups resolve offered options without asking which list', () 
     ],
   });
   const first = bindDiscourseToIntent(interpretDiscourse('อันแรก', state), state, 'อันแรก');
-  assert.equal(first?.kind, 'CAPABILITY');
-  assert.equal(first?.capabilityId, SOFTWARE_APPLY_BUILD);
-  assert.match(String(first?.arguments?.brief || ''), /featured project/i);
+  assert.equal(first?.kind, 'CONVERSATION');
+  assert.equal(first?.reasonCode, 'ORDINAL_NOTED');
+  assert.match(String(first?.userMessage || ''), /featured project/i);
   const second = bindDiscourseToIntent(interpretDiscourse('เอาอันที่สอง', state), state, 'เอาอันที่สอง');
-  assert.match(String(second?.arguments?.brief || ''), /bio strip/i);
+  assert.equal(second?.reasonCode, 'ORDINAL_NOTED');
+  assert.match(String(second?.userMessage || ''), /bio strip/i);
+  const noted = applyTurnToConversation(state, {
+    ownerText: 'เอาอันที่สอง',
+    discourse: interpretDiscourse('เอาอันที่สอง', state),
+    resolution: second!,
+  });
+  assert.equal(noted.selectedOption?.label, 'Add a short bio strip');
+  const doIt = bindDiscourseToIntent(interpretDiscourse('ทำเลย', noted), noted, 'ทำเลย');
+  assert.equal(doIt?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.match(String(doIt?.arguments?.brief || ''), /bio strip/i);
 });
 
 test('resume-the-site is continue, not restore to a leftover todo website', () => {
@@ -710,8 +720,16 @@ test('what-to-add offers numbered options and the second choice binds that optio
   });
   assert.equal(next.offeredOptions[1]?.label, 'Featured project section');
   const picked = bindDiscourseToIntent(interpretDiscourse('เอาอันที่สอง', next), next, 'เอาอันที่สอง');
-  assert.equal(picked?.capabilityId, SOFTWARE_APPLY_BUILD);
-  assert.match(String(picked?.arguments?.brief || ''), /Featured project section/i);
+  assert.equal(picked?.reasonCode, 'ORDINAL_NOTED');
+  assert.match(String(picked?.userMessage || ''), /Featured project section/i);
+  const chosen = applyTurnToConversation(next, {
+    ownerText: 'เอาอันที่สอง',
+    discourse: interpretDiscourse('เอาอันที่สอง', next),
+    resolution: picked!,
+  });
+  const doIt = bindDiscourseToIntent(interpretDiscourse('ทำเลย', chosen), chosen, 'ทำเลย');
+  assert.equal(doIt?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.match(String(doIt?.arguments?.brief || ''), /Featured project section/i);
 });
 
 test('do-it after a correction applies the pending change instead of rerunning tests', () => {
@@ -1161,6 +1179,49 @@ test('ok-do-it executes a pending change even when a queue is waiting', () => {
     const bound = bindDiscourseToIntent(discourse, state, phrase);
     assert.equal(bound?.capabilityId, SOFTWARE_APPLY_BUILD, phrase);
   }
+});
+
+test('named resume restores the named project even if a later plan snapshot is leftover', () => {
+  const onTodo = softwareState({
+    activeProjectSlug: 'todo-app',
+    activeGoalId: 'BUILD_SOFTWARE',
+    activePlanId: 'plan_todo',
+    pendingPermission: { proposalId: 'ap-todo', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
+    queue: [{ id: 'q1', text: 'loading animation', status: 'pending', act: 'MODIFY_PROJECT' }],
+    projects: [
+      { slug: 'todo-app', label: 'Todo App', kind: 'software', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
+      { slug: 'portfolio', label: 'Portfolio', kind: 'website', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio' },
+    ],
+  });
+  for (const phrase of ['กลับไปทำเว็บ portfolio ต่อ', 'มาทำ portfolio ของเราต่อกัน']) {
+    const discourse = interpretDiscourse(phrase, onTodo);
+    assert.equal(discourse.act, 'RESTORE_TOPIC', phrase);
+    const bound = bindDiscourseToIntent(discourse, onTodo, phrase);
+    assert.equal(bound?.reasonCode, 'RESTORE_TOPIC', phrase);
+    assert.match(String(bound?.userMessage || ''), /Portfolio/i, phrase);
+    const next = applyTurnToConversation(onTodo, {
+      ownerText: phrase,
+      discourse,
+      resolution: bound!,
+      project: { slug: 'todo-app', label: 'Todo App', kind: 'software', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
+    });
+    assert.equal(next.activeProjectSlug, 'portfolio', phrase);
+    assert.equal(next.activePlanId, 'plan_portfolio', phrase);
+    const edit = bindDiscourseToIntent(interpretDiscourse('หน้า home ยังโล่งไปนิด', next), next, 'หน้า home ยังโล่งไปนิด');
+    assert.notEqual(edit?.reasonCode, 'WAITING_PERMISSION', phrase);
+    assert.notEqual(edit?.reasonCode, 'WAITING_PERMISSION_NOTED', phrase);
+  }
+});
+
+test('what-to-add stays a plan request even when a leftover queue is waiting', () => {
+  const state = softwareState({
+    queue: [{ id: 'q1', text: 'loading animation', status: 'pending', act: 'MODIFY_PROJECT' }],
+  });
+  const discourse = interpretDiscourse('เพิ่มอะไรดี', state);
+  assert.equal(discourse.act, 'PLAN_REQUEST');
+  const bound = bindDiscourseToIntent(discourse, state, 'เพิ่มอะไรดี');
+  assert.equal(bound?.reasonCode, 'SUGGEST_ADDITIONS');
+  assert.notEqual(bound?.capabilityId, SOFTWARE_APPLY_BUILD);
 });
 
 test('short-answer preference compresses successful speak but keeps failure causes', () => {

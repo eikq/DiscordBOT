@@ -106,7 +106,10 @@ export function applyTurnToConversation(
   if (input.discourse.act === 'SELECT_ORDINAL' && input.discourse.ordinal) {
     const option = next.offeredOptions.find(item => item.index === input.discourse.ordinal)
       || next.offeredOptions[(input.discourse.ordinal || 1) - 1];
-    if (option) next.selectedOption = option;
+    if (option) {
+      next.selectedOption = option;
+      next.pendingChange = option.payload || option.label;
+    }
     if (!next.offeredOptions.length) {
       const project = restoreProject(next, input.ownerText);
       if (project && /อันแรก|portfolio|เว็บ/iu.test(input.ownerText)) {
@@ -166,6 +169,9 @@ export function applyTurnToConversation(
     };
     if (existing >= 0) next.projects[existing] = record;
     else next.projects.push(record);
+    const topicLocked = input.discourse.act === 'RESTORE_TOPIC'
+      && next.activeProjectSlug
+      && next.activeProjectSlug !== record.slug;
     if (input.discourse.act === 'NEW_PROJECT' && next.activeProjectSlug && next.activeProjectSlug !== record.slug) {
       next.topicStack.push({
         topic: 'software',
@@ -175,16 +181,18 @@ export function applyTurnToConversation(
         label: activeProject(next)?.label,
       });
     }
-    next.activeProjectSlug = record.slug;
-    next.activeGoalId = record.goalId || next.activeGoalId;
-    next.activePlanId = record.planId || next.activePlanId;
-    next.activeWorkspace = record.workspace || `data/jarvis/builds/${record.slug}`;
-    if (!['RESEARCH', 'SWITCH_TOPIC', 'STATUS_QUERY', 'MEMORY_QUERY', 'MEMORY_STORE'].includes(input.discourse.act)) {
-      next.activeTopic = 'software';
+    if (!topicLocked) {
+      next.activeProjectSlug = record.slug;
+      next.activeGoalId = record.goalId || next.activeGoalId;
+      next.activePlanId = record.planId || next.activePlanId;
+      next.activeWorkspace = record.workspace || `data/jarvis/builds/${record.slug}`;
+      if (!['RESEARCH', 'SWITCH_TOPIC', 'STATUS_QUERY', 'MEMORY_QUERY', 'MEMORY_STORE'].includes(input.discourse.act)) {
+        next.activeTopic = 'software';
+      }
+      next.referents.this_project = record.slug;
+      next.referents.this_site = record.slug;
+      next.referents.this_app = record.slug;
     }
-    next.referents.this_project = record.slug;
-    next.referents.this_site = record.slug;
-    next.referents.this_app = record.slug;
   }
   const slug = typeof input.resolution.arguments?.slug === 'string' ? String(input.resolution.arguments.slug) : undefined;
   const planId = typeof input.resolution.arguments?.planId === 'string' ? String(input.resolution.arguments.planId) : undefined;
