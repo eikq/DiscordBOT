@@ -3,7 +3,47 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — live acceptance of qwen-memory-build-studio
+## This turn — persistent permission + typed software builder runtime
+
+Branch: `local/jarvis-persistent-permission-builder-runtime-v1-2026-08-22`
+from exact source HEAD `7f7f55b3fcb4d4aeffeef9636a4a972387b45006`
+(`local/jarvis-qwen-memory-build-studio-v1-2026-08-22`). Did not modify
+`main`. Did not merge, rebase, reset, clean, or push.
+
+Verification: `npx tsc --noEmit` PASS; focused builder/studio/presence/actions/
+journal/recovery tests PASS; `npm run test:cloud` **715 / 715** PASS (was 704);
+`npm run build` PASS (same Vite/`import.meta` warning). Labels:
+**IMPLEMENTED** + **UNIT_VERIFIED**. **LIVE_VERIFIED** is not claimed.
+Real `npm install` / `npm run` / localhost preview were skipped in
+`NODE_TEST_CONTEXT` unless `JARVIS_LIVE_NPM=1`.
+
+Architecture:
+
+- Canonical permission state: operational SQLite
+  `data/jarvis/runtime/permissions.db`. Never `jarvis.db`. Never tokens.
+  `PERSISTENCE != AUTHORITY`. Restart revalidates goal/plan, target jail,
+  effects, expiry, policy fingerprint, and capability availability before
+  `PrivilegeLeaseStore.restoreValidated`. Failures:
+  `EXPIRED` / `NEEDS_REAPPROVAL` / `INVALID_AFTER_RESTART`.
+- SSE replay: existing ops bus. `GET /api/jarvis/events?stream=1` writes
+  `PERMISSION_SNAPSHOT` first. Unused confirmation tokens are reused so a
+  refresh does not invalidate the card.
+- Owner confirm/deny from voice, text, Presence, and confirm API share history.
+  UI buttons: `[อนุญาตงานนี้]` / `[อนุญาตครั้งนี้]` / `[ไม่อนุญาต]`,
+  `metadata.source=ui_action`.
+- Model identity is registry-derived: Qwen3.8 27B Cyber Abliterated /
+  alias `qwen38-cyber`. Qwen cannot author identity fields.
+- Typed `ProjectWorkspace` under `data/jarvis/builds/<slug>/`. No raw shell.
+  `npm install` / `npm ci` only. Registered scripts only. Dev server
+  `127.0.0.1` ports 4173–4299; restart marks unknown process state honestly.
+- BuildPlan visual stages: UNDERSTAND…PREVIEW…VERIFY…DONE from real SSE.
+  Failure → classify → bounded correction, no blind mutation retry.
+- Qwen still has no terminal tool. Model cannot renew/expand a lease.
+
+LIVE acceptance of “สร้างเว็บ todo แบบ modern ให้ผม” was **not** run this
+turn. CLICK / TYPE / SUBMIT remain unavailable.
+
+## Previous — live acceptance of qwen-memory-build-studio
 
 Branch: `local/jarvis-qwen-memory-build-studio-v1-2026-08-22`.
 Started at HEAD `94740198af05dc4d7c1b2484ab4adfdddb38a686`. Did not

@@ -106,16 +106,44 @@ permission proposal if needed → `software.applyBuild` → sandbox artifacts.
 
 Plans are stored in SQLite `build_plans`. Files are written only after the plan
 is `APPROVED`/`EXECUTING`/`VERIFYING`/`COMPLETED`, and only under
-`data/jarvis/builds/<slug>/`. Apply does not run unrestricted shell or npm.
+`data/jarvis/builds/<slug>/`. Apply does not run unrestricted shell.
+
+Pending permission and THIS_GOAL leases persist in operational SQLite
+`data/jarvis/runtime/permissions.db` (`PERSISTENCE != AUTHORITY`). Restart
+reloads then revalidates goal, target, effects, expiry, policy fingerprint, and
+capability availability. Failed revalidation becomes `EXPIRED` /
+`NEEDS_REAPPROVAL` / `INVALID_AFTER_RESTART`. Confirmation tokens stay in RAM
+only; SSE `PERMISSION_SNAPSHOT` reuses an unused token so a browser refresh can
+show the same pending card.
+
+Owner allow/deny from voice, text, Presence buttons, and the confirm API enter
+the same history. Button grants use `[อนุญาตงานนี้]` / `[อนุญาตครั้งนี้]` /
+`[ไม่อนุญาต]` with `metadata.source` `ui_action`. Expressed text is stored
+verbatim.
+
+Model identity for “ตอนนี้ใช้โมเดลอะไร” comes from `ModelProfileRegistry` +
+authenticated `/models`, never from Qwen self-description:
+`Qwen3.8 27B Cyber Abliterated` alias `qwen38-cyber`.
+
+Approved apply uses typed `ProjectWorkspace` capabilities (`project.createWorkspace`,
+`writeFile`, `installDependencies`, `runScript`, `runTests`, `build`,
+`startDevServer`, `stopDevServer`). Allowed package-manager ops are `npm install`
+and `npm ci` inside the workspace. Scripts resolve from registered
+`package.json` names (`build|test|lint|dev|preview`). Preview binds
+`127.0.0.1` only. Unit tests skip live npm unless `JARVIS_LIVE_NPM=1`.
+Failure proposes a bounded correction (`retryMutation: false`) and does not
+blind-retry mutation.
 
 ## Realtime Presence UI
 
 `/jarvis` keeps the cinematic Presence. When plan events arrive over the
 existing ops/SSE bus, a Build / Plan surface updates UNDERSTAND → PLAN →
-REVIEW → PERMISSION → BUILD → TEST → DONE from real event types
-(`PLAN_CREATED`, `PLAN_APPROVED`, `PERMISSION_REQUESTED`, `PLAN_STAGE_*`,
-`ARTIFACT_CREATED`, `VERIFY_*`). History is a light HUD, not a chat replacement.
-No fake percentages. No raw reasoning.
+REVIEW → PERMISSION → SCAFFOLD → INSTALL → BUILD → TEST → PREVIEW → VERIFY →
+DONE from real event types (`PLAN_CREATED`, `PLAN_APPROVED`,
+`PERMISSION_REQUESTED`, `PERMISSION_SNAPSHOT`, `PLAN_STAGE_*`,
+`ARTIFACT_CREATED`, `PREVIEW_READY`, `VERIFY_*`). A localhost Preview URL may
+appear when a Jarvis-owned dev server is running. History is a light HUD, not a
+chat replacement. No fake percentages. No raw reasoning.
 
 ## What stays gated
 
