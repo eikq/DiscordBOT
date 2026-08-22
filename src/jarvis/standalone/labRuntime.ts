@@ -2214,7 +2214,11 @@ export class JarvisLabRuntime {
         ? { planId: reviewPlan.id, goalId: reviewPlan.goalId, title: reviewPlan.title }
         : null,
       pendingPermission: pending?.proposalId
-        ? { proposalId: pending.proposalId, goalId: latest?.goalId, planId: latest?.id }
+        ? {
+          proposalId: pending.proposalId,
+          goalId: pending.permissionProposal?.goalId || current.pendingPermission?.goalId,
+          planId: pending.permissionProposal?.planId || current.pendingPermission?.planId,
+        }
         : null,
       preview: preview
         ? {
@@ -2284,7 +2288,7 @@ export class JarvisLabRuntime {
       pendingPermission: output.pendingConfirmation?.proposalId
         ? { proposalId: output.pendingConfirmation.proposalId, goalId: plan?.goalId, planId: plan?.id }
         : snapshot.pendingPermission
-          ? { proposalId: snapshot.pendingPermission.proposalId, goalId: plan?.goalId, planId: plan?.id }
+          ? snapshot.pendingPermission
           : null,
       pendingPlanReview: plan && (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT')
         ? { planId: plan.id, goalId: plan.goalId, title: plan.title }

@@ -94,8 +94,17 @@ export function mentionedProject(state: ConversationState | null | undefined, te
   ));
   if (identity.length === 1) return identity[0];
   if (/portfolio/iu.test(text)) {
-    return identity.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`))
-      || state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`));
+    const matches = (identity.length ? identity : state.projects)
+      .filter(item => /portfolio/iu.test(`${item.slug} ${item.label}`));
+    if (matches.length === 1) return matches[0];
+    const stacked = [...(state.topicStack || [])].reverse().find(frame => (
+      matches.some(item => item.slug === frame.projectSlug)
+    ));
+    return matches.find(item => item.slug === stacked?.projectSlug)
+      || matches.find(item => item.slug === state.activeProjectSlug)
+      || matches.find(item => item.slug === 'portfolio')
+      || matches[matches.length - 1]
+      || matches[0];
   }
   if (/todo/iu.test(text)) {
     return identity.find(item => /todo/iu.test(`${item.slug} ${item.label}`))

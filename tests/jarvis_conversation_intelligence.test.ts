@@ -1188,8 +1188,12 @@ test('named resume restores the named project even if a later plan snapshot is l
     activePlanId: 'plan_todo',
     pendingPermission: { proposalId: 'ap-todo', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
     queue: [{ id: 'q1', text: 'loading animation', status: 'pending', act: 'MODIFY_PROJECT' }],
+    topicStack: [
+      { topic: 'software', projectSlug: 'portfolio', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio', label: 'Portfolio' },
+    ],
     projects: [
       { slug: 'todo-app', label: 'Todo App', kind: 'software', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
+      { slug: 'jarvis-portfolio-modern', label: 'Portfolio', kind: 'website', goalId: 'BUILD_WEBSITE', planId: 'plan_old_portfolio' },
       { slug: 'portfolio', label: 'Portfolio', kind: 'website', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio' },
     ],
   });
@@ -1206,6 +1210,7 @@ test('named resume restores the named project even if a later plan snapshot is l
       project: { slug: 'todo-app', label: 'Todo App', kind: 'software', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
     });
     assert.equal(next.activeProjectSlug, 'portfolio', phrase);
+    assert.notEqual(next.activeProjectSlug, 'jarvis-portfolio-modern', phrase);
     assert.equal(next.activePlanId, 'plan_portfolio', phrase);
     const edit = bindDiscourseToIntent(interpretDiscourse('หน้า home ยังโล่งไปนิด', next), next, 'หน้า home ยังโล่งไปนิด');
     assert.notEqual(edit?.reasonCode, 'WAITING_PERMISSION', phrase);
@@ -1231,4 +1236,6 @@ test('short-answer preference compresses successful speak but keeps failure caus
   );
   const failure = compactOwnerSpeak('test ยังไม่ผ่าน เพราะ smoke failed on App.jsx', ['ตอบสั้น']);
   assert.match(failure, /smoke failed/);
+  const options = compactOwnerSpeak('1. Hero stats\n2. Featured project section\n3. Testimonials', ['ตอบสั้นกว่านี้ได้ไหม']);
+  assert.match(options, /Featured project section/);
 });
