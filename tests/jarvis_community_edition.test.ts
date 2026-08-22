@@ -38,6 +38,7 @@ import {
   resolveJarvisEdition,
 } from '../src/jarvis/edition';
 import { createBuildPlan } from '../src/jarvis/build/planner';
+import { buildSurfaceFromPlan } from '../src/jarvis/ui/presence/buildSurface';
 import { bindDiscourseToIntent, emptyConversationState, interpretDiscourse } from '../src/jarvis/conversation';
 import { interpretSemanticIntent } from '../src/jarvis/intent/semanticIntent';
 import { parseJarvisPage, visibleJarvisPages } from '../src/jarvis/ui/operating/JarvisOperatingShell';
@@ -313,6 +314,20 @@ test('community build plans advertise the community workspace, not owner builds'
     assert.match(plan.acceptanceCriteria.join('\n'), /data\/community\/workspaces/);
     assert.doesNotMatch(plan.acceptanceCriteria.join('\n'), /data\/jarvis\/builds/);
   });
+  const communitySurface = buildSurfaceFromPlan({
+    title: 'Todo App',
+    slug: 'todo-modern',
+    status: 'READY_FOR_REVIEW',
+    summary: 'Plan is not execution permission.',
+  }, 'community');
+  assert.equal(communitySurface?.artifact, 'data/community/workspaces/todo-modern');
+  const ownerSurface = buildSurfaceFromPlan({
+    title: 'Todo App',
+    slug: 'todo-modern',
+    status: 'READY_FOR_REVIEW',
+    summary: 'Plan is not execution permission.',
+  }, 'owner');
+  assert.equal(ownerSurface?.artifact, 'data/jarvis/builds/todo-modern');
 });
 
 test('community documentation and launcher artifacts exist', () => {

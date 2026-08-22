@@ -39,7 +39,7 @@ The Presence view is the product. Lab at `/jarvis-lab` is a smaller Community co
 git clone https://github.com/eikq/DiscordBOT.git
 cd DiscordBOT
 git checkout release/jarvis-community-edition-v1-2026-08-23
-npm install
+npm ci
 Copy-Item .env.community.example .env.community
 npm run jarvis:community
 ```
@@ -147,7 +147,7 @@ Product configuration is one edition manifest (`JARVIS_EDITION=community`). The 
 - Community research is public web lookup, not a private browser.
 - A local OpenAI-compatible model must be started separately.
 - Discord / Digital Me remains in the repository but is not started by Community.
-- Owner-only CCTV, device, and cybersecurity systems are not registered.
+- Owner-only CCTV, device, WorldIntel MCP, private-browser, Night Agent, and cybersecurity systems are not registered, started, or spawned.
 
 ## Community vs private / owner edition
 
@@ -156,8 +156,8 @@ Product configuration is one edition manifest (`JARVIS_EDITION=community`). The 
 | Data root | `data/community/` | `data/jarvis/` |
 | Presence + builder | yes | yes |
 | Memory / history | isolated | isolated |
-| Devices / CCTV | not registered | private |
-| Cyber / Whonix | not registered | private |
-| Discord / voice clone | not started | existing Digital Me |
+| Devices / CCTV | not registered, started, or spawned | private |
+| Cyber / Whonix | not registered, started, or spawned | private |
+| Discord / voice clone | not started or spawned | existing Digital Me |
 
 Owner work continues on private branches after this submission.

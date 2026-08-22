@@ -124,6 +124,8 @@ export default function JarvisPresencePage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [conversation, setConversation] = useState<ConversationStrip | null>(null);
   const buildEvents = useRef<Array<{ type: string; summary?: string; payload?: Record<string, unknown> }>>([]);
+  const editionRef = useRef<'owner' | 'community'>('owner');
+  editionRef.current = status?.edition === 'community' ? 'community' : 'owner';
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<string | null>(null);
   const [heard, setHeard] = useState<string | null>(null);
@@ -199,7 +201,7 @@ export default function JarvisPresencePage() {
       payload: item.payload,
     }));
     buildEvents.current = events.slice(-24);
-    const surface = mergePresenceBuildSurface(buildEvents.current, history.plans || []);
+    const surface = mergePresenceBuildSurface(buildEvents.current, history.plans || [], editionRef.current);
     if (surface && ops.snapshot?.preview?.url?.startsWith('http://127.0.0.1')) {
       surface.previewUrl = ops.snapshot.preview.url;
     }
@@ -288,7 +290,7 @@ export default function JarvisPresencePage() {
         }
         if (isBuildOperationType(payload.type) && payload.type !== 'MEMORY_UPDATED' && payload.type !== 'MODEL_STATUS_CHANGED') {
           buildEvents.current = [...buildEvents.current, typed].slice(-24);
-          setBuildSurface(mergePresenceBuildSurface(buildEvents.current));
+          setBuildSurface(mergePresenceBuildSurface(buildEvents.current, [], editionRef.current));
         }
         if (payload.type === 'MEMORY_UPDATED' || payload.type === 'PLAN_CREATED' || payload.type === 'PLAN_APPROVED') {
           void refreshHistory();

@@ -5,6 +5,8 @@ import type {
   CapabilityResult,
 } from '../capabilities/types';
 import { SOFTWARE_APPLY_BUILD } from '../build/constants';
+import { resolveJarvisEdition } from '../edition/resolve';
+import { workspaceLogicalPath } from '../edition/types';
 import {
   PROJECT_BUILD,
   PROJECT_CREATE_WORKSPACE,
@@ -39,7 +41,7 @@ export function registerProjectCapabilities(host: CapabilityHost, deps: ProjectC
 
 function projectHandlers(deps: ProjectCapabilityDeps): CapabilityHandler[] {
   return [
-    mutating(PROJECT_CREATE_WORKSPACE, 'Create a goal-scoped project workspace under data/jarvis/builds/<slug>/.', ['slug'], async input => {
+    mutating(PROJECT_CREATE_WORKSPACE, `Create a goal-scoped project workspace under ${workspaceLogicalPath('<slug>', resolveJarvisEdition())}.`, ['slug'], async input => {
       const slug = String(input.slug || '');
       const created = deps.workspace.create({ slug, title: slug });
       return ok(PROJECT_CREATE_WORKSPACE, `Workspace ready at ${created.dir}`, { workspace: created.dir, created: created.created });

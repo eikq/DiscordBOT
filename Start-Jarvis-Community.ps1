@@ -33,7 +33,7 @@ if ($nodeMajor -lt 18) {
 }
 
 if (-not (Test-Path -LiteralPath 'node_modules')) {
-  Write-Error 'Dependencies are missing. Run npm install first.'
+  Write-Error 'Dependencies are missing. Run npm ci first.'
   exit 1
 }
 

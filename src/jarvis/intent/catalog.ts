@@ -224,7 +224,7 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     sideEffectClass: 'CONFIRM_REQUIRED',
   },
   'project.createWorkspace': {
-    shortDescription: 'Create a goal-scoped project folder under data/jarvis/builds/<slug>/.',
+    shortDescription: 'Create a goal-scoped project folder under the edition sandbox workspace.',
     argumentSchemaSummary: 'slug',
     sideEffectClass: 'CONFIRM_REQUIRED',
   },

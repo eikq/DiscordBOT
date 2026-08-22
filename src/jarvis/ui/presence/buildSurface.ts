@@ -1,4 +1,5 @@
 import type { BuildPlan, VisualWorkflowNode } from '../../build/types';
+import { workspaceLogicalPath, type JarvisEdition } from '../../edition/types';
 
 export type PresenceBuildNodeState = 'pending' | 'active' | 'complete' | 'failed' | 'waiting-owner';
 
@@ -79,6 +80,7 @@ export function isBuildOperationType(type: string): boolean {
 
 export function buildSurfaceFromEvents(
   events: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>,
+  edition: JarvisEdition = 'owner',
 ): PresenceBuildSurface | null {
   const relevant = events.filter(item => item.type && EVENT_TO_NODE[item.type]);
   if (!relevant.length) return null;
@@ -100,10 +102,14 @@ export function buildSurfaceFromEvents(
     failed: latest.type === 'PLAN_STAGE_FAILED',
     done: latest.type === 'PLAN_STAGE_COMPLETED',
     previewUrl,
+    edition,
   });
 }
 
-export function buildSurfaceFromPlan(plan?: Pick<BuildPlan, 'title' | 'slug' | 'status' | 'summary'> | null): PresenceBuildSurface | null {
+export function buildSurfaceFromPlan(
+  plan?: Pick<BuildPlan, 'title' | 'slug' | 'status' | 'summary'> | null,
+  edition: JarvisEdition = 'owner',
+): PresenceBuildSurface | null {
   if (!plan) return null;
   return surfaceFor({
     title: plan.title,
@@ -112,14 +118,16 @@ export function buildSurfaceFromPlan(plan?: Pick<BuildPlan, 'title' | 'slug' | '
     active: PLAN_STATUS_TO_NODE[plan.status] || 'REVIEW',
     failed: plan.status === 'FAILED',
     done: plan.status === 'COMPLETED',
+    edition,
   });
 }
 
 export function mergePresenceBuildSurface(
   events: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>,
   plans: Array<Pick<BuildPlan, 'title' | 'slug' | 'status' | 'summary' | 'updatedAt'>> = [],
+  edition: JarvisEdition = 'owner',
 ): PresenceBuildSurface | null {
-  return buildSurfaceFromEvents(events) || buildSurfaceFromPlan(plans[0]);
+  return buildSurfaceFromEvents(events, edition) || buildSurfaceFromPlan(plans[0], edition);
 }
 
 function surfaceFor(input: {
@@ -130,6 +138,7 @@ function surfaceFor(input: {
   failed: boolean;
   done: boolean;
   previewUrl?: string;
+  edition?: JarvisEdition;
 }): PresenceBuildSurface {
   const nodes = NODES.map(node => {
     const order = NODES.findIndex(item => item.id === node.id);
@@ -147,7 +156,7 @@ function surfaceFor(input: {
   });
   return {
     title: input.title,
-    artifact: input.slug ? `data/jarvis/builds/${input.slug}` : undefined,
+    artifact: input.slug ? workspaceLogicalPath(input.slug, input.edition || 'owner') : undefined,
     previewUrl: input.previewUrl,
     evidence: input.evidence,
     nodes,

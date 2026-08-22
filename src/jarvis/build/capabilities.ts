@@ -5,6 +5,8 @@ import type {
   CapabilityResult,
 } from '../capabilities/types';
 import type { JarvisEventBus } from '../security/eventBus';
+import { resolveJarvisEdition } from '../edition/resolve';
+import { workspaceLogicalPath } from '../edition/types';
 import { SOFTWARE_APPLY_BUILD, SOFTWARE_PLAN_BUILD } from './constants';
 import { createBuildPlan, spokenPlanSummary } from './planner';
 import type { BuildPlanStore } from './planStore';
@@ -90,7 +92,7 @@ function applyHandler(deps: SoftwareCapabilityDeps): CapabilityHandler {
       untrustedOutput: false,
       effects: [{
         kind: 'CREATE',
-        description: 'Create, install, build, test, and optionally preview a project under data/jarvis/builds/<slug>/.',
+        description: `Create, install, build, test, and optionally preview a project under ${workspaceLogicalPath('<slug>', resolveJarvisEdition())}.`,
         destructive: false,
         reversible: true,
         privilege: 'owner_approval',

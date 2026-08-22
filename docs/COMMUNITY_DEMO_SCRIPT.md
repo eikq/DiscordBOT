@@ -4,10 +4,11 @@ Target: a deterministic local demo. Start Community on a **fresh** `data/communi
 
 ## Before recording
 
-1. `Copy-Item .env.community.example .env.community`
-2. Point `JARVIS_LLM_BASE_URL` / `JARVIS_LLM_MODEL` at a running OpenAI-compatible local server.
-3. `npm run jarvis:community`
-4. Confirm Presence shows **MODEL READY**.
+1. `npm ci` if `node_modules` is missing.
+2. `Copy-Item .env.community.example .env.community`
+3. Point `JARVIS_LLM_BASE_URL` / `JARVIS_LLM_MODEL` at a running OpenAI-compatible local server. The model id must match `GET $JARVIS_LLM_BASE_URL/models`.
+4. `npm run jarvis:community`
+5. Confirm Presence shows **MODEL READY**.
 
 ## Script
 
