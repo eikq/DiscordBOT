@@ -41,6 +41,21 @@ export function sanitizedRecent(summary: string | undefined): string {
   return compactRecent(summary);
 }
 
+export function compactResearchSpeak(text: string): string {
+  const stripped = text
+    .replace(/<untrusted_tool_output>[\s\S]*?<\/untrusted_tool_output>/giu, ' ')
+    .replace(/webpage text:[^\n]+/giu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  const withoutUrls = stripped.replace(/https?:\/\/\S+/gu, '').replace(/\s+/gu, ' ').trim();
+  const dump = withoutUrls.length < stripped.length * 0.75 || /แหล่งทางการ:|fetched from|citation\./i.test(stripped);
+  const source = dump ? withoutUrls : stripped;
+  if (source.length <= 280) {
+    return dump && stripped !== withoutUrls ? `${source} รายละเอียดอยู่ใน Details` : source;
+  }
+  return `${source.slice(0, 240).trim()} รายละเอียดอยู่ใน Details`;
+}
+
 function currentTask(state: ConversationState): string | undefined {
   if (state.pendingPermission) return 'Waiting for permission';
   if (state.pendingPlanReview) return 'Reviewing plan';

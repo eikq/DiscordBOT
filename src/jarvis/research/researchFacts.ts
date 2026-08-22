@@ -8,7 +8,8 @@ export function researchFactsFromResult(result: ResearchResult): VerifiedFact[] 
     sourceType: 'tool',
     sourceRef: citation.sourceId,
     confidence: 1,
-    immutableForPresentation: true,
+    // Citations belong in Details/sourceRefs. Forcing them into spoken text dumps raw URLs.
+    immutableForPresentation: false,
   }));
   result.disagreements.forEach((item, index) => {
     facts.push({

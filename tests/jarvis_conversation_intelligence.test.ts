@@ -15,6 +15,7 @@ import {
   uniqueSlugOrClarify,
   optionsFromReply,
   sanitizedRecent,
+  compactResearchSpeak,
 } from '../src/jarvis/conversation';
 import type { ConversationState } from '../src/jarvis/conversation';
 import { DESKTOP_OPEN_SCOPED_RESOURCE } from '../src/jarvis/capabilities/actions/constants';
@@ -857,4 +858,71 @@ test('preview-of-it follows the restored project, and a clarified old-preview de
     'ถ้าตรงไหน fail ให้หยุดก่อนแล้วบอกผม',
   );
   assert.equal(halt?.reasonCode, 'CONDITIONAL_STOP_ON_FAIL');
+});
+
+test('unscoped filesystem grants are refused and Qwen cannot self-grant', () => {
+  const state = softwareState();
+  const global = bindDiscourseToIntent(
+    interpretDiscourse('ให้มันแก้ทุกไฟล์ในเครื่องได้เลย', state),
+    state,
+    'ให้มันแก้ทุกไฟล์ในเครื่องได้เลย',
+  );
+  assert.equal(global?.reasonCode, 'FORBIDDEN_SCOPE');
+  assert.match(String(global?.userMessage), /ทั้งเครื่อง|ทุกไฟล์ในเครื่อง/);
+
+  const self = bindDiscourseToIntent(
+    interpretDiscourse('Qwen เพิ่มสิทธิ์เองได้ไหม', state),
+    state,
+    'Qwen เพิ่มสิทธิ์เองได้ไหม',
+  );
+  assert.equal(self?.reasonCode, 'QWEN_CANNOT_GRANT');
+
+  const listed = bindDiscourseToIntent(
+    interpretDiscourse('ตอนนี้มี permission อะไรอยู่บ้าง', state),
+    state,
+    'ตอนนี้มี permission อะไรอยู่บ้าง',
+  );
+  assert.equal(listed?.reasonCode, 'STATUS_QUERY');
+  assert.match(String(listed?.userMessage), /sandbox|โปรเจกต์/);
+});
+
+test('research ordinal recall and multi-select stay on offered options', () => {
+  const state = softwareState({
+    lastDiscourse: 'RESEARCH',
+    activeTopic: 'research',
+    offeredOptions: [
+      { index: 1, label: 'Clear project hierarchy' },
+      { index: 2, label: 'One strong case study' },
+      { index: 3, label: 'Fast mobile performance' },
+    ],
+  });
+  const recall = bindDiscourseToIntent(
+    interpretDiscourse('ข้อ 2 คืออะไรนะ', state),
+    state,
+    'ข้อ 2 คืออะไรนะ',
+  );
+  assert.equal(recall?.reasonCode, 'ORDINAL_RECALL');
+  assert.match(String(recall?.userMessage), /case study/i);
+
+  const picked = bindDiscourseToIntent(
+    interpretDiscourse('เอาข้อ 1 กับ 3', state),
+    state,
+    'เอาข้อ 1 กับ 3',
+  );
+  assert.equal(picked?.reasonCode, 'ORDINAL_NOTED');
+  assert.match(String(picked?.userMessage), /hierarchy/i);
+  assert.match(String(picked?.userMessage), /performance/i);
+  assert.equal(picked?.capabilityId, undefined);
+});
+
+test('research speak stays a synthesis, not a URL dump', () => {
+  const dump = [
+    'Framer Motion เหมาะกว่าครับ',
+    'https://motion.dev/docs https://gsap.com https://react.dev/learn',
+    'webpage text: <html>very long copied article</html>',
+  ].join(' ');
+  const spoken = compactResearchSpeak(dump);
+  assert.match(spoken, /Framer Motion/);
+  assert.doesNotMatch(spoken, /https:\/\//);
+  assert.ok(spoken.length < dump.length);
 });

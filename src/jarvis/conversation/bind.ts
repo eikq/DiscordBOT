@@ -91,7 +91,7 @@ export function bindDiscourseToIntent(
     case 'CONTINUE':
       return continueWork(state, text, discourse);
     case 'SELECT_ORDINAL':
-      return selectOrdinal(state, discourse.ordinal);
+      return selectOrdinal(state, discourse);
     case 'CONDITIONAL':
       return bindConditional(state, discourse);
     case 'RESEARCH':
@@ -345,23 +345,32 @@ function restartPreview(state: ConversationState): IntentResolution {
   };
 }
 
-function selectOrdinal(state: ConversationState, ordinal: number | undefined): IntentResolution | null {
+function selectOrdinal(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution | null {
+  const ordinals = (discourse.ordinals?.length ? discourse.ordinals : discourse.ordinal ? [discourse.ordinal] : [])
+    .filter((item): item is number => Number.isFinite(item) && item > 0);
+  const ordinal = ordinals[0];
   if (!ordinal) return clarify('อันไหนที่หมายถึงครับ?', 'ORDINAL_MISSING');
   if (state.offeredOptions.length) {
-    const option = state.offeredOptions.find(item => item.index === ordinal) || state.offeredOptions[ordinal - 1];
-    if (!option) return clarify('ไม่มีตัวเลือกนั้นครับ', 'ORDINAL_UNKNOWN');
+    const picked = ordinals
+      .map(index => state.offeredOptions.find(item => item.index === index) || state.offeredOptions[index - 1])
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    if (!picked.length) return clarify('ไม่มีตัวเลือกนั้นครับ', 'ORDINAL_UNKNOWN');
+    const labels = picked.map(item => item.label);
+    if (/คืออะไร|what is/iu.test(discourse.change || '')) {
+      return talk(ordinals.length > 1 ? labels.join(' · ') : labels[0]!, 'ORDINAL_RECALL');
+    }
     if (state.lastDiscourse === 'RESEARCH' || state.activeTopic === 'research') {
-      return talk(`เอา${option.label} ครับ`, 'ORDINAL_NOTED');
+      return talk(`เอา${labels.join(' และ ')} ครับ`, 'ORDINAL_NOTED');
     }
     if (state.activeProjectSlug || state.activePlanId) {
       return capability(SOFTWARE_APPLY_BUILD, {
         planId: state.activePlanId,
         goalId: state.activeGoalId,
-        brief: [option.payload || option.label, ...state.constraints].filter(Boolean).join('\n'),
+        brief: [...picked.map(item => item.payload || item.label), ...state.constraints].filter(Boolean).join('\n'),
         merge: true,
       }, 'CONVERSATION_ORDINAL_APPLY');
     }
-    return talk(`เอา${option.label} ครับ`, 'ORDINAL_NOTED');
+    return talk(`เอา${labels.join(' และ ')} ครับ`, 'ORDINAL_NOTED');
   }
   if (state.lastDiscourse === 'RESEARCH' || state.pendingChange) {
     return talk('เอาอันนั้นครับ', 'ORDINAL_NOTED');
@@ -600,6 +609,33 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
     const lines = state.projects.map((item, index) => `${index + 1}. ${item.label} (${item.slug})${item.slug === state.activeProjectSlug ? ' · active' : ''}`);
     return talk(lines.join('\n'), 'STATUS_QUERY');
   }
+  if (focus === 'permission') {
+    if (discourse.change === 'REFUSE_GLOBAL') {
+      return talk(
+        'ทำไม่ได้ครับ ไม่มีสิทธิ์แก้ทุกไฟล์ในเครื่อง จำกัดเฉพาะ project workspace ที่เปิดอยู่',
+        'FORBIDDEN_SCOPE',
+      );
+    }
+    if (discourse.change === 'QWEN_CANNOT_GRANT') {
+      return talk('Qwen เพิ่มสิทธิ์เองไม่ได้ครับ ต้องเป็น owner อนุญาตตามคำขอที่ค้างอยู่เท่านั้น', 'QWEN_CANNOT_GRANT');
+    }
+    if (state.pendingPermission) {
+      return talk(`มีคำขอสิทธิ์ค้างอยู่ proposal ${state.pendingPermission.proposalId} ขอบเขต THIS_GOAL ของโปรเจกต์นี้`, 'STATUS_QUERY');
+    }
+    const project = state.projects.find(item => item.slug === state.activeProjectSlug);
+    return talk(
+      project
+        ? `ตอนนี้สิทธิ์อยู่ที่โปรเจกต์ ${project.label} สำหรับ plan/test/build/preview ใน sandbox นี้ ไม่ครอบคลุมทั้งเครื่อง`
+        : 'ตอนนี้ไม่มีคำขอสิทธิ์ค้าง และไม่มีสิทธิ์ทั้งเครื่อง',
+      'STATUS_QUERY',
+    );
+  }
+  if (focus === 'capability') {
+    return talk(
+      'ทำได้ในโปรเจกต์ที่เปิดอยู่: แก้ไฟล์ใน sandbox, test, build, preview, แผน, research แบบอ่านอย่างเดียว — ยัง deploy Vercel / คลิกเดสก์ท็อป / shell อิสระไม่ได้',
+      'STATUS_QUERY',
+    );
+  }
   if (focus === 'preference') {
     const remembered = state.remembered.slice(-4);
     return talk(remembered.length ? `ตอบตามที่จำไว้: ${remembered.join(' · ')}` : 'ยังไม่มี preference การตอบที่จำไว้ครับ', 'STATUS_QUERY');
@@ -747,6 +783,21 @@ function recommendResearch(
   const options = state.offeredOptions.length
     ? state.offeredOptions
     : extractComparisonOptions(state.lastResearchQuery || state.lastOwnerIntent);
+  const wantCount = Number((text.match(/เลือก\s*(\d+)\s*อย่าง/u) || [])[1] || 0);
+  if (wantCount >= 2 && options.length >= wantCount) {
+    const picked = options.slice(0, wantCount);
+    return talk(
+      picked.map((item, index) => `${index + 1}. ${item.label}`).join('\n'),
+      'RESEARCH_RECOMMEND',
+    );
+  }
+  if (wantCount >= 2 && state.lastResearchQuery) {
+    return capability(
+      RESEARCH_CURRENT,
+      { query: `${state.lastResearchQuery} list ${wantCount} concise numbered recommendations for this portfolio`.slice(0, 240) },
+      'CONVERSATION_RESEARCH_RECOMMEND',
+    );
+  }
   const picked = pickRecommendedOption(options, `${state.lastOwnerIntent || ''} ${state.pendingChange || ''} ${text}`);
   if (picked) {
     return talk(

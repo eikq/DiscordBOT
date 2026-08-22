@@ -30,4 +30,5 @@ export {
   isOperationalNoise,
   isPermissionPrompt,
   sanitizedRecent,
+  compactResearchSpeak,
 } from './view';

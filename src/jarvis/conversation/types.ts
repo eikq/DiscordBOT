@@ -145,6 +145,7 @@ export type ConversationState = {
 export type DiscourseInterpretation = {
   act: DiscourseAct;
   ordinal?: number;
+  ordinals?: number[];
   change?: string;
   constraint?: string;
   researchQuery?: string;
@@ -178,7 +179,9 @@ export type StatusFocus =
   | 'preference'
   | 'project'
   | 'recovery'
-  | 'recent';
+  | 'recent'
+  | 'permission'
+  | 'capability';
 
 export type ResolvedReferent = {
   slot: ReferentSlot;

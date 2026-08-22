@@ -143,6 +143,7 @@ import {
   discoursePreemptsPendingGoal,
   isOperationalNoise,
   slugFromWorkspacePath,
+  compactResearchSpeak,
   type ConversationState,
   type DiscourseInterpretation,
 } from '../conversation';
@@ -1986,7 +1987,8 @@ export class JarvisLabRuntime {
     };
     pendingConfirmation?: { proposalId?: string };
   }>(sessionId: string, output: T): T {
-    const visible = String(output.presented?.text || '').trim();
+    const compacted = compactVisibleResearch(output);
+    const visible = String(compacted.presented?.text || '').trim();
     const history = this.historyStore();
     if (history && this.activeJarvisTurnId) {
       if (visible) {
@@ -2008,9 +2010,9 @@ export class JarvisLabRuntime {
     }
     this.activeJarvisTurnId = undefined;
     this.projectMemoryView(sessionId);
-    this.recordConversationTurn(sessionId, output);
+    this.recordConversationTurn(sessionId, compacted);
     return {
-      ...output,
+      ...compacted,
       conversation: this.permissionSnapshot(sessionId).conversation,
     };
   }
@@ -2519,6 +2521,22 @@ async function resolveLabActionTurn(text: string, input: {
     };
   }
   return { capabilities: [], resolution };
+}
+
+function compactVisibleResearch<T extends { presented?: { text?: string }; result?: unknown }>(output: T): T {
+  const result = output.result as {
+    verifiedFacts?: Array<{ key?: string }>;
+    toolResults?: Array<{ name?: string; capabilityId?: string }>;
+  } | undefined;
+  const research = (result?.toolResults || []).some(item => String(item.capabilityId || item.name || '').startsWith('research.'))
+    || (result?.verifiedFacts || []).some(item => String(item.key || '').startsWith('citation.'));
+  if (!research || !output.presented?.text) return output;
+  const text = compactResearchSpeak(output.presented.text);
+  if (text === output.presented.text) return output;
+  return {
+    ...output,
+    presented: { ...output.presented, text },
+  };
 }
 
 function operationKindFromCapability(capabilityId: string | undefined): NonNullable<ConversationState['recentOperation']>['kind'] | undefined {

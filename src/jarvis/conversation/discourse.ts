@@ -19,23 +19,39 @@ export function interpretDiscourse(
   const raw = stripOwnerAddress(text);
   if (!raw) return act('GREET');
 
-  const ordinal = parseOrdinal(raw, state);
+  const ordinals = parseOrdinals(raw, state);
+  const ordinal = ordinals[0] ?? parseOrdinal(raw, state);
   if (ordinal !== undefined && isMostlyOrdinal(raw)) {
     if (!state?.offeredOptions.length && !state?.projects.length && state?.lastDiscourse !== 'RESEARCH') {
       return {
         act: 'SELECT_ORDINAL',
         ordinal,
+        ordinals,
         confidence: 'MEDIUM',
         requiresClarification: true,
         clarification: 'อันไหนที่หมายถึงครับ?',
         source: 'discourse',
       };
     }
-    return { act: 'SELECT_ORDINAL', ordinal, confidence: 'HIGH', requiresClarification: false, source: 'discourse' };
+    return {
+      act: 'SELECT_ORDINAL',
+      ordinal,
+      ordinals: ordinals.length ? ordinals : [ordinal],
+      change: raw,
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+    };
   }
 
   if (isGreeting(raw)) return act('GREET');
   if (isAck(raw)) return act('ACKNOWLEDGE');
+  if (isUnscopedAuthority(raw)) {
+    return { ...act('STATUS_QUERY'), statusFocus: 'permission', change: 'REFUSE_GLOBAL' };
+  }
+  if (isSelfGrantQuery(raw)) {
+    return { ...act('STATUS_QUERY'), statusFocus: 'permission', change: 'QWEN_CANNOT_GRANT' };
+  }
   if (isModelQuery(raw)) return act('MODEL_QUERY');
   if (isPause(raw) && !isContinue(raw)) return act('PAUSE');
   if (isSwitchTopic(raw)) return act('SWITCH_TOPIC');
@@ -233,7 +249,7 @@ function isRerun(text: string): boolean {
 }
 
 function isStatus(text: string): boolean {
-  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|สมมติ/iu.test(text)
+  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
@@ -247,6 +263,8 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
   if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
   if (/มีกี่ project|project หลัก/iu.test(text)) return 'inventory';
   if (/ตอนนี้ตอบผมแบบไหน/iu.test(text)) return 'preference';
+  if (/permission อะไร|ครอบคลุมอะไร/iu.test(text)) return 'permission';
+  if (/ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้/iu.test(text)) return 'capability';
   if (/ถึงไหนแล้ว|กำลังทำอะไร|ตอนนี้ทำถึงข้อไหน|queue (?:เมื่อกี้|เป็นยังไง)|how far/iu.test(text)) return 'progress';
   if (/มือถือเป็นไง|บนมือถือ|responsive เป็นไง|ดีขึ้นไหม|เช็กให้หน่อย|check (?:it|that|the site)/iu.test(text) && hasActiveSoftware(state)) {
     return 'project';
@@ -265,7 +283,7 @@ function isInspect(text: string, state: ConversationState | null | undefined): b
 
 function isMemoryStore(text: string): boolean {
   if (/จำอะไรเกี่ยวกับ/iu.test(text)) return false;
-  return /จำไว้|remember (?:this|that)|เก็บไว้|ตอบสั้น|บอกสั้น|อย่าถามซ้ำ|ถ้า.{0,16}fail.{0,24}บอกสาเหตุ|ติดตั้ง package.{0,24}ถามก่อน|อย่าเก็บพวก/iu.test(text);
+  return /จำไว้|remember (?:this|that)|เก็บไว้|ตอบสั้น|บอกสั้น|อย่าถามซ้ำ|ถ้า.{0,40}(?:fail|พัง).{0,40}สาเหตุ|ติดตั้ง package.{0,24}ถามก่อน|อย่าเก็บพวก|permission เดิมก็แก้|จำแบบนี้ไว้/iu.test(text);
 }
 
 function isMemoryQuery(text: string): boolean {
@@ -319,7 +337,7 @@ function isResearch(text: string): boolean {
 function isResearchRecommend(text: string, state: ConversationState | null | undefined): boolean {
   if (state?.lastDiscourse !== 'RESEARCH' && state?.activeTopic !== 'research') return false;
   if (/ใส่ในแผน|เพิ่มหน้า|แก้ไฟล์|ติดตั้ง|กลับไปทำเว็บ/iu.test(text)) return false;
-  return /เลือกมาอันเดียว|เลือกมาอัน(?:นึง|หนึ่ง)?|recommend (?:just )?one|pick one|which one should I (?:use|pick)/iu.test(text);
+  return /เลือกมาอันเดียว|เลือกมาอัน(?:นึง|หนึ่ง)?|recommend (?:just )?one|pick one|which one should I (?:use|pick)|เลือก\s*\d+\s*อย่าง|อันไหนเอามาใช้/iu.test(text);
 }
 
 function isResearchFollowUp(text: string, state: ConversationState | null | undefined): boolean {
@@ -356,6 +374,16 @@ function isShortFollowUp(text: string): boolean {
   return text.length <= 24 && /ทำ|ต่อ|เลย|เหมือนเดิม|อันนี้|มัน/u.test(text);
 }
 
+function parseOrdinals(text: string, state?: ConversationState | null): number[] {
+  const found = [
+    ...[...text.matchAll(/(?:ข้อ|อันที่|option)\s*(\d+)/giu)].map(item => Number(item[1])),
+    ...[...text.matchAll(/(?:กับ|and|,)\s*(?:ข้อ\s*)?(\d+)/giu)].map(item => Number(item[1])),
+  ].filter(item => Number.isFinite(item) && item > 0);
+  if (found.length >= 2) return [...new Set(found)].slice(0, 6);
+  const one = parseOrdinal(text, state);
+  return one ? [one] : [];
+}
+
 function parseOrdinal(text: string, state?: ConversationState | null): number | undefined {
   if (/อันนั้น|ใช้อันนั้น|เอาอันนั้น|use that(?: one)?/iu.test(text)) {
     return state?.selectedOption?.index || state?.offeredOptions[0]?.index || 1;
@@ -370,7 +398,17 @@ function parseOrdinal(text: string, state?: ConversationState | null): number | 
 
 function isMostlyOrdinal(text: string): boolean {
   return /^(เอา)?\s*(อันแรก|อันสอง|อันที่\s*\d+|ข้อ\s*\d+|the first(?: one)?|the second(?: one)?|option\s*\d+)\s*(?:โอเค)?$/iu.test(text)
-    || /เอาอันที่(?:สอง|สาม|\d+)|เอาข้อ\s*\d+|เอาอันแรก|ใช้อันนั้น|ใช้อันแรก/iu.test(text);
+    || /เอาอันที่(?:สอง|สาม|\d+)|เอาข้อ\s*\d+|เอาอันแรก|ใช้อันนั้น|ใช้อันแรก/iu.test(text)
+    || /ข้อ\s*\d+\s*คืออะไร/iu.test(text)
+    || /เอาข้อ\s*\d+(?:\s*(?:กับ|and|,)\s*(?:ข้อ\s*)?\d+)+/iu.test(text);
+}
+
+function isUnscopedAuthority(text: string): boolean {
+  return /ทุกไฟล์ในเครื่อง|all files on (?:this |the )?(?:machine|computer)|unrestricted (?:filesystem|file access)|แก้ได้ทั้งเครื่อง/iu.test(text);
+}
+
+function isSelfGrantQuery(text: string): boolean {
+  return /qwen/i.test(text) && /สิทธิ์|grant|เพิ่มสิทธิ์|self-?grant|อนุญาตเอง/iu.test(text);
 }
 
 function parseConditional(text: string): DiscourseInterpretation | null {

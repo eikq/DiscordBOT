@@ -395,6 +395,31 @@ test('citations survive presentation and persona cannot drop source URLs', async
   assert.match(presented.text, /nvidia.com\/rtx/);
 });
 
+test('research synthesis stays short; citation URLs stay in evidence not the spoken reply', async () => {
+  const engine = new FactPreservingPresentationEngine();
+  const result = {
+    requestId: 'r-research',
+    answerIntent: 'standalone_action' as const,
+    verifiedFacts: [{
+      key: 'citation.src_bbbbbbbbbbbb',
+      value: 'https://motion.dev/docs',
+      sourceType: 'tool' as const,
+      sourceRef: 'src_bbbbbbbbbbbb',
+      immutableForPresentation: false,
+    }],
+    unverifiedClaims: [],
+    toolResults: [],
+    memoryRefs: [],
+    actionResults: [],
+    uncertainty: [],
+    suggestedContent: 'Framer Motion เหมาะกว่าครับ เบากับ React workflow',
+  };
+  const presented = await engine.render(result, defaultJarvisPresentation(), { sessionId: 'lab' });
+  assert.match(presented.text, /Framer Motion/);
+  assert.doesNotMatch(presented.text, /https:\/\/motion\.dev/);
+  assert.equal(result.verifiedFacts[0]?.value, 'https://motion.dev/docs');
+});
+
 test('research does not write canonical memory', async () => {
   const { host, memory } = runtime({
     'https://en.wikipedia.org/w/api.php?action=opensearch&search=mem&limit=8&namespace=0&format=json': {
@@ -412,7 +437,8 @@ test('research does not write canonical memory', async () => {
     capabilityCalls: [{ id: RESEARCH_CURRENT, input: { query: 'mem' } }],
   }));
   assert.equal(result.memoryRefs.length, 0);
-  assert.ok(result.verifiedFacts.some(fact => fact.immutableForPresentation));
+  assert.ok(result.verifiedFacts.some(fact => String(fact.key).startsWith('citation.')));
+  assert.ok(result.verifiedFacts.filter(fact => String(fact.key).startsWith('citation.')).every(fact => fact.immutableForPresentation === false));
 });
 
 test('max source count is enforced and duplicate URLs collapse', async () => {
