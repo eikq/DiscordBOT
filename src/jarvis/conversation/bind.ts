@@ -541,8 +541,18 @@ function shouldStoreChain(
 ): boolean {
   if (last?.ok === false) return false;
   if (/ทำเลย|เริ่มเลย|ไปเลย|ต่อเลย|do it|go ahead|execute/iu.test(text)) return false;
-  if (/ถ้า.{0,24}ผ่าน|if .{0,24}pass/iu.test(text)) return false;
+  if (/ถ้า.{0,24}(?:ผ่าน|โอเค)|if .{0,24}(?:pass|ok(?:ay)?)/iu.test(text)) return false;
+  if (last?.ok && preconditionAlreadyMet(last, acts)) return false;
   return acts.length >= 2;
+}
+
+function preconditionAlreadyMet(
+  last: NonNullable<ConversationState['recentVerification']>,
+  acts: DiscourseAct[],
+): boolean {
+  if (last.kind === 'test' && acts.includes('TEST')) return true;
+  if (last.kind === 'build' && acts.includes('BUILD')) return true;
+  return false;
 }
 
 function callForAct(

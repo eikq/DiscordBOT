@@ -1607,6 +1607,12 @@ test('leftover plans do not steal research recall, in-sentence ordinals, or heal
   const compile = interpretDiscourse('ถ้าโอเค compile/build ต่อ', leftover);
   assert.equal(compile.act, 'CONDITIONAL');
   assert.equal(compile.thenAct, 'BUILD');
+  const afterPassedTest = softwareState({
+    recentVerification: { kind: 'test', ok: true, summary: 'Tests passed for portfolio', at: 9, slug: 'portfolio' },
+  });
+  const compileNow = bindDiscourseToIntent(compile, afterPassedTest, 'ถ้าโอเค compile/build ต่อ');
+  assert.notEqual(compileNow?.reasonCode, 'CONDITIONAL_STORED');
+  assert.equal(compileNow?.capabilityId, PROJECT_BUILD);
 
   const armed = softwareState({
     recentVerification: { kind: 'test', ok: true, summary: 'Tests passed for portfolio', at: 9, slug: 'portfolio' },
