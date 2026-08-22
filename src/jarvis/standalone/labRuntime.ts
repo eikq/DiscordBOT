@@ -1779,7 +1779,12 @@ export class JarvisLabRuntime {
           value: String(args.target || input.text),
           actor: 'owner',
         });
-        text = written.ok ? 'I’ll keep that as an owner preference.' : written.ok === false ? written.message : 'I could not store that preference.';
+        text = written.ok
+          ? speakInLanguage(language, {
+            en: 'I’ll keep that as an owner preference.',
+            th: 'จำไว้แล้วครับ',
+          })
+          : written.ok === false ? written.message : 'I could not store that preference.';
       }
     }
     const request = createJarvisRequest({ text: input.text, sessionId: prepared.sessionId, actionSource: input.actionSource });

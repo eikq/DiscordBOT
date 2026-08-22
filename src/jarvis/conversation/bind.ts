@@ -36,16 +36,9 @@ export function bindDiscourseToIntent(
     case 'PAUSE':
       return talk('พักไว้ก่อนได้ครับ งานเดิมยังอยู่', 'PAUSE');
     case 'MODEL_QUERY':
-      return null;
+      return capability(JARVIS_RUNTIME_STATUS, {}, 'CONVERSATION_MODEL');
     case 'MEMORY_QUERY':
-      return {
-        kind: 'CONVERSATION',
-        confidence: 'HIGH',
-        reasonCode: 'ASK_MEMORY',
-        consumed: true,
-        source: 'context',
-        actionClass: 'CONVERSATION',
-      };
+      return bindMemoryQuery(state, text);
     case 'MEMORY_STORE':
       return {
         kind: 'CONVERSATION',
@@ -153,7 +146,7 @@ export function rewriteWrongRoute(
 
 export function looksLikeProjectFollowUp(text: string, state: ConversationState): boolean {
   if (!state.activeProjectSlug && !state.activePlanId && !state.pendingPlanReview) return false;
-  return /เปิดให้ดู|เปิดดู|preview|เพิ่มปุ่ม|dark mode|animation|navbar|hover|เว็บนี้|โปรเจกต์นี้|\b(it|this|that)\b|มัน|อันนี้|รันใหม่|build ใหม่|\badd\b|\bchange\b|\bmake\b/iu.test(text)
+  return /เปิดให้ดู|เปิดดู|preview|เพิ่มปุ่ม|dark mode|animation|navbar|hover|เว็บนี้|โปรเจกต์นี้|\b(it|this|that)\b|มัน|อันนี้|รันใหม่|build ใหม่|\badd\b|\bchange\b|\bmake\b|ขาวหมด|blank|console|สมมติ/iu.test(text)
     && !/chrome|youtube|notepad|spotify|cursor|vscode/iu.test(text);
 }
 
@@ -317,8 +310,12 @@ function inspect(state: ConversationState, text: string): IntentResolution {
       return talk(`ล่าสุดแก้: ${[change, recent].filter(Boolean).join(' · ')}`, 'INSPECT_RECENT_CHANGE');
     }
   }
-  if (/package\.json|package อะไร/iu.test(text)) {
-    return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: 'package.json' }, 'CONVERSATION_READ_PACKAGE');
+  if (/มีหน้าอะไร|which pages|what pages/iu.test(text)) {
+    return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: 'src/App.jsx' }, 'CONVERSATION_READ_PAGES');
+  }
+  if (/package\.json|package อะไร|ติดตั้งแล้วหรือยัง|ใช้จริงไหม/iu.test(text)) {
+    const file = /ใช้จริงไหม/iu.test(text) ? (state.referents.this_file || 'src/App.jsx') : 'package.json';
+    return capability(PROJECT_READ_FILE, { slug: resolved.slug, relativePath: file }, 'CONVERSATION_READ_PACKAGE');
   }
   if (/function ไหน|ฟังก์ชันไหน|which function|ไฟล์ไหน.*(จัดการ|todo)/iu.test(text)) {
     const file = state.referents.this_file || 'src/App.jsx';
@@ -510,6 +507,53 @@ function clarify(userMessage: string, reasonCode: string): IntentResolution {
   };
 }
 
+function bindMemoryQuery(state: ConversationState, text: string): IntentResolution {
+  if (/เปิด history|show history|open history|เปิดประวัติ/iu.test(text)) {
+    return talk('เปิดแผง History ได้จาก Presence แล้วครับ', 'OPEN_HISTORY');
+  }
+  if (/จำบทสนทนา|ได้ทั้งหมดไหม|whole conversation|entire (?:chat|conversation)/iu.test(text)) {
+    return talk(
+      'จำ working context ของ session นี้ครับ ไม่ได้เก็บ transcript ทั้งก้อนเป็น memory ถาวร เว้นแต่คุณสั่งจำ',
+      'CONVERSATION_MEMORY',
+    );
+  }
+  if (/สีที่ผมเลือก|ตอนแรกผมบอกสี|สีอะไร/iu.test(text)) {
+    const color = [...state.remembered, ...state.constraints, state.pendingChange || '', state.lastOwnerIntent || '']
+      .find(item => /ดำ|ฟ้า|ม่วง|black|blue|purple|palette|โทน|สีหลัก/iu.test(item));
+    return talk(
+      color ? `สีที่คุยกันไว้: ${color}` : 'ยังไม่มีสีที่จำเป็น memory ชัดเจนครับ ถ้าจะย้ำโทนเดิมบอกได้เลย',
+      'CONVERSATION_MEMORY',
+    );
+  }
+  if (/เปลี่ยนใจตรงไหน/iu.test(text)) {
+    const bits = [...state.constraints, state.pendingChange || ''].filter(item => /ไม่|อย่า|เปลี่ยนใจ|หมายถึง/u.test(item));
+    return talk(bits.length ? `จุดที่ปรับความหมาย: ${bits.slice(-3).join(' · ')}` : 'ยังไม่บันทึกจุดเปลี่ยนใจไว้ครับ', 'CONVERSATION_MEMORY');
+  }
+  if (/ย้อนแค่เรื่องเว็บ|memory ของ project/iu.test(text)) {
+    return talk(progressLine(state), 'CONVERSATION_MEMORY');
+  }
+  if (/ถ้าผมกลับมาพรุ่งนี้/iu.test(text)) {
+    return talk(
+      state.remembered.length
+        ? 'ควรรู้ preference ที่สั่งจำไว้ครับ งานโปรเจกต์ยัง restore จาก working context ได้'
+        : 'working context ของ session ยังอยู่ครับ preference ถาวรมีเมื่อคุณสั่งจำ',
+      'CONVERSATION_MEMORY',
+    );
+  }
+  if (/เราคุยอะไร/iu.test(text)) {
+    return talk(recentWorkLine(state), 'CONVERSATION_MEMORY');
+  }
+  return talk(rememberedLine(state), 'CONVERSATION_MEMORY');
+}
+
+function rememberedLine(state: ConversationState): string {
+  const bits = [
+    ...state.remembered.slice(-4),
+    ...state.constraints.slice(-3).map(item => `don't: ${item}`),
+  ].filter(Boolean);
+  return bits.length ? bits.join(' · ') : 'ยังไม่มี memory ที่เลือกจำไว้ครับ';
+}
+
 function bindStatus(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution {
   const focus = discourse.statusFocus || 'progress';
   if (focus === 'readiness') {
@@ -532,6 +576,12 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
       return talk(`${state.recentVerification.kind} ล่าสุดยังไม่ผ่าน${state.recentVerification.summary ? ` · ${state.recentVerification.summary}` : ''}`, 'STATUS_QUERY');
     }
     return talk('ตอนนี้ยังไม่มี failure ที่บันทึกไว้ครับ', 'STATUS_QUERY');
+  }
+  if (focus === 'recovery') {
+    return talk(
+      'ถ้าหน้าเว็บขาว ผมจะเช็กว่า preview ยังรัน, ดู test/build error ล่าสุด, อ่านไฟล์หลักในโปรเจกต์นี้ แล้วแก้ใน sandbox นี้ — ไม่เปิดแอปนอกโปรเจกต์',
+      'RECOVERY_PLAN',
+    );
   }
   if (focus === 'preview') {
     if (state.activePreview?.url) {

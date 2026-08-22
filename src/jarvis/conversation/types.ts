@@ -177,6 +177,7 @@ export type StatusFocus =
   | 'inventory'
   | 'preference'
   | 'project'
+  | 'recovery'
   | 'recent';
 
 export type ResolvedReferent = {

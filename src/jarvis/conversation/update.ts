@@ -203,6 +203,9 @@ export function applyTurnToConversation(
     const offered = optionsFromReply(input.replyText);
     if (offered.length) next.offeredOptions = offered;
   }
+  if (input.discourse.act === 'ACCUMULATE_REQUIREMENTS' && /สี|palette|โทน|animation เบา|ไม่รก/iu.test(input.ownerText)) {
+    next.remembered = unique([...next.remembered, summarizeMemory(input.ownerText)]).slice(-12);
+  }
   if (input.discourse.act === 'MEMORY_STORE' && input.discourse.change) {
     next.remembered = unique([...next.remembered, summarizeMemory(input.discourse.change)]).slice(-12);
   }

@@ -117,6 +117,9 @@ export function interpretDiscourse(
     return { ...act('MODIFY_PROJECT'), change: raw };
   }
 
+  if (hasActiveSoftware(state) && /ถ้ายัง/u.test(raw) && /ติดตั้ง|install/iu.test(raw)) {
+    return { ...act('MODIFY_PROJECT'), change: raw };
+  }
   if (hasActiveSoftware(state) && isShortFollowUp(raw)) {
     return act('CONTINUE');
   }
@@ -164,7 +167,7 @@ function isAck(text: string): boolean {
 }
 
 function isModelQuery(text: string): boolean {
-  return /ใช้โมเดลอะไร|โมเดลอะไรอยู่|what model|which model/iu.test(text);
+  return /ใช้โมเดลอะไร|โมเดลอะไรอยู่|what model|which model|context เท่าไหร่|context window|context size/iu.test(text);
 }
 
 function isPause(text: string): boolean {
@@ -211,13 +214,13 @@ function isPreview(text: string, state: ConversationState | null | undefined): b
 
 function isTest(text: string): boolean {
   return /^(test|รัน test|run tests?)$/iu.test(text)
-    || /รัน test|run (?:the )?tests?|test ด้วย|test อีก/iu.test(text);
+    || /รัน test|run (?:the )?tests?|test ด้วย|test อีก|แล้ว tests?\b|then tests?\b|ดู tests?\b/iu.test(text);
 }
 
 function isBuild(text: string, state: ConversationState | null | undefined): boolean {
   if (/create workspace|สร้างโฟลเดอร์โปรเจกต์/iu.test(text)) return false;
   if (/^(build|rebuild|build ใหม่)$/iu.test(text)) return Boolean(state?.activeProjectSlug);
-  return /build ใหม่|rebuild|รัน build|then build|ก็ build/iu.test(text) && Boolean(state?.activeProjectSlug);
+  return /build ใหม่|rebuild|รัน build|then build|ก็ build|ดู build|check (?:the )?build/iu.test(text) && Boolean(state?.activeProjectSlug);
 }
 
 function isRerun(text: string): boolean {
@@ -225,7 +228,7 @@ function isRerun(text: string): boolean {
 }
 
 function isStatus(text: string): boolean {
-  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม/iu.test(text)
+  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|สมมติ/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
@@ -233,7 +236,8 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
   if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
   if (/พร้อมทำงาน|พร้อมไหม|are you ready|ready to work/iu.test(text)) return 'readiness';
   if (/ผ่านไหม|ผ่าน\?/iu.test(text)) return 'verification';
-  if (/มีอะไรพัง|what failed/iu.test(text)) return 'failure';
+  if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
+  if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page/iu.test(text)) return 'failure';
   if (/มีงานอะไรค้าง|มีอะไรค้าง|what(?:'s| is) left/iu.test(text)) return 'pending';
   if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
   if (/มีกี่ project|project หลัก/iu.test(text)) return 'inventory';
@@ -251,7 +255,7 @@ function isInspect(text: string, state: ConversationState | null | undefined): b
   if (/\.(jsx?|tsx?|css|json)\b/.test(text)) return true;
   if (/function ไหน|ฟังก์ชันไหน|which function|ไฟล์ไหน.*(จัดการ|todo)|where (?:is|does)/iu.test(text)) return true;
   if (!hasActiveSoftware(state) && !/โปรเจกต์นี้|เว็บนี้/iu.test(text)) return false;
-  return /มีหน้าอะไร|ไฟล์อะไรหลัก|package อะไร|ติดตั้งแล้วหรือยัง|ไฟล์ไหนเปลี่ยน|เมื่อกี้แก้อะไร|what changed|which files? changed|เปิดดู .+\.(jsx?|tsx?|css|json)/iu.test(text);
+  return /มีหน้าอะไร|ไฟล์อะไรหลัก|package อะไร|ติดตั้งแล้วหรือยัง|ใช้จริงไหม|ไฟล์ไหนเปลี่ยน|เมื่อกี้แก้อะไร|what changed|which files? changed|เปิดดู .+\.(jsx?|tsx?|css|json)/iu.test(text);
 }
 
 function isMemoryStore(text: string): boolean {
@@ -260,7 +264,7 @@ function isMemoryStore(text: string): boolean {
 }
 
 function isMemoryQuery(text: string): boolean {
-  return /จำอะไรเกี่ยวกับ|สีที่ผมเลือก|memory ของ project|ตอนแรกผมบอก|เราคุยอะไร|ย้อนแค่เรื่อง|เปลี่ยนใจตรงไหน|ถ้าผมกลับมาพรุ่งนี้/iu.test(text);
+  return /จำอะไรเกี่ยวกับ|สีที่ผมเลือก|memory ของ project|ตอนแรกผมบอก|เราคุยอะไร|ย้อนแค่เรื่อง|เปลี่ยนใจตรงไหน|ถ้าผมกลับมาพรุ่งนี้|จำบทสนทนา|ได้ทั้งหมดไหม|เปิด history|show history|open history|เปิดประวัติ/iu.test(text);
 }
 
 function isNegate(text: string): boolean {

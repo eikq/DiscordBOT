@@ -787,3 +787,46 @@ test('research dumps are not shown as the recent working-context line', () => {
     'research complete',
   );
 });
+
+test('memory recap answers working context instead of dumping every preference', () => {
+  const state = softwareState({
+    remembered: ['สีหลักเอาประมาณดำ ฟ้า ม่วง', 'animation เบาๆ ไม่รก'],
+    constraints: ['แต่ไม่เอาส่วน testimonial'],
+    lastOwnerIntent: 'เพิ่ม dark mode ทั้งเว็บ',
+  });
+  for (const phrase of ['แล้วสีที่ผมเลือกคืออะไร', 'ตอนแรกผมบอกสีอะไร']) {
+    const bound = bindDiscourseToIntent(interpretDiscourse(phrase, state), state, phrase);
+    assert.equal(bound?.reasonCode, 'CONVERSATION_MEMORY', phrase);
+    assert.match(String(bound?.userMessage || ''), /ดำ|ฟ้า|ม่วง/i, phrase);
+    assert.doesNotMatch(String(bound?.userMessage || ''), /You asked me to remember/i, phrase);
+  }
+  const recap = bindDiscourseToIntent(interpretDiscourse('เมื่อกี้เราคุยอะไรกันมาบ้าง', state), state, 'เมื่อกี้เราคุยอะไรกันมาบ้าง');
+  assert.match(String(recap?.userMessage || ''), /Portfolio|dark mode|ล่าสุด/i);
+  const history = bindDiscourseToIntent(interpretDiscourse('เปิด history ให้ดู', state), state, 'เปิด history ให้ดู');
+  assert.equal(history?.reasonCode, 'OPEN_HISTORY');
+  assert.notEqual(history?.kind, 'UNSUPPORTED');
+});
+
+test('then-test and look-at-build bind operations, and a blank-page hypothetical does not open desktop', () => {
+  const state = softwareState({
+    recentVerification: { kind: 'build', ok: true, summary: 'Ran build', at: 9, slug: 'portfolio' },
+  });
+  assert.equal(interpretDiscourse('แล้ว test', state).act, 'TEST');
+  assert.equal(interpretDiscourse('ดู build ก่อน', state).act, 'BUILD');
+  const hypo = bindDiscourseToIntent(
+    interpretDiscourse('สมมติผมบอกว่าหน้าเว็บเปิดแล้วขาวหมด คุณจะทำยังไง', state),
+    state,
+    'สมมติผมบอกว่าหน้าเว็บเปิดแล้วขาวหมด คุณจะทำยังไง',
+  );
+  assert.equal(hypo?.reasonCode, 'RECOVERY_PLAN');
+  assert.notEqual(hypo?.capabilityId, DESKTOP_OPEN_SCOPED_RESOURCE);
+});
+
+test('install-if-missing and page inspect stay on the active project files', () => {
+  const state = softwareState();
+  const install = bindDiscourseToIntent(interpretDiscourse('ถ้ายังติดตั้งให้เลย', state), state, 'ถ้ายังติดตั้งให้เลย');
+  assert.equal(install?.capabilityId, SOFTWARE_APPLY_BUILD);
+  const pages = bindDiscourseToIntent(interpretDiscourse('ตอนนี้โปรเจกต์นี้มีหน้าอะไรบ้าง', state), state, 'ตอนนี้โปรเจกต์นี้มีหน้าอะไรบ้าง');
+  assert.equal(pages?.capabilityId, PROJECT_READ_FILE);
+  assert.equal(pages?.arguments?.relativePath, 'src/App.jsx');
+});
