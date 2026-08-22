@@ -806,6 +806,18 @@ async function startServer() {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
+  app.get('/api/jarvis/history', (req, res) => {
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
+      return res.status(403).json({ error: 'Jarvis lab requests are restricted to the local dashboard.' });
+    }
+    try {
+      const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+      const query = typeof req.query.query === 'string' ? req.query.query : undefined;
+      return res.json(jarvisLab.conversationHistory({ sessionId, query }));
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
   app.post('/api/jarvis/presentation', async (req, res) => {
     if (rejectIfMutationBlocked(req, res)) return;
     if (HOST !== '127.0.0.1' && HOST !== 'localhost' && HOST !== '::1') {
@@ -924,7 +936,8 @@ async function startServer() {
       const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : undefined;
       const speak = Boolean(req.body?.speak);
       const actionSource = req.body?.actionSource === 'voice' ? 'voice' : 'ui';
-      return res.json(await jarvisLab.confirmAction({ proposalId, token, sessionId, speak, actionSource }));
+      const duration = req.body?.duration === 'ONCE' || req.body?.duration === 'THIS_GOAL' ? req.body.duration : undefined;
+      return res.json(await jarvisLab.confirmAction({ proposalId, token, sessionId, speak, actionSource, duration }));
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
     }

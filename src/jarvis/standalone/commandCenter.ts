@@ -146,6 +146,7 @@ export class CommandCenterRuntime {
   private notifications: MonitorSignal[] = [];
   private memoryStore?: JarvisMemoryStore;
   private lastRequest: { route: RouteDecision; objective: string; taskId?: string } | null = null;
+  private lastSessionId?: string;
   private readonly gapResolver = new CapabilityGapResolver();
 
   constructor(options: CommandCenterOptions = {}) {
@@ -184,6 +185,7 @@ export class CommandCenterRuntime {
       now: options.now,
       invoke: options.invoke ?? createCapabilityWorkInvoker({
         host: () => this.host,
+        sessionId: () => this.lastSessionId,
         researchDepth: () => this.control.snapshot().researchDepth,
       }),
       simulated,
@@ -316,6 +318,7 @@ export class CommandCenterRuntime {
   }
 
   public async runObjective(objective: string, options: { simulated?: boolean; sessionId?: string; goalResolution?: GoalResolution } = {}): Promise<WorkTask> {
+    this.lastSessionId = options.sessionId;
     const simulated = Boolean(options.simulated || this.control.snapshot().simulationMode);
     if (simulated) this.control.patch({ simulationMode: true }, 'owner');
     const resolvedGoal = options.goalResolution ?? await resolveOwnerGoal(objective, { host: this.host });

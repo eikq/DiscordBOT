@@ -78,6 +78,9 @@ export type PersonalAiRuntimeStatus = {
     model?: string;
     loaded?: boolean;
     provider?: string;
+    health?: string;
+    ownerMessage?: string;
+    modelAvailable?: boolean;
     profile?: { id: string; displayName: string; family?: string; runtime: string; certificationState?: string };
   };
   stt?: { reachable?: boolean; model?: string; reason?: string };

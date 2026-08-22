@@ -1,5 +1,9 @@
 import { LocalLlmProvider } from '../../bot/llm/LocalLlmProvider';
+import { CANONICAL_LLM_BASE_URL, CANONICAL_LLM_MODEL } from '../../bot/llm/canonicalRuntime';
+import { MODEL_HEALTH_STATUSES, ownerMessageForModelHealth, type ModelHealthStatus } from '../../bot/llm/modelHealth';
+import { QWEN_OFFLINE_OWNER_MESSAGE } from '../models/qwen38Cyber';
 import { SqliteJarvisMemoryStore } from '../../bot/memory/jarvis/SqliteJarvisMemoryStore';
+import type { ConversationHistoryStore } from '../../bot/memory/jarvis/conversationStore';
 import { LocalSTTProvider } from '../../bot/stt/LocalSTTProvider';
 import type { SpeechToTextProvider } from '../../bot/stt/SpeechToTextProvider';
 import { createSpeechJarvisRequest } from '../audio/speechTurnRequest';
@@ -73,10 +77,18 @@ import type { JarvisMemoryService } from '../memory/service';
 import {
   forgetOwnerAlias,
   formatAliasAnswer,
+  formatOwnerPreferenceAnswer,
   listOwnerAliases,
   rememberOwnerAlias,
   rememberOwnerPreference,
 } from '../memory/ownerSemantics';
+import { extractDurableOwnerMemory } from '../memory/durableExtract';
+import { buildJarvisContext } from '../memory/contextBuilder';
+import { projectObsidianVault } from '../memory/obsidianProjection';
+import { BuildPlanStore } from '../build/planStore';
+import { isPlanApprovalUtterance } from '../build/planner';
+import { SOFTWARE_APPLY_BUILD } from '../build/constants';
+import { permissionProposalFromBuild } from '../security/permissionProposal';
 import { applyOpenedResource, observedDisplaySelector } from '../memory/workingContext';
 import { mergeResearchIntoContext, sourcesFromResearch } from '../memory/activeContext';
 import { describeDisplays, fingerprintDisplay, serializeDisplayFingerprint } from '../desktop/displayIdentity';
@@ -173,6 +185,9 @@ export type JarvisLabStatus = {
     reachable?: boolean;
     model?: string;
     provider?: 'ollama' | 'openai-compatible';
+    health?: string;
+    ownerMessage?: string;
+    modelAvailable?: boolean;
     profile?: ModelProfile;
   };
   stt: SttRuntimeProbe;
@@ -231,7 +246,7 @@ export type JarvisLabRuntimeOptions = {
   skills?: JarvisSkillHost;
   persona?: PersonaProvider;
   voices?: VoiceProfileResolver;
-  llm?: StandaloneLlm & { getRuntimeStatus?: () => Promise<{ enabled?: boolean; reachable?: boolean; model?: string; provider?: 'ollama' | 'openai-compatible' }> };
+  llm?: StandaloneLlm & { getRuntimeStatus?: () => Promise<{ enabled?: boolean; reachable?: boolean; model?: string; provider?: 'ollama' | 'openai-compatible'; health?: string; ownerMessage?: string; modelAvailable?: boolean }> };
   attachDefaultMemory?: boolean;
   attachDefaultCapabilities?: boolean;
   attachDefaultSkills?: boolean;
@@ -274,6 +289,9 @@ export class JarvisLabRuntime {
   private commandCenter?: CommandCenterRuntime;
   private readonly modelProfiles: ModelProfileRegistry;
   private readonly modelCertifications: ModelCertificationRegistry;
+  private readonly plans?: BuildPlanStore;
+  private activeJarvisTurnId?: string;
+  private readonly llmGeneratesAnswers: boolean;
 
   constructor(options: JarvisLabRuntimeOptions = {}) {
     const attached = options.memory
@@ -291,6 +309,8 @@ export class JarvisLabRuntime {
       ? undefined
       : options.workspace ?? (options.attachDefaultCapabilities ? trySharedWorkspaceRuntime({ research: this.research }) : undefined);
     const memoryStore = options.memoryStore ?? attached?.store;
+    const sqlite = memoryStore instanceof SqliteJarvisMemoryStore ? memoryStore : undefined;
+    this.plans = sqlite ? new BuildPlanStore(sqlite.database()) : undefined;
     const capabilities = options.capabilities
       ?? (options.attachDefaultCapabilities ? createStandaloneCapabilityHost({
         reminders: this.reminders,
@@ -299,6 +319,7 @@ export class JarvisLabRuntime {
         actions: {
           displayAliases: () => listOwnerAliases(memoryStore, 'display'),
         },
+        ...(sqlite ? { build: { db: sqlite.database() } } : {}),
       }) : undefined);
     const skills = options.skills
       ?? (options.attachDefaultSkills ? loadDefaultJarvisSkillRuntime() : undefined);
@@ -310,7 +331,10 @@ export class JarvisLabRuntime {
     const allowlists = loadDesktopAllowlists();
     this.applicationIds = configuredApplicationIds(allowlists);
     this.projectIds = configuredProjectIds(allowlists);
-    this.llm = options.llm ?? new LocalLlmProvider();
+    this.llm = options.llm ?? new LocalLlmProvider(
+      process.env.JARVIS_LLM_BASE_URL || process.env.LOCAL_QWEN_BASE_URL || CANONICAL_LLM_BASE_URL,
+      process.env.JARVIS_LLM_MODEL || process.env.LOCAL_QWEN_MODEL || CANONICAL_LLM_MODEL,
+    );
     this.modelProfiles = options.modelProfiles ?? new ModelProfileRegistry();
     this.modelCertifications = options.modelCertifications ?? new ModelCertificationRegistry();
     this.persona = options.persona ?? (options.attachDefaultPresentation ? new FileBehaviorPersonaProvider() : undefined);
@@ -333,7 +357,9 @@ export class JarvisLabRuntime {
       memory: attached?.service,
       capabilities,
       skills,
+      buildContext: request => this.dynamicContext(request.clientContext.sessionId, request.input.text),
     });
+    this.llmGeneratesAnswers = !options.core;
     if (options.commandCenter === false) {
       this.commandCenter = undefined;
     } else if (options.commandCenter) {
@@ -365,19 +391,20 @@ export class JarvisLabRuntime {
           }
         : undefined;
     } catch {
-      llm = { enabled: false, reachable: false };
+      llm = { enabled: false, reachable: false, health: 'MODEL_OFFLINE', ownerMessage: QWEN_OFFLINE_OWNER_MESSAGE };
     }
     if (llm?.profile) this.modelProfiles.replace(llm.profile);
+    const modelReady = llm?.health === 'MODEL_READY';
     const services = await this.serviceSnapshot();
     const selfKnowledge = await this.selfKnowledgeSnapshot({
       modelId: llm?.profile?.id,
-      modelAvailable: llm?.reachable,
+      modelAvailable: modelReady,
       services,
     });
     return {
       discordRequired: false,
       ready: true,
-      coreState: this.memoryAttached || llm?.reachable ? 'ready' : 'degraded',
+      coreState: this.memoryAttached || modelReady ? 'ready' : 'degraded',
       memory: {
         attached: this.memoryAttached,
         schemaVersion: this.memorySchemaVersion,
@@ -675,22 +702,28 @@ export class JarvisLabRuntime {
   }> {
     const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    this.persistOwnerTurn(sessionId, String(input.text || ''), input.actionSource === 'voice' ? 'voice' : 'text');
+    extractDurableOwnerMemory(this.memoryStore, String(input.text || ''));
+    const offline = await this.maybeOfflineModelReply(input, sessionId);
+    if (offline) return this.finalizeVisibleTurn(sessionId, offline);
+    const approved = await this.continueApprovedPlan(input, sessionId);
+    if (approved) return this.finalizeVisibleTurn(sessionId, approved);
     if (knowledgeKind && !this.workCenter()?.pendingGoals.store.waiting(sessionId).length) {
-      return this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
+      return this.finalizeVisibleTurn(sessionId, await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind));
     }
     const prepared = await this.prepareAsk(input);
     const memoryTurn = await this.finishOwnerMemoryTurn(input, prepared);
-    if (memoryTurn) return memoryTurn;
+    if (memoryTurn) return this.finalizeVisibleTurn(sessionId, memoryTurn);
     if (prepared.continuedTask) {
-      return this.finishWorkTask(input, prepared.sessionId, {
+      return this.finalizeVisibleTurn(sessionId, await this.finishWorkTask(input, prepared.sessionId, {
         route: 'CAPABILITY', socialAction: 'SPEAK', agentic: true, reason: 'pending_goal_continuation', confidence: 1,
-      }, prepared.continuedTask, prepared.pendingContinuation?.pendingGoal);
+      }, prepared.continuedTask, prepared.pendingContinuation?.pendingGoal));
     }
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
       const worked = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
       await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, worked);
-      return worked;
+      return this.finalizeVisibleTurn(sessionId, worked);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
@@ -699,9 +732,9 @@ export class JarvisLabRuntime {
     await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
     const adjusted = this.attachUnavailableAlternatives(output, prepared.resolution, prepared.sessionId);
     const speech = await this.maybeSpeak(adjusted.presented.text, adjusted.request.requestId, adjusted.presented.voiceProfileId, input.speak);
-    return {
+    return this.finalizeVisibleTurn(sessionId, {
       ...adjusted,
-      coreState: 'complete',
+      coreState: 'complete' as const,
       presentation: await this.presentationStatus(prepared.sessionId),
       research: this.researchSnapshot(),
       workspace: this.workspaceSnapshot(),
@@ -710,7 +743,7 @@ export class JarvisLabRuntime {
       affectStyle: this.workCenter()?.affect.style(),
       ...(prepared.pendingGoal ? { pendingGoal: prepared.pendingGoal } : {}),
       ...(speech ? { speech } : {}),
-    };
+    });
   }
 
   public async askStream(
@@ -729,34 +762,34 @@ export class JarvisLabRuntime {
   }> {
     const knowledgeKind = selfKnowledgeQuestionKind(String(input.text || ''));
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    this.persistOwnerTurn(sessionId, String(input.text || ''), input.actionSource === 'voice' ? 'voice' : 'text');
+    extractDurableOwnerMemory(this.memoryStore, String(input.text || ''));
+    const emitFinal = async <T extends { presented?: { text: string }; speech?: VoiceOutputResult }>(output: T): Promise<T> => {
+      const finalized = this.finalizeVisibleTurn(sessionId, output as T & { presented: { text: string } });
+      emit({ type: 'final', payload: finalized });
+      if (finalized.speech) emit({ type: 'speech', payload: finalized.speech });
+      return finalized;
+    };
+    const offline = await this.maybeOfflineModelReply(input, sessionId);
+    if (offline) return emitFinal(offline);
+    const approved = await this.continueApprovedPlan(input, sessionId);
+    if (approved) return emitFinal(approved);
     if (knowledgeKind && !this.workCenter()?.pendingGoals.store.waiting(sessionId).length) {
-      const output = await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind);
-      emit({ type: 'final', payload: output });
-      if (output.speech) emit({ type: 'speech', payload: output.speech });
-      return output;
+      return emitFinal(await this.answerSelfKnowledgeTurn(input, this.prepareSelfKnowledgeSession(input), knowledgeKind));
     }
     const prepared = await this.prepareAsk(input);
     const memoryTurn = await this.finishOwnerMemoryTurn(input, prepared);
-    if (memoryTurn) {
-      emit({ type: 'final', payload: memoryTurn });
-      if (memoryTurn.speech) emit({ type: 'speech', payload: memoryTurn.speech });
-      return memoryTurn;
-    }
+    if (memoryTurn) return emitFinal(memoryTurn);
     if (prepared.continuedTask) {
-      const output = await this.finishWorkTask(input, prepared.sessionId, {
+      return emitFinal(await this.finishWorkTask(input, prepared.sessionId, {
         route: 'CAPABILITY', socialAction: 'SPEAK', agentic: true, reason: 'pending_goal_continuation', confidence: 1,
-      }, prepared.continuedTask, prepared.pendingContinuation?.pendingGoal);
-      emit({ type: 'final', payload: output });
-      if (output.speech) emit({ type: 'speech', payload: output.speech });
-      return output;
+      }, prepared.continuedTask, prepared.pendingContinuation?.pendingGoal));
     }
     const { route, useWork } = this.decideAskRoute(input, prepared);
     if (useWork) {
       const output = await this.askViaWorkAgent(input, prepared.sessionId, route, prepared.resolution);
       await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, output);
-      emit({ type: 'final', payload: output });
-      if (output.speech) emit({ type: 'speech', payload: output.speech });
-      return output;
+      return emitFinal(output);
     }
     const output = await runStandaloneTextTurn(prepared.turn, {
       core: this.core,
@@ -780,7 +813,7 @@ export class JarvisLabRuntime {
     };
     emit({ type: 'final', payload: finalPayload });
     if (speech) emit({ type: 'speech', payload: speech });
-    return finalPayload;
+    return this.finalizeVisibleTurn(sessionId, finalPayload);
   }
 
   public async cancelSpeech(turnId: string): Promise<void> {
@@ -793,6 +826,7 @@ export class JarvisLabRuntime {
     sessionId?: string;
     speak?: boolean;
     actionSource?: 'text' | 'voice' | 'ui' | 'system';
+    duration?: 'ONCE' | 'THIS_GOAL';
   }): Promise<StandaloneTextTurnOutput & {
     coreState: 'complete';
     presentation: JarvisLabPresentationStatus;
@@ -820,6 +854,7 @@ export class JarvisLabRuntime {
       token: input.token,
       source: input.actionSource ?? 'ui',
       sessionId,
+      duration: input.duration,
     });
     return this.finishActionTurn(invoked, sessionId, input.speak);
   }
@@ -1511,7 +1546,10 @@ export class JarvisLabRuntime {
       const forgotten = forgetOwnerAlias(this.memoryStore, phrase, 'owner');
       text = forgotten.ok ? `I’ve forgotten the “${phrase}” alias.` : forgotten.ok === false ? forgotten.message : 'I could not forget that alias.';
     } else if (reason === 'ASK_MEMORY') {
-      text = formatAliasAnswer(listOwnerAliases(this.memoryStore, /monitor|screen|จอ/iu.test(input.text) ? 'display' : undefined));
+      const query = String(input.text || '');
+      text = /จอ|monitor|screen|alias/iu.test(query)
+        ? formatAliasAnswer(listOwnerAliases(this.memoryStore, /monitor|screen|จอ/iu.test(query) ? 'display' : undefined))
+        : formatOwnerPreferenceAnswer(this.memoryStore, query);
     } else if (reason === 'REMEMBER_PREFERENCE') {
       const pref = String(args.target || '');
       if (pref.startsWith('workspace.current=')) {
@@ -1600,6 +1638,8 @@ export class JarvisLabRuntime {
     presentation: JarvisLabPresentationStatus;
     speech?: VoiceOutputResult;
     pendingConfirmation?: PendingConfirmation;
+    research: ResearchSnapshot;
+    workspace: WorkspaceSnapshot;
   }> {
     const action = capabilityResultToActionResult(invoked);
     const pending = isActionHost(this.capabilityHost!) ? this.capabilityHost.pendingFrom(invoked) : undefined;
@@ -1665,16 +1705,171 @@ export class JarvisLabRuntime {
       result,
       presented,
       timings: { totalMs: 0 },
-      coreState: 'complete',
+      coreState: 'complete' as const,
       presentation: await this.presentationStatus(sessionId),
+      research: this.researchSnapshot(),
+      workspace: this.workspaceSnapshot(),
       ...(speech ? { speech } : {}),
       ...(pending ? { pendingConfirmation: pending } : {}),
     };
+  }
+
+  public conversationHistory(input: { sessionId?: string; query?: string; limit?: number } = {}) {
+    const history = this.historyStore();
+    if (!history) return { sessions: [], turns: [] };
+    if (input.query) {
+      return { sessions: history.listSessions(input.limit || 20), turns: history.searchVisible(input.query, input.limit || 20) };
+    }
+    const sessionId = input.sessionId?.trim();
+    if (sessionId) {
+      return { sessions: [history.getSession(sessionId)].filter(Boolean), turns: history.listTurns(sessionId) };
+    }
+    const sessions = history.listSessions(input.limit || 20);
+    return { sessions, turns: sessions.flatMap(item => history.listTurns(item.id, 12)) };
+  }
+
+  private historyStore(): ConversationHistoryStore | undefined {
+    return this.memoryStore instanceof SqliteJarvisMemoryStore ? this.memoryStore.history : undefined;
+  }
+
+  private persistOwnerTurn(sessionId: string, text: string, inputMode: 'voice' | 'text'): void {
+    const history = this.historyStore();
+    if (!history || !text.trim()) return;
+    const started = history.startTurn({
+      sessionId,
+      role: 'OWNER',
+      visibleText: text,
+      inputMode,
+      modelProfileId: 'qwen38-cyber',
+    });
+    history.completeTurn(started.id, text);
+    const jarvis = history.startTurn({
+      sessionId,
+      role: 'JARVIS',
+      visibleText: '',
+      inputMode: 'system-derived',
+      modelProfileId: 'qwen38-cyber',
+    });
+    this.activeJarvisTurnId = jarvis.id;
+  }
+
+  private finalizeVisibleTurn<T extends { presented?: { text?: string } }>(sessionId: string, output: T): T {
+    const visible = String(output.presented?.text || '').trim();
+    const history = this.historyStore();
+    if (history && this.activeJarvisTurnId) {
+      if (visible) history.completeTurn(this.activeJarvisTurnId, visible);
+      else history.markIncomplete(this.activeJarvisTurnId);
+    }
+    this.activeJarvisTurnId = undefined;
+    this.projectMemoryView(sessionId);
+    return output;
+  }
+
+  private projectMemoryView(sessionId: string): void {
+    const history = this.historyStore();
+    if (!this.memoryStore || !history) return;
+    try {
+      const sessions = history.listSessions(12);
+      const turnsBySession = Object.fromEntries(sessions.map(item => [item.id, history.listTurns(item.id)]));
+      projectObsidianVault({
+        store: this.memoryStore,
+        sessions,
+        turnsBySession,
+        plans: this.plans?.list(12),
+      });
+      sharedJarvisEventBus().emit('MEMORY_UPDATED', 'Conversation memory projected', { sessionId });
+    } catch {
+      // Projection is a view; canonical SQLite already holds the turn.
+    }
+  }
+
+  private dynamicContext(sessionId: string, ownerRequest: string): string {
+    const history = this.historyStore();
+    const pending = this.workCenter()?.agent.store.active().find(task => task.status === 'WAITING_PERMISSION');
+    const memories = this.memoryStore
+      ? new JarvisMemoryRetrieval(this.memoryStore).retrieveForTurn({ text: ownerRequest, limit: 8 }).items
+      : [];
+    const built = buildJarvisContext({
+      ownerRequest,
+      recentTurns: history?.recentTurns(sessionId, 10),
+      sessionSummary: history?.getSession(sessionId)?.summary,
+      activeGoal: history?.getSession(sessionId)?.activeGoalId
+        ? { id: history.getSession(sessionId)!.activeGoalId! }
+        : undefined,
+      memories,
+      plan: this.plans?.latestForSession(sessionId) || this.plans?.list(1)[0],
+      pendingPermission: pending ? permissionProposalFromBuild({
+        title: pending.objective.slice(0, 80),
+        slug: pending.id.slice(0, 24),
+        capabilityId: pending.permissionRequirements[0] || SOFTWARE_APPLY_BUILD,
+      }) : null,
+      runtime: { model: 'qwen38-cyber' },
+    });
+    return built.promptBlock;
+  }
+
+  private async maybeOfflineModelReply(input: JarvisLabAskInput, sessionId: string) {
+    if (!this.llmGeneratesAnswers || !this.llm?.getRuntimeStatus) return undefined;
+    try {
+      const runtime = await this.llm.getRuntimeStatus();
+      const health = asModelHealth(runtime.health);
+      if (!health || health === 'MODEL_READY') return undefined;
+      const message = runtime.ownerMessage || ownerMessageForModelHealth(health) || QWEN_OFFLINE_OWNER_MESSAGE;
+      sharedJarvisEventBus().emit('MODEL_STATUS_CHANGED', message, { health }, 'warn');
+      const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
+      const result: JarvisCoreResult = {
+        requestId: request.requestId,
+        answerIntent: 'model_offline',
+        verifiedFacts: [{ key: 'jarvis.model.health', value: health, sourceType: 'system', immutableForPresentation: true }],
+        unverifiedClaims: [],
+        toolResults: [],
+        memoryRefs: [],
+        actionResults: freezeActionResults([]),
+        uncertainty: [message],
+        suggestedContent: message,
+      };
+      const presented = await this.engine.render(result, this.sessions.resolveTurn(sessionId), { sessionId });
+      return {
+        request,
+        result,
+        presented: { ...presented, text: message },
+        timings: { totalMs: 0 },
+        coreState: 'complete' as const,
+        presentation: await this.presentationStatus(sessionId),
+        research: this.researchSnapshot(),
+        workspace: this.workspaceSnapshot(),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async continueApprovedPlan(input: JarvisLabAskInput, sessionId: string) {
+    if (!isPlanApprovalUtterance(String(input.text || '')) || !this.plans || !this.capabilityHost) return undefined;
+    const plan = this.plans.latestForSession(sessionId) || this.plans.list(1)[0];
+    if (!plan) return undefined;
+    if (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT') {
+      this.plans.setStatus(plan.id, 'APPROVED');
+      sharedJarvisEventBus().emit('PLAN_APPROVED', `Plan approved: ${plan.title}`, { planId: plan.id, goalId: plan.goalId });
+    }
+    const invoked = await this.capabilityHost.invoke({
+      id: SOFTWARE_APPLY_BUILD,
+      input: { planId: plan.id, brief: plan.title, goalId: plan.goalId },
+      source: input.actionSource === 'voice' ? 'voice' : 'text',
+      sessionId,
+    });
+    return this.finishActionTurn(invoked, sessionId, input.speak);
   }
 }
 
 export function createJarvisLabRuntime(options: JarvisLabRuntimeOptions = {}): JarvisLabRuntime {
   return new JarvisLabRuntime(options);
+}
+
+function asModelHealth(value: string | undefined): ModelHealthStatus | undefined {
+  return (MODEL_HEALTH_STATUSES as readonly string[]).includes(value || '')
+    ? value as ModelHealthStatus
+    : undefined;
 }
 
 function turnOverride(input: JarvisLabAskInput): PresentationOverride | undefined {

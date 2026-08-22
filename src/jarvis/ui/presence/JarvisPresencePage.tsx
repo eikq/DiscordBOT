@@ -13,6 +13,9 @@ import { webglAvailable } from '../three/webglAvailability';
 import EmergencyStop, { riskBriefFromPreflight, type RiskBriefModel } from '../operating/TrustedOperator';
 import type { PersonalAiRuntimeStatus } from '../operating/JarvisPages';
 import { PresenceApproval } from './PresenceApproval';
+import { PresenceBuildPlan } from './PresenceBuildPlan';
+import { PresenceHistory } from './PresenceHistory';
+import { buildSurfaceFromEvents, historyItemsFromTurns, isBuildOperationType, type PresenceBuildSurface, type PresenceHistoryItem } from './buildSurface';
 import { PresenceCoreFallback } from './cinematic/PresenceCoreFallback';
 import { PresenceSpatialHud } from './cinematic/PresenceSpatialHud';
 import { pushActivityItem, visibleActivityItems, type PresenceActivityItem } from './cinematic/activityFeed';
@@ -94,6 +97,10 @@ export default function JarvisPresencePage() {
   const [research, setResearch] = useState<LabResearchSnapshot | null>(null);
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<LabPendingConfirmation | null>(null);
+  const [buildSurface, setBuildSurface] = useState<PresenceBuildSurface | null>(null);
+  const [historyItems, setHistoryItems] = useState<PresenceHistoryItem[]>([]);
+  const [historyQuery, setHistoryQuery] = useState('');
+  const buildEvents = useRef<Array<{ type: string; summary?: string; payload?: Record<string, unknown> }>>([]);
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<string | null>(null);
   const [heard, setHeard] = useState<string | null>(null);
@@ -140,6 +147,9 @@ export default function JarvisPresencePage() {
   const inspectMode = useMemo(() => inspectDragEnabled(window.location.search), []);
 
   const refreshStatus = useCallback(() => readJson<RuntimeStatus>('/api/jarvis/status').then(setStatus), []);
+  const refreshHistory = useCallback(() => readJson<{ turns?: Array<{ id: string; role: string; visibleText: string; timestamp: number; status?: string; goalId?: string; planId?: string }> }>('/api/jarvis/history?sessionId=jarvis-lab')
+    .then(payload => setHistoryItems(historyItemsFromTurns(payload.turns || [])))
+    .catch(() => undefined), []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
   const refreshCommandCenter = useCallback(() => readJson<CommandCenterClientSnapshot>('/api/jarvis/command-center').then(setCommandCenter).catch(() => undefined), []);
   const refreshOperator = useCallback(() => readJson<TrustedOperatorSnapshot>('/api/jarvis/operator').then(setOperator).catch(() => undefined), []);
@@ -152,6 +162,7 @@ export default function JarvisPresencePage() {
 
   useEffect(() => {
     void refreshStatus().catch(err => setError(safeError(err)));
+    void refreshHistory();
     void refreshSystem();
     void refreshCommandCenter();
     void refreshOperator();
@@ -198,12 +209,19 @@ export default function JarvisPresencePage() {
         const stage = latestResearchStage([typed]);
         if (stage) setResearchStage(stage);
         if (isResearchOperationType(payload.type) || stage) void refreshResearch();
+        if (isBuildOperationType(payload.type) && payload.type !== 'MEMORY_UPDATED' && payload.type !== 'MODEL_STATUS_CHANGED') {
+          buildEvents.current = [...buildEvents.current, typed].slice(-24);
+          setBuildSurface(buildSurfaceFromEvents(buildEvents.current));
+        }
+        if (payload.type === 'MEMORY_UPDATED' || payload.type === 'PLAN_CREATED' || payload.type === 'PLAN_APPROVED') {
+          void refreshHistory();
+        }
       } catch {
         /* heartbeat or malformed */
       }
     };
     return () => source.close();
-  }, [documentHidden, refreshCommandCenter, refreshResearch]);
+  }, [documentHidden, refreshCommandCenter, refreshResearch, refreshHistory]);
 
   useEffect(() => () => {
     unsubMic.current?.();
@@ -344,7 +362,7 @@ export default function JarvisPresencePage() {
           permissionScope: [commandCenter.permission.capability || 'task'],
         } : null;
 
-  const settleConfirm = async (decision: 'allow' | 'deny') => {
+  const settleConfirm = async (decision: 'allow' | 'deny', duration: 'THIS_GOAL' | 'ONCE' = 'THIS_GOAL') => {
     if (!pendingConfirmation || confirming.current) return;
     confirming.current = true;
     setBusy(true);
@@ -356,6 +374,7 @@ export default function JarvisPresencePage() {
           proposalId: pendingConfirmation.proposalId,
           token: pendingConfirmation.token,
           decision,
+          duration,
           sessionId: 'jarvis-lab',
           speak: speakEnabled,
           actionSource: 'ui',
@@ -368,6 +387,7 @@ export default function JarvisPresencePage() {
       playSpeech(payload.speech);
       void refreshCommandCenter();
       void refreshOperator();
+      void refreshHistory();
     } catch (err) {
       setError(safeError(err));
     } finally {
@@ -410,8 +430,8 @@ export default function JarvisPresencePage() {
     }
   };
 
-  const settleApproval = async (decision: 'allow' | 'deny') => {
-    if (approvalTarget.kind === 'confirm') return settleConfirm(decision);
+  const settleApproval = async (decision: 'allow' | 'deny', duration: 'THIS_GOAL' | 'ONCE' = 'THIS_GOAL') => {
+    if (approvalTarget.kind === 'confirm') return settleConfirm(decision, duration);
     if (approvalTarget.kind === 'grant') return settleGrant(decision);
   };
 
@@ -648,6 +668,7 @@ export default function JarvisPresencePage() {
       playSpeech(payload.speech);
       void refreshReminders();
       void refreshCommandCenter();
+      void refreshHistory();
     } catch (err) {
       setDraft(null);
       setSpeechState('idle');
@@ -872,6 +893,11 @@ export default function JarvisPresencePage() {
       <header className="jp-mark">
         <strong>JARVIS</strong>
         <span>{ambientNow ? 'Ambient presence' : 'Presence'}</span>
+        {status?.llm?.health ? (
+          <small className="jp-model" data-health={status.llm.health}>
+            {status.llm.health === 'MODEL_READY' ? 'QWEN READY' : 'QWEN OFFLINE'}
+          </small>
+        ) : null}
       </header>
       <div className="jp-clock">
         <time dateTime={clock.toISOString()}>{timeLabel}</time>
@@ -888,6 +914,19 @@ export default function JarvisPresencePage() {
         </div>
       ) : null}
       <div className="jp-core">{coreVisual}</div>
+      {status?.llm?.health && status.llm.health !== 'MODEL_READY' ? (
+        <p className="jp-offline" role="status">{status.llm.ownerMessage || 'Qwen local ยังไม่พร้อม ผมยังไม่ได้เริ่มงานนี้'}</p>
+      ) : null}
+      {buildSurface ? <PresenceBuildPlan surface={buildSurface} /> : null}
+      <PresenceHistory
+        items={historyItems}
+        query={historyQuery}
+        onQuery={setHistoryQuery}
+        onReopen={id => {
+          const item = historyItems.find(entry => entry.id === id);
+          if (item?.text) setText(item.text);
+        }}
+      />
       {visual.fixture === 'waiting-owner' && !pendingRisk ? (
         <aside className="jp-approve" aria-label="Owner approval fixture">
           <header>
@@ -913,8 +952,10 @@ export default function JarvisPresencePage() {
           model={pendingRisk}
           busy={busy || opsBusy}
           spokenPrompt={`I need approval for ${approvalLabel}. Proceed?`}
+          proposal={pendingConfirmation?.permissionProposal}
           onDeny={() => { void settleApproval('deny'); }}
-          onAllow={() => { void settleApproval('allow'); }}
+          onAllow={() => { void settleApproval('allow', 'THIS_GOAL'); }}
+          onAllowOnce={() => { void settleApproval('allow', 'ONCE'); }}
         />
       ) : (
         <PresenceSpatialHud

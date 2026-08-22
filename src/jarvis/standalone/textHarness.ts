@@ -7,6 +7,7 @@ import type { PendingConfirmation } from '../capabilities/actions';
 import type { JarvisCore, JarvisCoreResult, JarvisRequest } from '../core/types';
 import { LocalLlmJarvisCore } from './LocalLlmJarvisCore';
 import { LocalLlmProvider } from '../../bot/llm/LocalLlmProvider';
+import { CANONICAL_LLM_BASE_URL, CANONICAL_LLM_MODEL } from '../../bot/llm/canonicalRuntime';
 import type { LlmTurnMetrics, TurnTimings } from './turnTimings';
 
 export type StandaloneTextTurnInput = {
@@ -64,7 +65,10 @@ export async function runStandaloneTextTurn(
     presetActionResults: input.presetActionResults,
     actionSource: input.actionSource,
   });
-  const core = options.core ?? new LocalLlmJarvisCore(new LocalLlmProvider());
+  const core = options.core ?? new LocalLlmJarvisCore(new LocalLlmProvider(
+    process.env.JARVIS_LLM_BASE_URL || process.env.LOCAL_QWEN_BASE_URL || CANONICAL_LLM_BASE_URL,
+    process.env.JARVIS_LLM_MODEL || process.env.LOCAL_QWEN_MODEL || CANONICAL_LLM_MODEL,
+  ));
   const engine = options.engine ?? new FactPreservingPresentationEngine();
   const timedCore = core as JarvisCore & { handleTimed?: LocalLlmJarvisCore['handleTimed'] };
   const started = Date.now();

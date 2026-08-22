@@ -78,6 +78,17 @@
   gap: 0.15rem;
 }
 
+.jp-model {
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: var(--jp-ok);
+}
+
+.jp-model[data-health]:not([data-health="MODEL_READY"]) {
+  color: var(--jp-alert);
+}
+
 .jp-mark strong {
   font-family: var(--jp-display);
   font-size: 0.72rem;
@@ -307,7 +318,10 @@
 .jp-approve__ask { margin: 0.85rem 0 0.55rem; }
 .jp-approve__row { display: flex; gap: 0.45rem; }
 .jp-approve__note,
+.jp-approve__once,
 .jp-approve__more { margin-top: 0.7rem; color: var(--jp-muted); font-size: 0.72rem; }
+.jp-approve__goal { margin: 0.7rem 0 0.35rem; font-family: var(--jp-display); letter-spacing: 0.06em; }
+.jp-approve__effects { margin: 0.4rem 0 0; padding-left: 1.1rem; color: var(--jp-ice); font-size: 0.8rem; }
 .jp-approve__more .jai-risk-brief { margin-top: 0.5rem; }
 
 .jp-btn {
@@ -356,10 +370,96 @@
   font-size: 0.78rem;
 }
 
+.jp-offline {
+  position: absolute;
+  left: 50%;
+  top: 6.4rem;
+  transform: translateX(-50%);
+  color: var(--jp-amber);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.jp-build {
+  position: absolute;
+  right: 1.5rem;
+  top: 18%;
+  width: min(22rem, 28vw);
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--jp-line);
+  background: rgb(5 10 16 / 0.72);
+  backdrop-filter: blur(16px);
+  pointer-events: none;
+}
+
+.jp-build header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-family: var(--jp-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.64rem;
+  color: var(--jp-cyan);
+}
+
+.jp-build ol { margin: 0.7rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.28rem; }
+.jp-build li { display: grid; grid-template-columns: 0.7rem minmax(0, 1fr) auto; gap: 0.55rem; align-items: center; font-size: 0.78rem; }
+.jp-build i { width: 0.45rem; height: 0.45rem; border-radius: 50%; border: 1px solid var(--jp-muted); }
+.jp-build li[data-state="complete"] i { background: var(--jp-ok); border-color: var(--jp-ok); }
+.jp-build li[data-state="active"] i { background: var(--jp-cyan); border-color: var(--jp-cyan); }
+.jp-build li[data-state="waiting-owner"] i { background: var(--jp-amber); border-color: var(--jp-amber); }
+.jp-build li[data-state="failed"] i { background: var(--jp-alert); border-color: var(--jp-alert); }
+.jp-build em { font-style: normal; color: var(--jp-muted); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.jp-build__art,
+.jp-build__ev { margin: 0.45rem 0 0; color: var(--jp-muted); font-size: 0.72rem; }
+
+.jp-history {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.4rem;
+  width: min(22rem, 32vw);
+}
+
+.jp-history__toggle {
+  border: 1px solid var(--jp-line);
+  background: rgb(5 10 16 / 0.6);
+  padding: 0.4rem 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: var(--jp-muted);
+  cursor: pointer;
+}
+
+.jp-history__panel {
+  margin-top: 0.45rem;
+  padding: 0.7rem;
+  border: 1px solid var(--jp-line);
+  background: rgb(5 10 16 / 0.82);
+  backdrop-filter: blur(16px);
+}
+
+.jp-history__panel input {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--jp-line);
+  background: transparent;
+}
+
+.jp-history ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; max-height: 12rem; overflow: auto; }
+.jp-history button { width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer; }
+.jp-history strong { display: block; font-size: 0.62rem; letter-spacing: 0.12em; color: var(--jp-cyan); }
+.jp-history span { color: var(--jp-ice); font-size: 0.75rem; }
+.jp-history li[data-status="incomplete"] span { color: var(--jp-amber); }
+
 @media (max-width: 900px) {
   .jp-core { inset: 16% 6% 28%; }
   .jp-hud,
-  .jp-approve {
+  .jp-approve,
+  .jp-build,
+  .jp-history {
     position: static;
     transform: none;
     width: auto;

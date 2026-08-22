@@ -78,6 +78,14 @@ export type LabPendingConfirmation = {
   reason: string;
   expiresAt: string;
   preflight?: import('../safety/types').ActionPreflight;
+  permissionProposal?: {
+    goal: string;
+    summary: string;
+    reason: string;
+    scope: string;
+    duration: string;
+    effects: string[];
+  };
 };
 
 export type LabCapabilityCatalogItem = {
