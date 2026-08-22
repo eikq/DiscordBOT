@@ -386,6 +386,124 @@
   letter-spacing: 0.04em;
 }
 
+.jp-setup {
+  position: absolute;
+  left: 50%;
+  top: 5.8rem;
+  z-index: 6;
+  width: min(28rem, 86vw);
+  transform: translateX(-50%);
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--jp-line);
+  background: rgb(5 10 16 / 0.78);
+  backdrop-filter: blur(16px);
+}
+
+.jp-setup header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.jp-setup strong {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  color: var(--jp-amber);
+}
+
+.jp-setup header button,
+.jp-prompts button {
+  border: 1px solid var(--jp-line);
+  background: transparent;
+  color: var(--jp-ice);
+  cursor: pointer;
+}
+
+.jp-setup header button {
+  padding: 0.28rem 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+}
+
+.jp-setup p,
+.jp-setup small,
+.jp-welcome p {
+  margin: 0.4rem 0 0;
+  color: var(--jp-muted);
+  font-size: 0.78rem;
+}
+
+.jp-setup dl {
+  display: grid;
+  gap: 0.28rem;
+  margin: 0.55rem 0 0;
+}
+
+.jp-setup dt {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.58rem;
+  color: var(--jp-muted);
+}
+
+.jp-setup dd { margin: 0; font-size: 0.78rem; }
+
+.jp-welcome {
+  position: absolute;
+  left: 1.6rem;
+  bottom: 7.4rem;
+  z-index: 6;
+  width: min(26rem, 42vw);
+  pointer-events: auto;
+}
+
+.jp-welcome__kicker {
+  margin: 0;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: var(--jp-cyan);
+}
+
+.jp-welcome h2 {
+  margin: 0.25rem 0 0;
+  font-family: var(--jp-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.jp-welcome ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  color: var(--jp-muted);
+  font-size: 0.78rem;
+}
+
+.jp-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.jp-prompts button {
+  max-width: 100%;
+  padding: 0.4rem 0.55rem;
+  text-align: left;
+  font-size: 0.72rem;
+}
+
+.jp-prompts small {
+  display: block;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--jp-cyan);
+  font-size: 0.58rem;
+}
+
 .jp-build {
   position: absolute;
   right: 1.5rem;

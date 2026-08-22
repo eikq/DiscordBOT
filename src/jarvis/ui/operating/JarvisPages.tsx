@@ -69,6 +69,10 @@ export type CapabilityCatalogItem = {
 };
 
 export type PersonalAiRuntimeStatus = {
+  edition?: 'owner' | 'community';
+  editionLabel?: string;
+  dataRoot?: string;
+  manifest?: { edition: string; capabilities?: Record<string, boolean> };
   ready: boolean;
   coreState: string;
   memory: { attached: boolean; schemaVersion?: number };
@@ -81,6 +85,8 @@ export type PersonalAiRuntimeStatus = {
     health?: string;
     ownerMessage?: string;
     modelAvailable?: boolean;
+    baseUrl?: string;
+    authConfigured?: boolean;
     profile?: { id: string; displayName: string; family?: string; runtime: string; certificationState?: string };
   };
   stt?: { reachable?: boolean; model?: string; reason?: string };
@@ -197,12 +203,12 @@ function HomePage(props: Props) {
     { label: 'Model', value: props.status?.llm?.reachable === true ? 'Ready' : props.status?.llm?.reachable === false ? 'Unavailable' : props.status ? 'Unknown' : 'Checking', tone: props.status?.llm?.reachable === true ? 'green' : 'amber' },
     { label: 'Memory', value: props.status ? (props.status.memory.attached ? 'Healthy' : 'Not attached') : 'Checking', tone: props.status?.memory.attached ? 'green' : 'amber' },
     { label: 'Security', value: props.security ? securitySummary(props.security) : 'Checking', tone: props.security && securitySummary(props.security) === 'Protected' ? 'green' : 'amber' },
-    { label: 'Devices', value: devicesSimulated ? `${deviceCount} simulated` : `${deviceCount} online`, tone: devicesSimulated ? 'violet' : deviceCount > 0 ? 'cyan' : 'neutral' },
+    ...(props.status?.edition === 'community' ? [] : [{ label: 'Devices', value: devicesSimulated ? `${deviceCount} simulated` : `${deviceCount} online`, tone: (devicesSimulated ? 'violet' : deviceCount > 0 ? 'cyan' : 'neutral') as 'violet' | 'cyan' | 'neutral' }]),
     { label: 'Tasks', value: task ? humanTaskState(task.status) : 'Idle', tone: task?.active ? 'cyan' : waiting ? 'amber' : 'neutral' },
-  ] as const;
+  ];
   return (
     <div className="jai-page jai-page--home">
-      <PageHeader eyebrow="JARVIS PERSONAL AI" title="At a glance" description="Everything that needs your attention, and nothing that does not." />
+      <PageHeader eyebrow={props.status?.edition === 'community' ? 'JARVIS COMMUNITY' : 'JARVIS PERSONAL AI'} title="At a glance" description="Everything that needs your attention, and nothing that does not." />
       <div className="jai-home-grid">
         <SectionCard title="Jarvis Core" description="Driven by observable runtime state" tone={props.coreTitle === 'error' ? 'red' : props.coreTitle === 'degraded' ? 'amber' : 'cyan'} className="jai-core-card">
           <div className="jai-core-card__visual">{props.coreVisual}</div>
@@ -329,7 +335,7 @@ function TasksPage(props: Props) {
           <ExpertDetails summary="Task IDs, capability IDs, and simulation demos">
             {task ? <dl className="jai-data-list"><div><dt>Task ID</dt><dd><code>{task.id}</code></dd></div><div><dt>Goal ID</dt><dd><code>{task.goalResolution?.goalId || 'unresolved'}</code></dd></div><div><dt>Pending goal ID</dt><dd><code>{task.waitingInput?.pendingGoalId || 'none'}</code></dd></div><div><dt>Missing fields</dt><dd>{task.waitingInput?.missingFields.join(' · ') || 'none'}</dd></div><div><dt>Pending expiry</dt><dd>{task.waitingInput?.expiresAt || 'none'}</dd></div><div><dt>Status</dt><dd>{task.status}</dd></div><div><dt>Capability IDs</dt><dd>{task.steps.some(step => step.capability) ? task.steps.filter(step => step.capability).map(step => <code key={step.id}>{step.capability} </code>) : 'none'}</dd></div><div><dt>Input adapters</dt><dd>{task.adapters.length ? task.adapters.map(item => <code key={item.stepId}>{item.adapterId} </code>) : 'none'}</dd></div><div><dt>Errors</dt><dd>{task.errors.join(' · ') || 'none'}</dd></div><div><dt>Checkpoint</dt><dd><code>{task.rollback?.checkpointId || 'none'}</code></dd></div><div><dt>Cancellation</dt><dd>{task.cancellation ? `${task.cancellation.state} · ${task.cancellation.reason || 'reason unavailable'} · observed=${String(task.cancellation.observedByHandler)}` : 'none'}</dd></div><div><dt>Gap attempts</dt><dd>{task.gapResolution ? `${task.gapResolution.boundedAttempts.attempted}/${task.gapResolution.boundedAttempts.maximum}` : 'none'}</dd></div><div><dt>Goal evidence</dt><dd>{task.goalResolution?.evidence.join(' · ') || 'none'}</dd></div><div><dt>Gap evidence</dt><dd>{task.gapResolution?.evidence.join(' · ') || 'none'}</dd></div></dl> : null}
             <p className="jai-muted">Demos create tagged simulation data. They do not operate owner hardware.</p>
-            <div className="jai-action-row">{(['research', 'coding', 'evolution', 'monitoring'] as const).map(id => <button type="button" className="jai-button" key={id} disabled={props.busy} onClick={() => props.onDemo(id)}>{id}</button>)}</div>
+            <div className="jai-action-row">{(props.status?.edition === 'community' ? (['research', 'coding'] as const) : (['research', 'coding', 'evolution', 'monitoring'] as const)).map(id => <button type="button" className="jai-button" key={id} disabled={props.busy} onClick={() => props.onDemo(id)}>{id}</button>)}</div>
           </ExpertDetails>
         </div>
       </div>
@@ -405,6 +411,14 @@ function ContentPage() {
 }
 
 function DevicesPage(props: Props) {
+  if (props.status?.edition === 'community') {
+    return (
+      <div className="jai-page">
+        <PageHeader eyebrow="COMMUNITY" title="Devices" description="Private device modules are not part of Community Edition." />
+        <EmptyState title="Not registered" detail="Camera, CCTV, and household device control stay in the private owner runtime." />
+      </div>
+    );
+  }
   const devices = props.commandCenter?.devices ?? [];
   const cctv = props.status?.selfKnowledge?.capabilities.filter(item => item.id.startsWith('cctv.')) ?? [];
   const cctvConnect = cctv.find(item => item.id === 'cctv.connect');
@@ -504,7 +518,7 @@ function SystemPage(props: Props) {
       <div className="jai-status-grid jai-status-grid--four"><Metric label="CPU" value={props.system?.cpu ? formatPct(props.system.cpu.usagePct) : 'Unknown'} detail={props.system?.cpu ? `${props.system.cpu.cores} cores` : 'not measured'} /><Metric label="RAM" value={props.system?.ram ? formatPct(props.system.ram.usedPct) : 'Unknown'} detail={props.system?.ram ? `${formatMb(props.system.ram.totalMb - props.system.ram.freeMb)} / ${formatMb(props.system.ram.totalMb)}` : 'not measured'} /><Metric label="GPU" value={props.system?.gpu ? formatPct(props.system.gpu.utilizationPct) : 'Unavailable'} detail={props.system?.gpu?.name || props.system?.gpuUnavailableReason || 'not measured'} /><Metric label="Disk" value={props.system?.disk ? formatPct(props.system.disk.usedPct) : 'Unknown'} detail={props.system?.disk ? `${props.system.disk.freeGb} GB free` : 'not measured'} /></div>
       <div className="jai-two-column">
         <SectionCard title="Model / inference" description={props.status?.llm?.reachable === true ? 'Configured runtime reachable' : props.status?.llm?.reachable === false ? 'Runtime unavailable' : 'Runtime state unknown'} tone={props.status?.llm?.reachable ? 'cyan' : 'amber'}><div className="jai-model-card"><Cpu size={25} /><div><span>Model</span><strong>{props.status?.llm?.model || 'Not reported'}</strong><small>{props.status?.runtime?.contextTokens ? `${props.status.runtime.contextTokens.toLocaleString()} context tokens` : 'Context unknown'}</small></div></div><dl className="jai-data-list"><div><dt>Loaded</dt><dd>{props.status?.llm?.loaded === undefined ? 'unknown' : String(props.status.llm.loaded)}</dd></div><div><dt>Provider boundary</dt><dd>{props.status?.llm?.profile?.runtime || props.status?.llm?.provider || 'unknown'}</dd></div><div><dt>Certification</dt><dd>{props.status?.llm?.profile?.certificationState || 'NOT_TESTED'}</dd></div><div><dt>Keep alive</dt><dd>{String(props.status?.runtime?.keepAlive || 'unknown')}</dd></div><div><dt>VRAM</dt><dd>{props.system?.gpu?.vramTotalMb ? `${formatMb(props.system.gpu.vramUsedMb)} / ${formatMb(props.system.gpu.vramTotalMb)}` : 'unavailable'}</dd></div><div><dt>Last turn</dt><dd>{props.conversation.modelMetrics?.tokensPerSec ? `${props.conversation.modelMetrics.tokensPerSec.toFixed(1)} tok/s · ${props.conversation.modelMetrics.outputTokens ?? '—'} output tokens` : 'not recorded'}</dd></div></dl><ExpertDetails summary="Inference details"><dl className="jai-data-list"><div><dt>Family</dt><dd>{props.status?.llm?.profile?.family || 'unknown'}</dd></div><div><dt>Prompt tokens</dt><dd>{props.conversation.modelMetrics?.promptTokens ?? 'not recorded'}</dd></div><div><dt>Prompt rate</dt><dd>{props.conversation.modelMetrics?.promptTokensPerSec ? `${props.conversation.modelMetrics.promptTokensPerSec.toFixed(1)} tok/s` : 'not recorded'}</dd></div><div><dt>Load time</dt><dd>{props.conversation.modelMetrics?.loadMs !== undefined ? `${Math.round(props.conversation.modelMetrics.loadMs)} ms` : 'not recorded'}</dd></div><div><dt>Queue / active requests</dt><dd>not exposed by the current provider contract</dd></div></dl></ExpertDetails></SectionCard>
-        <SectionCard title="Services" description="Typed lifecycle actions only" tone="neutral"><ServiceList services={props.status?.services ?? []} busy={props.busy} onService={props.onService} /></SectionCard>
+        <SectionCard title="Services" description="Typed lifecycle actions only" tone="neutral">{props.status?.edition === 'community' ? <EmptyState title="Private service control hidden" detail="Community Edition does not expose owner STT, voice, or device service controls." /> : <ServiceList services={props.status?.services ?? []} busy={props.busy} onService={props.onService} />}</SectionCard>
       </div>
       {intelligence.length ? <div className="jai-status-grid jai-status-grid--four"><Metric label="Available now" value={String(statusCounts.AVAILABLE ?? 0)} detail="runtime evidence" /><Metric label="Needs setup" value={String((statusCounts.NEEDS_CONFIGURATION ?? 0) + (statusCounts.NEEDS_PROVIDER ?? 0) + (statusCounts.NEEDS_DEPENDENCY ?? 0) + (statusCounts.NEEDS_OWNER_INPUT ?? 0))} detail="configuration, provider, or owner input" /><Metric label="Simulation" value={String(statusCounts.SIMULATION ?? 0)} detail="no live effect" /><Metric label="Local acceptance" value={String(intelligence.filter(item => item.localAcceptance === 'BLOCKED_LOCAL_ACCEPTANCE').length)} detail="owner machine required" /></div> : null}
       <SectionCard title="End-to-end goals" description="What Jarvis can complete through declared capability routes" tone="violet">
@@ -544,12 +558,24 @@ function ActivityPage(props: Props) {
 }
 
 function SettingsPage(props: Props) {
+  const community = props.status?.edition === 'community';
   return (
     <div className="jai-page">
-      <PageHeader eyebrow="PREFERENCES" title="Settings" description="Daily experience preferences without weakening owner protections." />
-      <div className="jai-two-column"><SectionCard title="Assistant presentation" description="Persona and voice remain independent" tone="cyan">{props.settings}</SectionCard><SectionCard title="Owner preferences" description="Current control snapshot" tone="neutral"><dl className="jai-data-list"><div><dt>Research depth</dt><dd>{props.commandCenter?.control.researchDepth || 'standard'}</dd></div><div><dt>Proactive alerts</dt><dd>{props.commandCenter?.control.proactiveAlerts ? 'enabled' : 'disabled'}</dd></div><div><dt>Background evolution</dt><dd>{props.commandCenter?.control.backgroundEvolution ? 'enabled' : 'disabled'}</dd></div><div><dt>Night Cycle</dt><dd>{props.commandCenter?.control.nightCycle ? 'enabled' : 'disabled'}</dd></div></dl><label className="jai-setting-toggle"><input type="checkbox" checked={Boolean(props.commandCenter?.control.simulationMode)} onChange={event => props.onSimulation(event.target.checked)} /><span><strong>Simulation mode</strong><small>All demos remain clearly tagged.</small></span></label></SectionCard></div>
-      <SectionCard title="Perceptual memory privacy" description="PREPARE_CONTRACT · no capture provider is active" tone="violet"><div className="jai-two-column"><div><h3>Never capture</h3><p className="jai-muted">Passwords, password managers, OTP/2FA, private keys, credential dialogs, banking/payment views, owner-private apps/windows, and known secret stores.</p></div><div><h3>Redact before storage</h3><p className="jai-muted">API keys, authorization headers, cookies, tokens, Discord credentials, private-key material, payment patterns, and password-like clipboard content.</p></div></div><TrustedOperatorNote>Local does not automatically mean safe. Filter failure means no capture.</TrustedOperatorNote></SectionCard>
-      <div className="jai-prepared-grid"><PreparedFeature label="PREPARED" title="Proactive notification policy" detail="Importance, cooldown, quiet hours, and owner preferences." /><PreparedFeature label="NOT CONFIGURED" title="Attachment intake" detail="Assistant attachment UI waits for the Document Intelligence contract." /><PreparedFeature label="BLOCKED_LOCAL_ACCEPTANCE" title="Microphone / voice output" detail="The controls exist; audio hardware and local STT/TTS must be verified on Windows." /><PreparedFeature label="BLOCKED_LOCAL_ACCEPTANCE" title="Perpetual monitoring" detail="Windows event, visual, file, notification, and hardware capture require owner-machine privacy, performance, retention, and consent acceptance." /></div>
+      <PageHeader eyebrow="PREFERENCES" title="Settings" description={community ? 'Community setup and daily experience.' : 'Daily experience preferences without weakening owner protections.'} />
+      {community ? (
+        <SectionCard title="Local model" description="OpenAI-compatible endpoint from environment" tone={props.status?.llm?.health === 'MODEL_READY' ? 'cyan' : 'amber'}>
+          <dl className="jai-data-list">
+            <div><dt>Endpoint</dt><dd>{props.status?.llm?.baseUrl || 'not configured'}</dd></div>
+            <div><dt>Model</dt><dd>{props.status?.llm?.model || 'not configured'}</dd></div>
+            <div><dt>Connection</dt><dd>{props.status?.llm?.health === 'MODEL_READY' ? 'MODEL READY' : 'LOCAL MODEL OFFLINE'}</dd></div>
+            <div><dt>API key</dt><dd>{props.status?.llm?.authConfigured ? 'configured' : 'not set'}</dd></div>
+          </dl>
+          <p className="jai-muted">Change JARVIS_LLM_BASE_URL, JARVIS_LLM_MODEL, and optional JARVIS_LLM_API_KEY in `.env.community`, then restart Community JARVIS. The key is never displayed.</p>
+        </SectionCard>
+      ) : null}
+      <div className="jai-two-column"><SectionCard title="Assistant presentation" description="Persona and voice remain independent" tone="cyan">{props.settings}</SectionCard><SectionCard title={community ? 'Preferences' : 'Owner preferences'} description="Current control snapshot" tone="neutral"><dl className="jai-data-list"><div><dt>Research depth</dt><dd>{props.commandCenter?.control.researchDepth || 'standard'}</dd></div><div><dt>Proactive alerts</dt><dd>{props.commandCenter?.control.proactiveAlerts ? 'enabled' : 'disabled'}</dd></div>{community ? null : <div><dt>Background evolution</dt><dd>{props.commandCenter?.control.backgroundEvolution ? 'enabled' : 'disabled'}</dd></div>}{community ? null : <div><dt>Night Cycle</dt><dd>{props.commandCenter?.control.nightCycle ? 'enabled' : 'disabled'}</dd></div>}</dl>{community ? null : <label className="jai-setting-toggle"><input type="checkbox" checked={Boolean(props.commandCenter?.control.simulationMode)} onChange={event => props.onSimulation(event.target.checked)} /><span><strong>Simulation mode</strong><small>All demos remain clearly tagged.</small></span></label>}</SectionCard></div>
+      {community ? null : <SectionCard title="Perceptual memory privacy" description="PREPARE_CONTRACT · no capture provider is active" tone="violet"><div className="jai-two-column"><div><h3>Never capture</h3><p className="jai-muted">Passwords, password managers, OTP/2FA, private keys, credential dialogs, banking/payment views, owner-private apps/windows, and known secret stores.</p></div><div><h3>Redact before storage</h3><p className="jai-muted">API keys, authorization headers, cookies, tokens, Discord credentials, private-key material, payment patterns, and password-like clipboard content.</p></div></div><TrustedOperatorNote>Local does not automatically mean safe. Filter failure means no capture.</TrustedOperatorNote></SectionCard>}
+      {community ? null : <div className="jai-prepared-grid"><PreparedFeature label="PREPARED" title="Proactive notification policy" detail="Importance, cooldown, quiet hours, and owner preferences." /><PreparedFeature label="NOT CONFIGURED" title="Attachment intake" detail="Assistant attachment UI waits for the Document Intelligence contract." /><PreparedFeature label="BLOCKED_LOCAL_ACCEPTANCE" title="Microphone / voice output" detail="The controls exist; audio hardware and local STT/TTS must be verified on Windows." /><PreparedFeature label="BLOCKED_LOCAL_ACCEPTANCE" title="Perpetual monitoring" detail="Windows event, visual, file, notification, and hardware capture require owner-machine privacy, performance, retention, and consent acceptance." /></div>}
     </div>
   );
 }

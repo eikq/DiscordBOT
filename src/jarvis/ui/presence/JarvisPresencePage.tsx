@@ -12,6 +12,7 @@ import { parseQualityMode, QUALITY_STORAGE_KEY, resolveQualityLevel, type Qualit
 import { webglAvailable } from '../three/webglAvailability';
 import EmergencyStop, { riskBriefFromPreflight, type RiskBriefModel } from '../operating/TrustedOperator';
 import type { PersonalAiRuntimeStatus } from '../operating/JarvisPages';
+import CommunityPresenceChrome, { communityModelBadge, communityWelcomeVisible } from './CommunityPresenceChrome';
 import { PresenceApproval } from './PresenceApproval';
 import { PresenceBuildPlan } from './PresenceBuildPlan';
 import { PresenceHistory } from './PresenceHistory';
@@ -139,6 +140,7 @@ export default function JarvisPresencePage() {
   const [clock, setClock] = useState(() => new Date());
   const [ambient, setAmbient] = useState(() => isPresenceAmbientPath(window.location.pathname, window.location.search));
   const [emergencyOpen, setEmergencyOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [documentHidden, setDocumentHidden] = useState(false);
   const [webglLost, setWebglLost] = useState(false);
@@ -894,9 +896,9 @@ export default function JarvisPresencePage() {
     systemAsked: classifyVoiceFamily(lastAsk).family === 'SYSTEM_STATUS' || /system status|สถานะระบบ|runtime/i.test(lastAsk),
     reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0 && /remind|เตือน|attention/i.test(lastAsk),
     reminderActive: /remind|เตือน/i.test(lastAsk),
-    cctvAsked: /cctv|camera|กล้อง/i.test(lastAsk),
+    cctvAsked: status?.edition !== 'community' && /cctv|camera|กล้อง/i.test(lastAsk),
     mediaAsked: /spotify|music|เพลง|youtube/i.test(lastAsk),
-    desktopAsked: Boolean(desktopClass),
+    desktopAsked: status?.edition !== 'community' && Boolean(desktopClass),
     attentionCount: attention.length,
   });
   const visual = composePresenceVisual({
@@ -917,9 +919,9 @@ export default function JarvisPresencePage() {
     systemAsked: classifyVoiceFamily(lastAsk).family === 'SYSTEM_STATUS' || /system status|สถานะระบบ|runtime/i.test(lastAsk),
     reminderPending: (reminders?.scheduler.pendingCount ?? 0) > 0,
     reminderActive: /remind|เตือน/i.test(lastAsk),
-    cctvAsked: /cctv|camera|กล้อง/i.test(lastAsk),
+    cctvAsked: status?.edition !== 'community' && /cctv|camera|กล้อง/i.test(lastAsk),
     mediaAsked: /spotify|music|เพลง|youtube/i.test(lastAsk),
-    desktopAsked: Boolean(desktopClass),
+    desktopAsked: status?.edition !== 'community' && Boolean(desktopClass),
     placementUnverified,
     attentionCount: attention.length,
     stepsDone: commandCenter?.task?.steps.filter(step => step.state === 'done').length,
@@ -970,15 +972,17 @@ export default function JarvisPresencePage() {
   ) : <PresenceCoreFallback phase={visual.phase} />;
 
   return (
-    <div className="jp jai" data-cinematic="true" data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase}>
+    <div className="jp jai" data-cinematic="true" data-edition={status?.edition || 'owner'} data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase}>
       {visual.fixtureLabel ? <div className="jp-fixture" role="status">{visual.fixtureLabel}</div> : null}
       <div className="jp-orbit" aria-hidden="true" />
       <header className="jp-mark">
-        <strong>JARVIS</strong>
-        <span>{ambientNow ? 'Ambient presence' : 'Presence'}</span>
+        <strong>{status?.edition === 'community' ? 'JARVIS COMMUNITY' : 'JARVIS'}</strong>
+        <span>{ambientNow ? 'Ambient presence' : status?.edition === 'community' ? 'Community' : 'Presence'}</span>
         {status?.llm?.health ? (
           <small className="jp-model" data-health={status.llm.health}>
-            {status.llm.health === 'MODEL_READY' ? 'QWEN READY' : 'QWEN OFFLINE'}
+            {status.edition === 'community'
+              ? communityModelBadge(status.llm.health)
+              : status.llm.health === 'MODEL_READY' ? 'QWEN READY' : 'QWEN OFFLINE'}
           </small>
         ) : null}
       </header>
@@ -997,7 +1001,30 @@ export default function JarvisPresencePage() {
         </div>
       ) : null}
       <div className="jp-core">{coreVisual}</div>
-      {status?.llm?.health && status.llm.health !== 'MODEL_READY' ? (
+      {status?.edition === 'community' ? (
+        <CommunityPresenceChrome
+          edition={status.edition}
+          modelHealth={status.llm?.health}
+          modelName={status.llm?.model}
+          endpoint={status.llm?.baseUrl}
+          authConfigured={status.llm?.authConfigured}
+          welcome={communityWelcomeVisible({
+            edition: status.edition,
+            ambient: ambientNow,
+            hasAnswer: Boolean(answer || heard),
+            busy,
+            taskActive: Boolean(commandCenter?.task?.active),
+            waitingPermission: Boolean(commandCenter?.permission.waiting || pendingConfirmation),
+          })}
+          setupOpen={setupOpen}
+          onSetupOpen={setSetupOpen}
+          onPrompt={prompt => {
+            setText(prompt);
+            setComposerOpen(true);
+            window.setTimeout(() => askField.current?.focus(), 0);
+          }}
+        />
+      ) : status?.llm?.health && status.llm.health !== 'MODEL_READY' ? (
         <p className="jp-offline" role="status">{status.llm.ownerMessage || 'Qwen local ยังไม่พร้อม ผมยังไม่ได้เริ่มงานนี้'}</p>
       ) : null}
       {buildSurface ? <PresenceBuildPlan surface={buildSurface} /> : null}
@@ -1066,8 +1093,8 @@ export default function JarvisPresencePage() {
           reminderWhen={reminders?.pendingDeliveries[0]?.scheduledLocal}
           waitingQuestion={commandCenter?.task?.waitingInput?.question}
           simulated={Boolean(commandCenter?.simulationMode || visual.fixture)}
-          desktopNote={desktopClass ? desktopAuthorityMaturity(desktopClass).note : undefined}
-          cctvNote="Camera context is prepared. Live CCTV stays PREPARE_CONTRACT until a reviewed provider is accepted."
+          desktopNote={status?.edition === 'community' ? undefined : desktopClass ? desktopAuthorityMaturity(desktopClass).note : undefined}
+          cctvNote={status?.edition === 'community' ? undefined : 'Camera context is prepared. Live CCTV stays PREPARE_CONTRACT until a reviewed provider is accepted.'}
         />
       )}
       {error ? <p className="jp-error">{error}</p> : null}

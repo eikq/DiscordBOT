@@ -24,6 +24,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { COMMUNITY_LAB_PAGE_IDS } from '../../edition/types';
 import EmergencyStop from './TrustedOperator';
 
 export type JarvisPageId =
@@ -68,9 +69,17 @@ export const JARVIS_PAGES: PageDefinition[] = [
   { id: 'settings', label: 'Settings', description: 'Experience preferences', icon: Settings, section: 'control', keywords: ['persona', 'quality', 'preferences'] },
 ];
 
-export function parseJarvisPage(pathname: string): JarvisPageId {
+export function parseJarvisPage(pathname: string, edition?: string): JarvisPageId {
   const segment = pathname.split('/').filter(Boolean)[1]?.toLowerCase();
-  return JARVIS_PAGES.some(page => page.id === segment) ? segment as JarvisPageId : 'home';
+  const pages = visibleJarvisPages(edition);
+  return pages.some(page => page.id === segment) ? segment as JarvisPageId : 'home';
+}
+
+export function visibleJarvisPages(edition?: string) {
+  if (edition === 'community') {
+    return JARVIS_PAGES.filter(page => (COMMUNITY_LAB_PAGE_IDS as readonly string[]).includes(page.id));
+  }
+  return JARVIS_PAGES;
 }
 
 type QuickCommand = {
@@ -116,6 +125,7 @@ type Props = {
   emergencyBusy?: boolean;
   onEmergencyActivate: () => void;
   onEmergencyResume: () => void;
+  edition?: string;
 };
 
 export default function JarvisOperatingShell({
@@ -131,6 +141,7 @@ export default function JarvisOperatingShell({
   emergencyBusy,
   onEmergencyActivate,
   onEmergencyResume,
+  edition,
 }: Props) {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -159,11 +170,13 @@ export default function JarvisOperatingShell({
   }, [paletteOpen]);
 
   const commands = useMemo(() => {
+    const pages = visibleJarvisPages(edition);
+    const allowed = QUICK_COMMANDS.filter(command => !command.page || pages.some(page => page.id === command.page));
     const term = query.trim().toLowerCase();
-    if (!term) return QUICK_COMMANDS;
-    return QUICK_COMMANDS.filter(command =>
+    if (!term) return allowed;
+    return allowed.filter(command =>
       `${command.label} ${command.hint} ${command.keywords.join(' ')}`.toLowerCase().includes(term));
-  }, [query]);
+  }, [edition, query]);
 
   const runCommand = (command: QuickCommand) => {
     setPaletteOpen(false);
@@ -185,8 +198,8 @@ export default function JarvisOperatingShell({
         <div className="jai-nav__brand">
           <div className="jai-mark" aria-hidden="true"><span>J</span></div>
           <div className="jai-nav__brand-copy">
-            <strong>JARVIS</strong>
-            <span>Control Center</span>
+            <strong>{edition === 'community' ? 'JARVIS COMMUNITY' : 'JARVIS'}</strong>
+            <span>{edition === 'community' ? 'Community Lab' : 'Control Center'}</span>
           </div>
           <button type="button" className="jai-icon-button jai-nav__collapse" onClick={() => setNavCollapsed(value => !value)} aria-label={navCollapsed ? 'Expand navigation' : 'Collapse navigation'}>
             {navCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
@@ -196,7 +209,7 @@ export default function JarvisOperatingShell({
         {(['daily', 'build', 'control'] as const).map(section => (
           <div className="jai-nav__group" key={section}>
             <p>{section === 'daily' ? 'Daily' : section === 'build' ? 'Intelligence' : 'Control'}</p>
-            {JARVIS_PAGES.filter(page => page.section === section).map(page => {
+            {visibleJarvisPages(edition).filter(page => page.section === section).map(page => {
               const Icon = page.icon;
               return (
                 <button

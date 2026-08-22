@@ -207,10 +207,17 @@ export default function JarvisOperatingPage() {
   }, []);
 
   useEffect(() => {
-    const onPopState = () => setPage(parseJarvisPage(window.location.pathname));
+    const onPopState = () => setPage(parseJarvisPage(window.location.pathname, status?.edition));
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [status?.edition]);
+
+  useEffect(() => {
+    setPage(current => {
+      const next = parseJarvisPage(`/jarvis-lab/${current}`, status?.edition);
+      return next;
+    });
+  }, [status?.edition]);
 
   useEffect(() => {
     if (documentHidden) return;
@@ -686,6 +693,7 @@ export default function JarvisOperatingPage() {
         emergencyBusy={opsBusy}
         onEmergencyActivate={() => { void postOperator('/api/jarvis/emergency-stop', { reason: 'Owner activated Emergency Stop from the Jarvis interface.' }); }}
         onEmergencyResume={() => { void postOperator('/api/jarvis/emergency-resume', { reason: 'Owner explicitly resumed operation from the Jarvis interface.' }); }}
+        edition={status?.edition}
       >
         <JarvisPages
           page={page}
