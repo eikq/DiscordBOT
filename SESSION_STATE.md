@@ -3,29 +3,35 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — continuous conversation intelligence
+## This turn — continuous conversation intelligence live 31–214
 
 Branch: `local/jarvis-continuous-conversation-intelligence-v1-2026-08-22`
-from source checkpoint `ec5e1592a15983105b0de54e891195b812ab2798`
-(`local/jarvis-persistent-permission-builder-runtime-v1-2026-08-22`).
+from source checkpoint `ec5e1592a15983105b0de54e891195b812ab2798`.
 Did not modify `main`. Did not merge, rebase, reset, clean, or push.
-No commits this turn (working tree uncommitted).
 
 Conversation working memory is CONTEXT, not authority. Qwen output is
 interpretation only. CLICK / TYPE / SUBMIT remain unavailable.
 
 Live Presence: `http://127.0.0.1:3012/jarvis?contextDebug=1` session
-`jarvis-lab`. Messages were typed into the real composer, not
-`POST /api/jarvis/ask`. llama.cpp stayed on 8086.
+`jarvis-lab`. OWNER turns 31–214 were typed into the real composer
+(Playwright into `textarea[aria-label="Talk to Jarvis"]` + `.jp-send`),
+not `POST /api/jarvis/ask`. llama.cpp stayed on 8086. Conversation
+state was not wiped between blocks.
 
-LIVE_VERIFIED through about turn 30 of the 214-turn script (Phases 1–3,
-plus resume-work rerun). Turns 31–214 were not completed and are not
-claimed as passed.
+CHECKPOINT: `15a4d5836cb3a856e6e32ef929f331f5ee976914`
+FINAL HEAD: `97705b309aa2a09f31df9a9cedf391550a2a0e3a`
 
-Verification: `npx tsc --noEmit` PASS; conversation intelligence **35**
-PASS; builder/memory focused **20** PASS; `npm run test:cloud` **750 / 750**
-PASS; `npm run build` PASS (same Vite/`import.meta` warning). Labels:
-**IMPLEMENTED** + **UNIT_VERIFIED** + partial **LIVE_VERIFIED**.
+Turns 1–30: previous LIVE/PARTIAL. Turns 31–214: LIVE executed
+(184/184 recorded). Strict debug-overlay scoring of 31–214:
+GOOD 65 / PARTIAL 85 / DUMB 33 / FAILED 1. Later generalized
+fixes are **UNIT_VERIFIED**; those DUMB turns were **not** live-rerun
+and are **not** LIVE_VERIFIED as passing.
+
+Verification: `npx tsc --noEmit` PASS; conversation intelligence
+**70 / 70** PASS; focused intent/memory/builder/permission
+**162 / 162** PASS; `npm run test:cloud` **786 / 786** PASS;
+`npm run build` PASS (same Vite/`import.meta` warning). Labels:
+**IMPLEMENTED** + **UNIT_VERIFIED** + mixed **LIVE** (not all GOOD).
 
 ## Previous — live software builder acceptance
 
