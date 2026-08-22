@@ -2,6 +2,20 @@
 
 Thai-first Discord voice bot with live transcription, social response logic, barge-in cancellation, and consent-gated local RVC voice cloning on an NVIDIA GPU.
 
+## JARVIS Community Edition
+
+Standalone local JARVIS — conversation, permission-first software builder, memory, and localhost preview. No Discord token required.
+
+```powershell
+npm install
+Copy-Item .env.community.example .env.community
+npm run jarvis:community
+```
+
+Open `http://127.0.0.1:3012/jarvis`. Configure any OpenAI-compatible local model in `.env.community`.
+
+Full guide: [`COMMUNITY_EDITION.md`](COMMUNITY_EDITION.md) · demo script: [`docs/COMMUNITY_DEMO_SCRIPT.md`](docs/COMMUNITY_DEMO_SCRIPT.md)
+
 ## Public hackathon demo
 
 - Interactive public demo: https://digital-me-thai-voice.piriyapong2551.chatgpt.site
