@@ -310,6 +310,7 @@ export {
 } from './workspace';
 export type { WorkspaceResult, WorkspaceRuntime, WorkspaceSnapshot } from './workspace';
 export * from './build';
+export * from './conversation';
 export { permissionFirstFromCapability, shouldAvoidGenericRefusal } from './policy/permissionFirst';
 export { permissionProposalFromBuild, BUILD_GOAL_EFFECTS } from './security/permissionProposal';
 export { ownerConfirmationVisibleText, ownerDecisionSourceFrom } from './security/ownerConfirmation';

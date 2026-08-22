@@ -18,6 +18,7 @@ export {
 } from './constants';
 export { ProjectPathError, assertProjectSlug, resolveWorkspaceFile, resolveWorkspaceRoot } from './pathGuard';
 export { ProjectWorkspace, writeTodoWebsite } from './workspace';
+export { writeWebsite } from './siteRender';
 export {
   assertScriptRegistered,
   createFakeCommandRunner,

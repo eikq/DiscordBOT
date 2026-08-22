@@ -113,6 +113,10 @@ export type InteractionContext = {
   recentReminderIds?: string[];
   pendingClarification?: ClarificationState;
   pendingProposalId?: string;
+  activeGoalId?: string;
+  activePlanId?: string;
+  activeProjectSlug?: string;
+  activePreviewUrl?: string;
   candidateTargets?: string[];
   updatedAt: number;
   expiresAt: number;
@@ -124,6 +128,7 @@ export type IntentResolveOptions = {
   projectIds?: string[];
   catalog?: CompactCapability[];
   context?: InteractionContext | null;
+  conversation?: import('../conversation/types').ConversationState | null;
   now?: number;
   capabilityHost?: CapabilityHost;
   goalCatalog?: GoalCatalog;

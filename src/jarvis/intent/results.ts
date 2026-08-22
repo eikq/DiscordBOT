@@ -13,6 +13,18 @@ export function clarificationActionResult(resolution: IntentResolution): ActionR
   });
 }
 
+export function conversationActionResult(resolution: IntentResolution): ActionResult {
+  return Object.freeze({
+    name: 'intent.conversation',
+    status: 'completed' as const,
+    capabilityId: 'intent.conversation',
+    summary: resolution.userMessage || '',
+    risk: 'READ_ONLY' as const,
+    errorCode: resolution.reasonCode,
+    detail: resolution.reasonCode,
+  });
+}
+
 export function unsupportedActionResult(resolution: IntentResolution): ActionResult {
   const extra = resolution.alternatives?.length
     ? ` ${resolution.alternatives.map(item => item.label).join(' หรือ ')}`

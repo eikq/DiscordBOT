@@ -4,6 +4,7 @@ import type { PreviewArtifact } from '../project/types';
 import type { PersistentPermissionRecord } from './persistentPermission';
 import type { PrivilegeLeaseInventoryItem } from './types';
 import type { VisualWorkflowNode } from '../build/types';
+import type { ConversationDebugView, ConversationView } from '../conversation/types';
 
 export type PermissionRuntimeSnapshot = {
   pendingPermission: PendingConfirmation | null;
@@ -12,6 +13,7 @@ export type PermissionRuntimeSnapshot = {
   plan: Pick<BuildPlan, 'id' | 'goalId' | 'title' | 'slug' | 'status' | 'summary' | 'updatedAt'> | null;
   stage: VisualWorkflowNode | null;
   preview: PreviewArtifact | null;
+  conversation: (ConversationView & { debug?: ConversationDebugView }) | null;
 };
 
 export function emptyPermissionRuntimeSnapshot(): PermissionRuntimeSnapshot {
@@ -22,5 +24,6 @@ export function emptyPermissionRuntimeSnapshot(): PermissionRuntimeSnapshot {
     plan: null,
     stage: null,
     preview: null,
+    conversation: null,
   };
 }

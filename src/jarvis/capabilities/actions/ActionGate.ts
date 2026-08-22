@@ -105,8 +105,9 @@ export interface ActionHost extends CapabilityHost {
   };
 }
 
-export function isActionHost(host: CapabilityHost): host is ActionHost {
-  return typeof (host as ActionHost).confirm === 'function'
+export function isActionHost(host: CapabilityHost | undefined | null): host is ActionHost {
+  return Boolean(host)
+    && typeof (host as ActionHost).confirm === 'function'
     && typeof (host as ActionHost).denyProposal === 'function';
 }
 

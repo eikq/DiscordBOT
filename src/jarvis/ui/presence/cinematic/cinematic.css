@@ -227,6 +227,28 @@
 }
 
 .jp-dock { width: min(34rem, calc(100vw - 2.4rem)); }
+.jp-context,
+.jp-context-debug {
+  margin: 0 auto 0.4rem;
+  max-width: min(34rem, 70vw);
+  padding: 0.42rem 0.7rem;
+  border: 1px solid rgb(94 231 255 / 0.14);
+  background: rgb(4 10 18 / 0.52);
+  color: var(--jp-muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.jp-context span,
+.jp-context-debug span {
+  display: block;
+  color: var(--jp-cyan);
+  margin-bottom: 0.18rem;
+}
+.jp-context p { margin: 0.08rem 0; letter-spacing: 0.04em; text-transform: none; }
+.jp-context strong { color: var(--jp-ice); font-weight: 600; }
+.jp-context-debug { opacity: 0.72; font-size: 0.58rem; }
 .jp-caption {
   max-width: min(36rem, 70vw);
   margin: 0 auto 0.35rem;

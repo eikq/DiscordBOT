@@ -44,6 +44,8 @@ function planHandler(deps: SoftwareCapabilityDeps): CapabilityHandler {
           brief: { type: 'string' },
           query: { type: 'string' },
           goalId: { type: 'string' },
+          planId: { type: 'string' },
+          merge: { type: 'boolean' },
         },
         anyOf: [{ required: ['brief'] }, { required: ['query'] }],
       },
@@ -77,6 +79,7 @@ function applyHandler(deps: SoftwareCapabilityDeps): CapabilityHandler {
           brief: { type: 'string' },
           planId: { type: 'string' },
           goalId: { type: 'string' },
+          merge: { type: 'boolean' },
         },
       },
       outputSchema: { type: 'object' },
@@ -119,6 +122,32 @@ function invokePlan(
   if (!brief) {
     return fail(SOFTWARE_PLAN_BUILD, 'rejected', 'INVALID_ARGUMENT', 'brief is required.', 'read');
   }
+  const mergeId = typeof input.planId === 'string' ? input.planId : '';
+  const existing = mergeId ? deps.plans.get(mergeId) : null;
+  if (existing && (input.merge === true || existing.status === 'DRAFT' || existing.status === 'READY_FOR_REVIEW')) {
+    const plan = deps.plans.save({
+      ...existing,
+      brief: `${existing.brief}\n${brief}`.slice(0, 800),
+      requirements: [...existing.requirements, `Owner update: ${brief.slice(0, 160)}`].slice(0, 24),
+    });
+    deps.events?.emit('PLAN_CREATED', 'updated requirements', {
+      planId: plan.id,
+      goalId: plan.goalId,
+      title: plan.title,
+      slug: plan.slug,
+      status: plan.status,
+    });
+    const content = `${spokenPlanSummary(plan)}\nอัปเดตแผนเดิม ไม่ได้สร้างแผนใหม่`;
+    return {
+      capabilityId: SOFTWARE_PLAN_BUILD,
+      status: 'ok',
+      structured: { status: 'completed', reasonCode: 'PLAN_MERGED', risk: 'READ_ONLY', summary: content, plan },
+      content,
+      sourceUrls: [],
+      untrustedOutput: false,
+      sideEffect: 'read',
+    };
+  }
   const plan = createBuildPlan({
     brief,
     goalId: typeof input.goalId === 'string' ? input.goalId : undefined,
@@ -155,9 +184,20 @@ async function invokeApply(
   context: CapabilityInvocationContext | undefined,
   deps: SoftwareCapabilityDeps,
 ): Promise<CapabilityResult> {
-  const plan = resolvePlan(input, context, deps);
+  let plan = resolvePlan(input, context, deps);
   if (!plan) {
     return fail(SOFTWARE_APPLY_BUILD, 'rejected', 'PLAN_NOT_FOUND', 'I do not have an approved plan for this session.', 'write');
+  }
+  const brief = typeof input.brief === 'string' ? input.brief.trim() : '';
+  if (brief) {
+    plan = deps.plans.save({
+      ...plan,
+      requirements: [...plan.requirements, brief.slice(0, 200)].slice(0, 24),
+    });
+  }
+  if (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT') {
+    plan = deps.plans.save({ ...plan, status: 'APPROVED' });
+    deps.events?.emit('PLAN_APPROVED', `Plan approved: ${plan.title}`, { planId: plan.id, goalId: plan.goalId });
   }
   if (!WRITABLE.has(plan.status)) {
     return fail(
@@ -178,6 +218,7 @@ async function invokeApply(
     runner: deps.runner ?? (skipLiveCommandsInTests() ? undefined : createProjectCommandRunner()),
     devServers: deps.devServers,
     events: deps.events,
+    mode: workspace.exists(plan.slug) ? 'revise' : 'create',
   });
   deps.plans.save(executed.plan);
   const exists = sandboxExists({ slug: executed.plan.slug }, workspace.sandboxRoot) || workspace.exists(executed.plan.slug);
@@ -225,7 +266,7 @@ function resolvePlan(
     const fromSession = deps.plans.latestForSession(context.sessionId);
     if (fromSession) return fromSession;
   }
-  return deps.plans.list(1)[0] || null;
+  return null;
 }
 
 function fail(

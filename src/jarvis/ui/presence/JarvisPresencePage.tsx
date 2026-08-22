@@ -38,7 +38,6 @@ import {
   derivePresencePhase,
   desktopAuthorityMaturity,
   formatAttentionSpoken,
-  formatTaskStatusSpoken,
   inferDesktopAuthorityClass,
   isCancelLikeUnbound,
   interpretPresenceOwnerReply,
@@ -55,6 +54,25 @@ const PresenceCore = lazy(() => import('./cinematic/PresenceCoreScene'));
 
 type RuntimeStatus = PersonalAiRuntimeStatus;
 type MicState = 'idle' | 'listening' | 'transcribing' | 'permission-denied' | 'unavailable';
+type ConversationStrip = {
+  project?: string;
+  goal?: string;
+  current?: string;
+  recent?: string;
+  next?: string;
+  permission?: string;
+  remembering?: string[];
+  debug?: {
+    intent?: string;
+    referent?: string;
+    goalId?: string;
+    planId?: string;
+    projectId?: string;
+    capabilityId?: string;
+    permissionOutcome?: string;
+  };
+};
+
 type AskResponse = {
   presented: { text: string };
   result: {
@@ -100,6 +118,8 @@ export default function JarvisPresencePage() {
   const [buildSurface, setBuildSurface] = useState<PresenceBuildSurface | null>(null);
   const [historyItems, setHistoryItems] = useState<PresenceHistoryItem[]>([]);
   const [historyQuery, setHistoryQuery] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [conversation, setConversation] = useState<ConversationStrip | null>(null);
   const buildEvents = useRef<Array<{ type: string; summary?: string; payload?: Record<string, unknown> }>>([]);
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<string | null>(null);
@@ -144,6 +164,7 @@ export default function JarvisPresencePage() {
   const visualScene = useMemo(() => parsePresenceVisualScene(window.location.search), []);
   const replayQuery = useMemo(() => parsePresenceReplay(window.location.search), []);
   const debugHud = useMemo(() => visualDebugEnabled(window.location.search), []);
+  const contextDebug = useMemo(() => /(?:^|[?&])contextDebug=1(?:&|$)/.test(window.location.search), []);
   const inspectMode = useMemo(() => inspectDragEnabled(window.location.search), []);
 
   const refreshStatus = useCallback(() => readJson<RuntimeStatus>('/api/jarvis/status').then(setStatus), []);
@@ -160,7 +181,11 @@ export default function JarvisPresencePage() {
     const [ops, history] = await Promise.all([
       readJson<{
         events?: Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>;
-        snapshot?: { pendingPermission?: LabPendingConfirmation | null; preview?: { url?: string } | null };
+        snapshot?: {
+          pendingPermission?: LabPendingConfirmation | null;
+          preview?: { url?: string } | null;
+          conversation?: ConversationStrip | null;
+        };
       }>('/api/jarvis/events').catch(() => ({ events: [] as Array<{ type?: string; summary?: string; payload?: Record<string, unknown> }>, snapshot: undefined })),
       readJson<{ plans?: Array<{ title: string; slug: string; status: string; summary: string; updatedAt: number }> }>('/api/jarvis/history?sessionId=jarvis-lab').catch(() => ({ plans: [] })),
     ]);
@@ -178,6 +203,7 @@ export default function JarvisPresencePage() {
     if (ops.snapshot?.pendingPermission?.proposalId && ops.snapshot.pendingPermission.token) {
       setPendingConfirmation(ops.snapshot.pendingPermission);
     }
+    if (ops.snapshot?.conversation) setConversation(ops.snapshot.conversation);
   }, []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
   const refreshCommandCenter = useCallback(() => readJson<CommandCenterClientSnapshot>('/api/jarvis/command-center').then(setCommandCenter).catch(() => undefined), []);
@@ -517,6 +543,7 @@ export default function JarvisPresencePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: payloadText,
+        sessionId: 'jarvis-lab',
         personaProfileId: JARVIS_PERSONA_ID,
         voiceProfileId: JARVIS_VOICE_ID,
         speak: spoken || speakEnabled,
@@ -534,6 +561,7 @@ export default function JarvisPresencePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: payloadText,
+        sessionId: 'jarvis-lab',
         personaProfileId: JARVIS_PERSONA_ID,
         voiceProfileId: JARVIS_VOICE_ID,
         speak: spoken || speakEnabled,
@@ -623,18 +651,6 @@ export default function JarvisPresencePage() {
       if (!spokenText) setText('');
       return;
     }
-    if (voice.family === 'TASK_STATUS') {
-      speakLocal(formatTaskStatusSpoken(commandCenter?.task ?? null));
-      if (!spokenText) setText('');
-      return;
-    }
-    if (voice.family === 'WORK_CONTINUE') {
-      speakLocal(commandCenter?.task?.active
-        ? 'I’ll continue the current task with the same authority. I will not retry forever.'
-        : 'There is no active task to continue.');
-      if (!spokenText) setText('');
-      return;
-    }
     if (voice.family === 'CANCEL_TASK') {
       await cancelCurrentTask();
       if (!spokenText) setText('');
@@ -668,6 +684,10 @@ export default function JarvisPresencePage() {
       return;
     }
 
+    if (/เปิด history|show history|open history|เปิดประวัติ/iu.test(payloadText)) {
+      setHistoryOpen(true);
+    }
+
     const reply = interpretPresenceOwnerReply(payloadText, approvalTarget);
     if (reply.kind === 'allow' || reply.kind === 'deny') {
       await settleApproval(reply.kind, 'THIS_GOAL', {
@@ -683,9 +703,6 @@ export default function JarvisPresencePage() {
         if (!spokenText) setText('');
         return;
       }
-      speakLocal('Nothing is waiting for approval. Say the request you want instead.');
-      if (!spokenText) setText('');
-      return;
     }
     if (reply.kind === 'ambiguous') {
       speakLocal('More than one permission is waiting. Choose Allow Once on the exact request.');
@@ -982,6 +999,8 @@ export default function JarvisPresencePage() {
       <PresenceHistory
         items={historyItems}
         query={historyQuery}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
         onQuery={setHistoryQuery}
         onReopen={id => {
           const item = historyItems.find(entry => entry.id === id);
@@ -1054,6 +1073,30 @@ export default function JarvisPresencePage() {
       ) : null}
       {!ambientNow ? (
         <div className="jp-dock">
+          {!ambientNow && (conversation?.project || conversation?.goal || conversation?.current) ? (
+            <aside className="jp-context" aria-label="JARVIS context">
+              <span>JARVIS CONTEXT</span>
+              {conversation.project ? <p>Working on <strong>{conversation.project}</strong></p> : null}
+              {conversation.goal ? <p>Goal <strong>{conversation.goal}</strong></p> : null}
+              {conversation.current ? <p>Current <strong>{conversation.current}</strong></p> : null}
+              {conversation.recent ? <p>Recent <strong>{conversation.recent}</strong></p> : null}
+              {conversation.next ? <p>Next <strong>{conversation.next}</strong></p> : null}
+              {conversation.permission ? <p>Permission <strong>{conversation.permission}</strong></p> : null}
+              {conversation.remembering?.length ? <p>Remembering <strong>{conversation.remembering.slice(0, 3).join(' · ')}</strong></p> : null}
+            </aside>
+          ) : null}
+          {contextDebug && conversation?.debug ? (
+            <aside className="jp-context-debug" aria-label="Context debug">
+              <span>{[
+                conversation.debug.intent,
+                conversation.debug.referent,
+                conversation.debug.projectId,
+                conversation.debug.planId,
+                conversation.debug.capabilityId,
+                conversation.debug.permissionOutcome,
+              ].filter(Boolean).join(' · ')}</span>
+            </aside>
+          ) : null}
           {answer || heard ? (
             <p className="jp-caption" data-empty={answer ? 'false' : 'true'}>
               {priorAsk && priorAsk !== heard ? <span className="jp-heard" data-prior="true">{priorAsk}</span> : null}

@@ -422,6 +422,12 @@ test('natural Thai/English build requests plan first and keep the same goal afte
     assert.equal(sandboxExists({ slug: plan.slug }, sandboxRoot), false);
     const softwareOk = validateActionInput(SOFTWARE_PLAN_BUILD, { brief: 'todo' }, emptyAllowlists());
     assert.equal(softwareOk.ok, true);
+    const mergeOk = validateActionInput(SOFTWARE_PLAN_BUILD, {
+      brief: 'futuristic but uncluttered',
+      planId: plan.id,
+      merge: true,
+    }, emptyAllowlists());
+    assert.equal(mergeOk.ok, true);
     const blockedPath = validateActionInput(SOFTWARE_APPLY_BUILD, { path: 'C:\\Windows' }, emptyAllowlists());
     assert.equal(blockedPath.ok, false);
     plans.setStatus(plan.id, 'APPROVED');

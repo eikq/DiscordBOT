@@ -361,13 +361,19 @@ export function validateActionInput(
 
 function validateSoftwareInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {
   const allowed = capabilityId === SOFTWARE_PLAN_BUILD
-    ? ['brief', 'query', 'goalId']
-    : ['brief', 'planId', 'goalId'];
+    ? ['brief', 'query', 'goalId', 'planId', 'merge']
+    : ['brief', 'planId', 'goalId', 'merge'];
   if (!onlyKeys(input, allowed)) {
     return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Those software arguments are not allowed.' };
   }
   const value: Record<string, unknown> = {};
-  for (const key of allowed) {
+  if (input.merge !== undefined) {
+    if (typeof input.merge !== 'boolean') {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'merge must be true or false.' };
+    }
+    value.merge = input.merge;
+  }
+  for (const key of allowed.filter(item => item !== 'merge')) {
     if (input[key] === undefined) continue;
     if (typeof input[key] !== 'string') {
       return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: `${key} must be text.` };

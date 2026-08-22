@@ -11,8 +11,11 @@ import {
 } from '../project/commands';
 import type { ProjectCommandEvidence, ProjectCommandRunner } from '../project/types';
 import type { DevServerRegistry } from '../project/devServer';
-import { ProjectWorkspace, writeTodoWebsite } from '../project/workspace';
+import { ProjectWorkspace } from '../project/workspace';
+import { writeWebsite } from '../project/siteRender';
 import type { PreviewArtifact } from '../project/types';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export type ApprovedBuildRuntime = {
   workspace: ProjectWorkspace;
@@ -20,6 +23,7 @@ export type ApprovedBuildRuntime = {
   devServers?: DevServerRegistry;
   events?: JarvisEventBus;
   now?: () => number;
+  mode?: 'create' | 'revise';
 };
 
 export type ApprovedBuildResult = {
@@ -56,16 +60,21 @@ export async function executeApprovedBuild(
   };
 
   emit('PLAN_STAGE_STARTED', 'scaffolding workspace', { stage: 'SCAFFOLD' }, 'EXECUTING');
-  const files = writeTodoWebsite(plan, deps.workspace);
-  emit('ARTIFACT_CREATED', 'workspace files written', { stage: 'SCAFFOLD', files }, 'EXECUTING');
+  const mode = deps.mode === 'revise' && deps.workspace.exists(plan.slug) ? 'revise' : 'create';
+  const files = writeWebsite(plan, deps.workspace, mode);
+  emit('ARTIFACT_CREATED', 'workspace files written', { stage: 'SCAFFOLD', files, mode }, 'EXECUTING');
 
   const workspace = deps.workspace.rootOf(plan.slug);
   const result: ApprovedBuildResult = { plan, files, workspace };
+  const nodeModules = path.join(workspace, 'node_modules');
+  const skipInstall = mode === 'revise' && fs.existsSync(nodeModules);
 
-  const install = await maybeRun(deps, {
-    kind: 'install',
-    run: () => deps.runner!.run({ kind: commandKindForInstall('install'), workspace }),
-  });
+  const install = skipInstall
+    ? { evidence: undefined, failed: false, summary: 'install reused existing node_modules' }
+    : await maybeRun(deps, {
+      kind: 'install',
+      run: () => deps.runner!.run({ kind: commandKindForInstall('install'), workspace }),
+    });
   result.install = install.evidence;
   emit('ARTIFACT_UPDATED', install.summary, { stage: 'INSTALL', evidence: install.evidence }, 'EXECUTING');
   if (install.failed) {

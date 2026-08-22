@@ -215,12 +215,12 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
   },
   'software.planBuild': {
     shortDescription: 'Create a structured software/website plan without writing files.',
-    argumentSchemaSummary: 'brief',
+    argumentSchemaSummary: 'brief, planId?, merge?',
     sideEffectClass: 'READ_ONLY',
   },
   'software.applyBuild': {
     shortDescription: 'Write an approved plan into the Jarvis sandbox after owner permission.',
-    argumentSchemaSummary: 'planId?, brief?',
+    argumentSchemaSummary: 'planId?, brief?, merge?',
     sideEffectClass: 'CONFIRM_REQUIRED',
   },
   'project.createWorkspace': {

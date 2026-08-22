@@ -4,6 +4,7 @@
  */
 
 import type { LabCorePhase } from '../labUiState';
+import type { VoiceFamily } from '../../intent/voiceFamilies';
 
 export const PRESENCE_PHASES = [
   'IDLE',
@@ -437,6 +438,17 @@ export function resolvePresenceApproval(input: {
     };
   }
   return { kind: 'none' };
+}
+
+export function presenceShouldForwardToJarvis(input: {
+  voiceFamily: VoiceFamily;
+  approval: PresenceOwnerReply;
+}): boolean {
+  if (input.approval.kind === 'allow' || input.approval.kind === 'deny' || input.approval.kind === 'ambiguous') {
+    return false;
+  }
+  if (input.voiceFamily === 'WORK_CONTINUE' || input.voiceFamily === 'TASK_STATUS') return true;
+  return input.approval.kind === 'unbound';
 }
 
 export function interpretPresenceOwnerReply(text: string, target: PresenceApprovalTarget): PresenceOwnerReply {

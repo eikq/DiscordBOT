@@ -26,7 +26,7 @@ export function slugFromBrief(brief: string): string {
 }
 
 export function isPlanApprovalUtterance(text: string): boolean {
-  return /เอาตามแผนนี้|ตามแผนนี้|อนุมัติแผน|เริ่มตามแผน|approve (?:the )?plan|use this plan|go with this plan|looks good,? (?:go|ship)/iu.test(text.trim());
+  return /เอาตาม(?:แผน)?นี้|ตามแผนนี้|อนุมัติแผน|เริ่มตามแผน|approve (?:the )?plan|use this plan|go with this plan|looks good,? (?:go|ship)/iu.test(text.trim());
 }
 
 export function spokenPlanSummary(plan: BuildPlan): string {

@@ -420,7 +420,8 @@ function wantsPrivateBrowse(text: string): boolean {
 }
 
 function wantsResearch(text: string): boolean {
-  return /เช็คราคา|เช็กราคา|ราคาล่าสุด|ลองดูว่า|ช่วยหา|ดูข่าว|หาอะไรเกี่ยวกับ|find out|look into|look up|can you check|prices?|ข่าว|ล่าสุด|ค้น/iu.test(text)
+  if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราคุยอะไร|จำอะไรเกี่ยวกับ/iu.test(text)) return false;
+  return /เช็คราคา|เช็กราคา|ราคาล่าสุด|ลองดูว่า|ช่วยหา|ดูข่าว|หาอะไรเกี่ยวกับ|หาข้อมูล|find out|look into|look up|can you check|prices?|ข่าวล่าสุด|ข้อมูลล่าสุด|ค้นเว็บ|ค้นคว้า/iu.test(text)
     && !isTalkingAboutTopic(text)
     && !matchService(text);
 }

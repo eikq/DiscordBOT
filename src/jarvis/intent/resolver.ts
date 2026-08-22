@@ -7,10 +7,20 @@ import { resolveOwnerGoal } from '../goals';
 import { DESKTOP_PLACE_WINDOW } from '../capabilities/actions/constants';
 import { preferConcreteDisplay, type DisplaySelector } from '../desktop/monitorTopology';
 import type { CompactCapability, IntentResolution, IntentResolveOptions } from './types';
+import { bindDiscourseToIntent, interpretDiscourse, rewriteWrongRoute } from '../conversation';
 
 export async function resolveUserIntent(text: string, options: IntentResolveOptions = {}): Promise<IntentResolution> {
   const catalog = options.catalog ?? compactCapabilityCatalog();
   const actionClass = classifyActionability(text);
+  const conversation = options.conversation;
+
+  if (conversation) {
+    const discourse = interpretDiscourse(text, conversation);
+    const bound = bindDiscourseToIntent(discourse, conversation, text);
+    if (bound && (bound.kind !== 'CONVERSATION' || bound.consumed)) {
+      return finish(bound, catalog, conversation, text);
+    }
+  }
 
   const fast = fastPathResolution(text, {
     catalog,
@@ -23,11 +33,11 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
     const declared = shouldResolveDeclaredGoal(options)
       ? await resolveDeclaredGoalIntent(text, options)
       : undefined;
-    return applyConfidencePolicy(bindFastPathToGoal(fast, declared) ?? fast, catalog);
+    return finish(bindFastPathToGoal(fast, declared) ?? fast, catalog, conversation, text);
   }
 
   if (shouldTreatAsForbiddenRequest(text)) {
-    return applyConfidencePolicy({
+    return finish({
       kind: 'FORBIDDEN',
       confidence: 'HIGH',
       reasonCode: 'FORBIDDEN_REQUEST',
@@ -35,12 +45,12 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
       consumed: true,
       source: 'heuristic',
       actionClass: 'FORBIDDEN',
-    }, catalog);
+    }, catalog, conversation, text);
   }
 
   if (shouldResolveDeclaredGoal(options)) {
     const goalIntent = await resolveDeclaredGoalIntent(text, options);
-    if (goalIntent) return applyConfidencePolicy(goalIntent, catalog);
+    if (goalIntent) return finish(goalIntent, catalog, conversation, text);
   }
 
   const heuristic = heuristicResolve(text, {
@@ -51,7 +61,7 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
     aliases: options.aliases,
     now: options.now,
   });
-  if (heuristic) return applyConfidencePolicy(heuristic, catalog);
+  if (heuristic) return finish(heuristic, catalog, conversation, text);
 
   if (options.semanticResolve && (actionClass === 'ACTIONABLE' || actionClass === 'INFORMATION' || actionClass === 'AMBIGUOUS')) {
     try {
@@ -63,10 +73,10 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
         actionClass,
         consumed: true,
       }, catalog);
-      if (validated.ok === true) return applyConfidencePolicy(validated.value, catalog);
+      if (validated.ok === true) return finish(validated.value, catalog, conversation, text);
       const reasonCode = 'reasonCode' in validated ? validated.reasonCode : 'INVALID_INTENT';
       if (reasonCode === 'UNKNOWN_CAPABILITY') {
-        return applyConfidencePolicy({
+        return finish({
           kind: 'UNSUPPORTED',
           confidence: 'HIGH',
           reasonCode: 'UNKNOWN_CAPABILITY',
@@ -74,10 +84,10 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
           consumed: true,
           source: 'semantic',
           actionClass,
-        }, catalog);
+        }, catalog, conversation, text);
       }
       if (reasonCode === 'FORBIDDEN_ARGUMENT' || reasonCode === 'UNKNOWN_INTENT_FIELD') {
-        return applyConfidencePolicy({
+        return finish({
           kind: 'FORBIDDEN',
           confidence: 'HIGH',
           reasonCode,
@@ -85,9 +95,9 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
           consumed: true,
           source: 'semantic',
           actionClass: 'FORBIDDEN',
-        }, catalog);
+        }, catalog, conversation, text);
       }
-      return applyConfidencePolicy({
+      return finish({
         kind: 'CLARIFICATION',
         confidence: 'LOW',
         reasonCode,
@@ -95,9 +105,9 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
         consumed: true,
         source: 'semantic',
         actionClass: 'AMBIGUOUS',
-      }, catalog);
+      }, catalog, conversation, text);
     } catch {
-      return applyConfidencePolicy({
+      return finish({
         kind: 'CLARIFICATION',
         confidence: 'LOW',
         reasonCode: 'SEMANTIC_UNAVAILABLE',
@@ -105,12 +115,12 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
         consumed: true,
         source: 'semantic',
         actionClass: 'AMBIGUOUS',
-      }, catalog);
+      }, catalog, conversation, text);
     }
   }
 
   if (actionClass === 'AMBIGUOUS' || actionClass === 'ACTIONABLE' || actionClass === 'INFORMATION') {
-    return applyConfidencePolicy({
+    return finish({
       kind: 'CLARIFICATION',
       confidence: 'LOW',
       reasonCode: 'NEEDS_DETAIL',
@@ -118,17 +128,28 @@ export async function resolveUserIntent(text: string, options: IntentResolveOpti
       consumed: true,
       source: 'heuristic',
       actionClass: actionClass === 'INFORMATION' ? 'INFORMATION' : 'AMBIGUOUS',
-    }, catalog);
+    }, catalog, conversation, text);
   }
 
-  return {
+  return finish({
     kind: 'CONVERSATION',
     confidence: 'HIGH',
     reasonCode: 'CONVERSATION',
     consumed: false,
     source: 'heuristic',
     actionClass: 'CONVERSATION',
-  };
+  }, catalog, conversation, text);
+}
+
+function finish(
+  resolution: IntentResolution,
+  catalog: CompactCapability[],
+  conversation: IntentResolveOptions['conversation'],
+  text: string,
+): IntentResolution {
+  const scored = applyConfidencePolicy(resolution, catalog);
+  if (!conversation) return scored;
+  return rewriteWrongRoute(scored, conversation, text);
 }
 
 function bindFastPathToGoal(fast: IntentResolution, declared?: IntentResolution): IntentResolution | undefined {

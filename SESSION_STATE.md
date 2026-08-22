@@ -3,7 +3,31 @@
 Updated: 2026-08-22
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — live software builder acceptance
+## This turn — continuous conversation intelligence
+
+Branch: `local/jarvis-continuous-conversation-intelligence-v1-2026-08-22`
+from source checkpoint `ec5e1592a15983105b0de54e891195b812ab2798`
+(`local/jarvis-persistent-permission-builder-runtime-v1-2026-08-22`).
+Did not modify `main`. Did not merge, rebase, reset, clean, or push.
+No commits this turn (working tree uncommitted).
+
+Conversation working memory is CONTEXT, not authority. Qwen output is
+interpretation only. CLICK / TYPE / SUBMIT remain unavailable.
+
+Live Presence: `http://127.0.0.1:3012/jarvis?contextDebug=1` session
+`jarvis-lab`. Messages were typed into the real composer, not
+`POST /api/jarvis/ask`. llama.cpp stayed on 8086.
+
+LIVE_VERIFIED through about turn 30 of the 214-turn script (Phases 1–3,
+plus resume-work rerun). Turns 31–214 were not completed and are not
+claimed as passed.
+
+Verification: `npx tsc --noEmit` PASS; conversation intelligence **35**
+PASS; builder/memory focused **20** PASS; `npm run test:cloud` **750 / 750**
+PASS; `npm run build` PASS (same Vite/`import.meta` warning). Labels:
+**IMPLEMENTED** + **UNIT_VERIFIED** + partial **LIVE_VERIFIED**.
+
+## Previous — live software builder acceptance
 
 Branch: `local/jarvis-persistent-permission-builder-runtime-v1-2026-08-22`
 started at HEAD `bb8ad56861fac10fddd966568ba5fefe6269f841`. Did not

@@ -61,6 +61,7 @@ import {
 import {
   clarificationActionResult,
   compactCapabilityCatalog,
+  conversationActionResult,
   intentStageOf,
   InteractionContextStore,
   newClarificationId,
@@ -132,6 +133,19 @@ import type { SynthesizedTaskResponse } from '../agent/types';
 import type { AffectStyle } from '../evolution/affect';
 import type { PendingGoalContinuation, PendingGoalRecord } from '../goals';
 import type { WorkTask } from '../agent/types';
+import {
+  applyTurnToConversation,
+  ConversationStateStore,
+  conversationDebugView,
+  conversationView,
+  defaultConversationStatePath,
+  interpretDiscourse,
+  discoursePreemptsPendingGoal,
+  isOperationalNoise,
+  slugFromWorkspacePath,
+  type ConversationState,
+  type DiscourseInterpretation,
+} from '../conversation';
 
 export type JarvisLabAskInput = {
   text: string;
@@ -293,7 +307,14 @@ export class JarvisLabRuntime {
   private readonly modelProfiles: ModelProfileRegistry;
   private readonly modelCertifications: ModelCertificationRegistry;
   private readonly plans?: BuildPlanStore;
+  private readonly conversations: ConversationStateStore;
   private activeJarvisTurnId?: string;
+  private lastConversationBind?: {
+    sessionId: string;
+    text: string;
+    resolution: IntentResolution;
+    discourse: DiscourseInterpretation;
+  };
   private readonly llmGeneratesAnswers: boolean;
 
   constructor(options: JarvisLabRuntimeOptions = {}) {
@@ -314,6 +335,9 @@ export class JarvisLabRuntime {
     const memoryStore = options.memoryStore ?? attached?.store;
     const sqlite = memoryStore instanceof SqliteJarvisMemoryStore ? memoryStore : undefined;
     this.plans = sqlite ? new BuildPlanStore(sqlite.database()) : undefined;
+    this.conversations = new ConversationStateStore(
+      options.attachDefaultCapabilities ? defaultConversationStatePath() : undefined,
+    );
     const capabilities = options.capabilities
       ?? (options.attachDefaultCapabilities ? createStandaloneCapabilityHost({
         reminders: this.reminders,
@@ -489,6 +513,7 @@ export class JarvisLabRuntime {
   }
 
   public permissionSnapshot(sessionId = 'jarvis-lab'): PermissionRuntimeSnapshot {
+    this.hydrateConversation(sessionId);
     const view = isActionHost(this.capabilityHost)
       ? this.capabilityHost.runtimePermissionView?.()
       : undefined;
@@ -496,7 +521,10 @@ export class JarvisLabRuntime {
       || (!view && isActionHost(this.capabilityHost)
         ? this.capabilityHost.hydratePendingConfirmation?.(sessionId)
         : undefined);
-    const plan = this.plans?.latestForSession(sessionId) || this.plans?.list(1)[0] || null;
+    const conversationState = this.conversations.get(sessionId);
+    const plan = (conversationState.activePlanId && this.plans?.get(conversationState.activePlanId))
+      || this.plans?.latestForSession(sessionId)
+      || null;
     const lease = view?.lease
       ?? sharedTrustedOperatorRuntime().leases.listInventory().find(item => item.state === 'ACTIVE')
       ?? null;
@@ -517,7 +545,18 @@ export class JarvisLabRuntime {
             FAILED: 'BUILD',
           } as const)[plan.status] || 'PLAN'
         : null;
-    if (!pending && !plan && !lease && !preview) return emptyPermissionRuntimeSnapshot();
+    const conversation = {
+      ...conversationView(conversationState),
+      debug: conversationDebugView(conversationState, {
+        capabilityId: this.lastConversationBind?.sessionId === sessionId
+          ? this.lastConversationBind.resolution.capabilityId
+          : conversationState.lastJarvisAction,
+        permissionOutcome: pending ? 'WAITING' : lease ? 'LEASE_ACTIVE' : 'NONE',
+      }),
+    };
+    if (!pending && !plan && !lease && !preview && !conversation.project && !conversation.goal) {
+      return { ...emptyPermissionRuntimeSnapshot(), conversation };
+    }
     return {
       pendingPermission: pending || null,
       permissionRecord: view?.record || null,
@@ -533,6 +572,7 @@ export class JarvisLabRuntime {
       } : null,
       stage,
       preview,
+      conversation,
     };
   }
 
@@ -960,9 +1000,10 @@ export class JarvisLabRuntime {
       intentKind: prepared.resolution.kind,
     });
     const desktopDirect = Boolean(prepared.resolution.capabilityId?.startsWith('desktop.'));
+    const conversationBound = prepared.resolution.consumed === true && prepared.resolution.source === 'context';
     return {
       route,
-      useWork: !desktopDirect && ((prepared.resolution.goal?.status === 'RESOLVED'
+      useWork: !conversationBound && !desktopDirect && ((prepared.resolution.goal?.status === 'RESOLVED'
         && prepared.resolution.goal.handler === 'CAPABILITY_PLAN') || shouldUseWorkAgent(route, {
         explicitCalls: Boolean(input.capabilityCalls?.length || input.capabilities?.length),
         intentKind: prepared.resolution.kind,
@@ -1253,6 +1294,9 @@ export class JarvisLabRuntime {
       || (input.capabilityCalls?.[0]?.id ?? '');
     if (!text) throw new Error('Enter text for Jarvis.');
     const sessionId = input.sessionId?.trim() || 'jarvis-lab';
+    this.hydrateConversation(sessionId);
+    const conversation = this.conversations.get(sessionId);
+    const discourse = interpretDiscourse(text, conversation);
     const override = turnOverride(input);
     if (!input.oneTurn && (input.personaProfileId || input.voiceProfileId)) {
       if (input.personaProfileId) this.sessions.selectPersona(sessionId, input.personaProfileId);
@@ -1263,8 +1307,10 @@ export class JarvisLabRuntime {
       ? input.capabilities.filter(id => typeof id === 'string')
       : [];
     const center = this.workCenter();
-    const shouldAttemptContinuation = Boolean(input.continuation?.pendingGoalId)
-      || Boolean(center?.pendingGoals.store.waiting(sessionId).length);
+    const shouldAttemptContinuation = (
+      Boolean(input.continuation?.pendingGoalId)
+      || Boolean(center?.pendingGoals.store.waiting(sessionId).length)
+    ) && !discoursePreemptsPendingGoal(discourse);
     if (center && shouldAttemptContinuation && !input.capabilityCalls?.length && explicitCapabilities.length === 0) {
       const continued = await center.continuePendingGoal({
         sessionId,
@@ -1318,7 +1364,14 @@ export class JarvisLabRuntime {
       explicitCapabilities,
       capabilityCalls: input.capabilityCalls,
       catalog: compactCapabilityCatalog(this.capabilityHost),
-      context: mergeResearchIntoContext(this.intents.get(sessionId), this.research?.snapshot().last, sessionId),
+      context: {
+        ...mergeResearchIntoContext(this.intents.get(sessionId), this.research?.snapshot().last, sessionId),
+        activeGoalId: conversation.activeGoalId,
+        activePlanId: conversation.activePlanId,
+        activeProjectSlug: conversation.activeProjectSlug,
+        activePreviewUrl: conversation.activePreview?.url,
+      },
+      conversation,
       aliases: listOwnerAliases(this.memoryStore),
       semanticResolve: this.llm?.generateText
         ? async (request) => runSemanticResolver(
@@ -1330,6 +1383,12 @@ export class JarvisLabRuntime {
         : undefined,
       capabilityHost: this.capabilityHost,
     });
+    this.lastConversationBind = {
+      sessionId,
+      text,
+      resolution: prepared.resolution,
+      discourse,
+    };
     let pendingGoal: PendingGoalRecord | undefined;
     if (center && prepared.resolution.goal?.status === 'NEEDS_INPUT') {
       const current = center.pendingGoals.store.waiting(sessionId).find(item => (
@@ -1872,7 +1931,9 @@ export class JarvisLabRuntime {
   private persistOwnerTurn(sessionId: string, text: string, inputMode: 'voice' | 'text' | 'ui_action'): void {
     const history = this.historyStore();
     if (!history || !text.trim()) return;
-    const plan = this.plans?.latestForSession(sessionId) || this.plans?.list(1)[0];
+    const conv = this.conversations.get(sessionId);
+    const plan = (conv.activePlanId && this.plans?.get(conv.activePlanId))
+      || this.plans?.latestForSession(sessionId);
     const started = history.startTurn({
       sessionId,
       role: 'OWNER',
@@ -1894,7 +1955,20 @@ export class JarvisLabRuntime {
     this.activeJarvisTurnId = jarvis.id;
   }
 
-  private finalizeVisibleTurn<T extends { presented?: { text?: string }; result?: { memoryRefs?: Array<{ canonicalId?: string }>; actionResults?: Array<{ proposalId?: string }> }; pendingConfirmation?: { proposalId?: string } }>(sessionId: string, output: T): T {
+  private finalizeVisibleTurn<T extends {
+    presented?: { text?: string };
+    result?: {
+      memoryRefs?: Array<{ canonicalId?: string }>;
+      actionResults?: Array<{
+        proposalId?: string;
+        name?: string;
+        status?: string;
+        summary?: string;
+        capabilityId?: string;
+      }>;
+    };
+    pendingConfirmation?: { proposalId?: string };
+  }>(sessionId: string, output: T): T {
     const visible = String(output.presented?.text || '').trim();
     const history = this.historyStore();
     if (history && this.activeJarvisTurnId) {
@@ -1917,6 +1991,7 @@ export class JarvisLabRuntime {
     }
     this.activeJarvisTurnId = undefined;
     this.projectMemoryView(sessionId);
+    this.recordConversationTurn(sessionId, output);
     return output;
   }
 
@@ -1944,21 +2019,35 @@ export class JarvisLabRuntime {
     const memories = this.memoryStore
       ? new JarvisMemoryRetrieval(this.memoryStore).retrieveForTurn({ text: ownerRequest, limit: 8 }).items
       : [];
+    this.hydrateConversation(sessionId);
+    const conversation = this.conversations.get(sessionId);
+    const view = conversationView(conversation);
     const built = buildJarvisContext({
       ownerRequest,
       recentTurns: history?.recentTurns(sessionId, 10),
       sessionSummary: history?.getSession(sessionId)?.summary,
-      activeGoal: history?.getSession(sessionId)?.activeGoalId
-        ? { id: history.getSession(sessionId)!.activeGoalId! }
-        : undefined,
+      activeGoal: conversation.activeGoalId
+        ? { id: conversation.activeGoalId }
+        : history?.getSession(sessionId)?.activeGoalId
+          ? { id: history.getSession(sessionId)!.activeGoalId! }
+          : undefined,
       memories,
-      plan: this.plans?.latestForSession(sessionId) || this.plans?.list(1)[0],
+      plan: (conversation.activePlanId && this.plans?.get(conversation.activePlanId))
+        || this.plans?.latestForSession(sessionId)
+        || null,
       pendingPermission: pending ? permissionProposalFromBuild({
         title: pending.objective.slice(0, 80),
         slug: pending.id.slice(0, 24),
         capabilityId: pending.permissionRequirements[0] || SOFTWARE_APPLY_BUILD,
       }) : null,
       runtime: { model: 'qwen38-cyber' },
+      projectMemory: [
+        view.project ? `Working on ${view.project}` : '',
+        view.current ? `Current: ${view.current}` : '',
+        view.recent ? `Recent: ${view.recent}` : '',
+        ...conversation.constraints.map(item => `Constraint: ${item}`),
+        ...conversation.remembered,
+      ].filter(Boolean),
     });
     return built.promptBlock;
   }
@@ -2001,8 +2090,12 @@ export class JarvisLabRuntime {
 
   private async continueApprovedPlan(input: JarvisLabAskInput, sessionId: string) {
     if (!isPlanApprovalUtterance(String(input.text || '')) || !this.plans || !this.capabilityHost) return undefined;
-    const plan = this.plans.latestForSession(sessionId) || this.plans.list(1)[0];
+    this.hydrateConversation(sessionId);
+    const current = this.conversations.get(sessionId);
+    const plan = (current.activePlanId && this.plans.get(current.activePlanId))
+      || this.plans.latestForSession(sessionId);
     if (!plan) return undefined;
+    if (!['DRAFT', 'READY_FOR_REVIEW', 'APPROVED', 'WAITING_PERMISSION'].includes(plan.status)) return undefined;
     if (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT') {
       this.plans.setStatus(plan.id, 'APPROVED');
       sharedJarvisEventBus().emit('PLAN_APPROVED', `Plan approved: ${plan.title}`, { planId: plan.id, goalId: plan.goalId });
@@ -2013,7 +2106,183 @@ export class JarvisLabRuntime {
       source: input.actionSource === 'voice' ? 'voice' : 'text',
       sessionId,
     });
+    this.lastConversationBind = {
+      sessionId,
+      text: String(input.text || ''),
+      resolution: {
+        kind: 'CAPABILITY',
+        capabilityId: SOFTWARE_APPLY_BUILD,
+        arguments: { planId: plan.id, goalId: plan.goalId },
+        confidence: 'HIGH',
+        reasonCode: 'CONVERSATION_APPROVE_PLAN',
+        consumed: true,
+        source: 'context',
+        actionClass: 'ACTIONABLE',
+      },
+      discourse: interpretDiscourse(String(input.text || ''), this.conversations.get(sessionId)),
+    };
     return this.finishActionTurn(invoked, sessionId, input.speak);
+  }
+
+  private hydrateConversation(sessionId: string): ConversationState {
+    const current = this.conversations.get(sessionId);
+    const sessionPlans = (this.plans?.list(12) || []).filter(item => item.sessionId === sessionId);
+    const latest = (current.activePlanId && this.plans?.get(current.activePlanId))
+      || this.plans?.latestForSession(sessionId)
+      || sessionPlans[0];
+    const preview = sharedTrustedOperatorRuntime().devServers?.list().find(item => (
+      item.status === 'running' || item.status === 'starting' || item.status === 'unknown'
+    ));
+    const pending = isActionHost(this.capabilityHost)
+      ? this.capabilityHost.runtimePermissionView?.()?.pending
+        || this.capabilityHost.hydratePendingConfirmation?.(sessionId)
+      : undefined;
+    const slug = current.activeProjectSlug || latest?.slug || slugFromWorkspacePath(preview?.workspace);
+    const knownSlugs = new Set(current.projects.map(item => item.slug).filter(Boolean));
+    const planProjects = sessionPlans
+      .filter(plan => !knownSlugs.size || knownSlugs.has(plan.slug) || plan.id === latest?.id || plan.slug === slug)
+      .map(plan => ({
+        slug: plan.slug,
+        label: plan.title,
+        kind: plan.projectType === 'WEBSITE' ? 'website' as const : 'software' as const,
+        goalId: plan.goalId,
+        planId: plan.id,
+        workspace: `data/jarvis/builds/${plan.slug}`,
+      }));
+    const matchingPlan = latest && latest.id === (current.activePlanId || latest.id) ? latest : latest;
+    const reviewPlan = matchingPlan && (matchingPlan.status === 'READY_FOR_REVIEW' || matchingPlan.status === 'DRAFT')
+      && (!current.activePlanId || matchingPlan.id === current.activePlanId)
+      ? matchingPlan
+      : undefined;
+    return this.conversations.hydrate({
+      sessionId,
+      projects: planProjects,
+      activeProjectSlug: slug,
+      activePlanId: current.activePlanId || latest?.id,
+      activeGoalId: current.activeGoalId || latest?.goalId,
+      pendingPlanReview: reviewPlan
+        ? { planId: reviewPlan.id, goalId: reviewPlan.goalId, title: reviewPlan.title }
+        : null,
+      pendingPermission: pending?.proposalId
+        ? { proposalId: pending.proposalId, goalId: latest?.goalId, planId: latest?.id }
+        : null,
+      preview: preview
+        ? {
+          url: preview.url,
+          port: preview.port,
+          processRef: preview.processRef,
+          slug: slugFromWorkspacePath(preview.workspace),
+        }
+        : undefined,
+    });
+  }
+
+  private recordConversationTurn(
+    sessionId: string,
+    output: {
+      presented?: { text?: string };
+      result?: { actionResults?: Array<{ name?: string; status?: string; summary?: string; capabilityId?: string }> };
+      pendingConfirmation?: { proposalId?: string };
+    },
+  ): void {
+    const bound = this.lastConversationBind?.sessionId === sessionId ? this.lastConversationBind : undefined;
+    const ownerText = bound?.text || '';
+    if (!ownerText && !output.presented?.text) return;
+    const current = this.conversations.get(sessionId);
+    const discourse = bound?.discourse || interpretDiscourse(ownerText, current);
+    const resolution = bound?.resolution || {
+      kind: 'CONVERSATION' as const,
+      confidence: 'HIGH' as const,
+      reasonCode: 'TURN',
+      consumed: false,
+      source: 'heuristic' as const,
+      actionClass: 'CONVERSATION' as const,
+    };
+    const snapshot = this.permissionSnapshotWithoutHydrate(sessionId);
+    const action = [...(output.result?.actionResults || [])].reverse().find(item => (
+      item.capabilityId && !String(item.capabilityId).startsWith('intent.')
+    ));
+    const kind = operationKindFromCapability(action?.capabilityId);
+    const createdPlan = /CONVERSATION_NEW_PROJECT|CONVERSATION_PLAN|CONVERSATION_PLAN_REQUEST|CONVERSATION_MERGE_PLAN/.test(bound?.resolution.reasonCode || '')
+      || action?.capabilityId === 'software.planBuild';
+    const plan = createdPlan
+      ? (this.plans?.latestForSession(sessionId) || snapshot.plan)
+      : (snapshot.plan || this.plans?.latestForSession(sessionId));
+    this.conversations.patch(sessionId, state => applyTurnToConversation(state, {
+      ownerText,
+      discourse,
+      resolution,
+      replyText: output.presented?.text,
+      preview: snapshot.preview
+        ? {
+          url: snapshot.preview.url,
+          port: snapshot.preview.port,
+          processRef: snapshot.preview.processRef,
+          slug: slugFromWorkspacePath(snapshot.preview.workspace),
+        }
+        : undefined,
+      operation: kind && !isOperationalNoise(action?.summary)
+        ? {
+          kind,
+          capabilityId: action?.capabilityId,
+          slug: plan?.slug,
+          ok: action?.status === 'completed' || action?.status === 'ok',
+          summary: action?.summary || kind,
+          at: Date.now(),
+        }
+        : undefined,
+      pendingPermission: output.pendingConfirmation?.proposalId
+        ? { proposalId: output.pendingConfirmation.proposalId, goalId: plan?.goalId, planId: plan?.id }
+        : snapshot.pendingPermission
+          ? { proposalId: snapshot.pendingPermission.proposalId, goalId: plan?.goalId, planId: plan?.id }
+          : null,
+      pendingPlanReview: plan && (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT')
+        ? { planId: plan.id, goalId: plan.goalId, title: plan.title }
+        : null,
+      project: plan
+        ? {
+          slug: plan.slug,
+          label: plan.title,
+          kind: (this.plans?.get(plan.id)?.projectType === 'WEBSITE' ? 'website' : 'software'),
+          goalId: plan.goalId,
+          planId: plan.id,
+        }
+        : undefined,
+    }));
+  }
+
+  private permissionSnapshotWithoutHydrate(sessionId: string): PermissionRuntimeSnapshot {
+    const view = isActionHost(this.capabilityHost)
+      ? this.capabilityHost.runtimePermissionView?.()
+      : undefined;
+    const pending = view?.pending
+      || (!view && isActionHost(this.capabilityHost)
+        ? this.capabilityHost.hydratePendingConfirmation?.(sessionId)
+        : undefined);
+    const conversationState = this.conversations.get(sessionId);
+    const plan = (conversationState.activePlanId && this.plans?.get(conversationState.activePlanId))
+      || this.plans?.latestForSession(sessionId)
+      || null;
+    const preview = sharedTrustedOperatorRuntime().devServers?.list().find(item => (
+      item.status === 'running' || item.status === 'starting' || item.status === 'unknown'
+    )) || null;
+    return {
+      pendingPermission: pending || null,
+      permissionRecord: view?.record || null,
+      lease: view?.lease || null,
+      plan: plan ? {
+        id: plan.id,
+        goalId: plan.goalId,
+        title: plan.title,
+        slug: plan.slug,
+        status: plan.status,
+        summary: plan.summary,
+        updatedAt: plan.updatedAt,
+      } : null,
+      stage: null,
+      preview,
+      conversation: conversationView(conversationState),
+    };
   }
 }
 
@@ -2079,6 +2348,7 @@ async function resolveLabActionTurn(text: string, input: {
   capabilityCalls?: JarvisLabAskInput['capabilityCalls'];
   catalog: ReturnType<typeof compactCapabilityCatalog>;
   context?: ReturnType<InteractionContextStore['get']>;
+  conversation?: ConversationState;
   aliases?: import('../memory/ownerSemantics').OwnerAliasRecord[];
   semanticResolve?: Parameters<typeof resolveUserIntent>[1] extends infer T
     ? T extends { semanticResolve?: infer S } ? S : undefined
@@ -2141,6 +2411,7 @@ async function resolveLabActionTurn(text: string, input: {
     projectIds: input.projectIds,
     catalog: input.catalog,
     context: input.context,
+    conversation: input.conversation,
     aliases: input.aliases,
     semanticResolve: input.semanticResolve,
     capabilityHost: input.capabilityHost,
@@ -2184,6 +2455,14 @@ async function resolveLabActionTurn(text: string, input: {
       resolution,
     };
   }
+  if (resolution.kind === 'CONVERSATION' && resolution.consumed && (resolution.userMessage || resolution.reasonCode === 'ASK_MEMORY' || resolution.reasonCode === 'REMEMBER_PREFERENCE')) {
+    return {
+      capabilities: [],
+      actionOnly: true,
+      presetActionResults: [conversationActionResult(resolution)],
+      resolution,
+    };
+  }
   if (resolution.kind === 'CAPABILITY' && resolution.capabilityId) {
     return {
       capabilities: [resolution.capabilityId],
@@ -2196,6 +2475,20 @@ async function resolveLabActionTurn(text: string, input: {
     };
   }
   return { capabilities: [], resolution };
+}
+
+function operationKindFromCapability(capabilityId: string | undefined): NonNullable<ConversationState['recentOperation']>['kind'] | undefined {
+  const id = String(capabilityId || '');
+  if (!id) return undefined;
+  if (id.includes('runTests')) return 'test';
+  if (id.includes('project.build') || id.endsWith('.build')) return 'build';
+  if (id.includes('startDevServer')) return 'preview';
+  if (id.includes('stopDevServer')) return 'stop';
+  if (id.includes('install')) return 'install';
+  if (id.includes('applyBuild') || id.includes('writeFile')) return 'write';
+  if (id.includes('planBuild')) return 'plan';
+  if (id.includes('research')) return 'research';
+  return 'inspect';
 }
 
 function tryDefaultMemory(): { service: JarvisMemoryService; store: SqliteJarvisMemoryStore; schemaVersion?: number } | undefined {

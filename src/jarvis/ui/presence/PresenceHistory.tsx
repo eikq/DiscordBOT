@@ -5,9 +5,13 @@ export function PresenceHistory(props: {
   items: PresenceHistoryItem[];
   query: string;
   onQuery: (value: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onReopen?: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = props.open ?? localOpen;
+  const setOpen = props.onOpenChange ?? setLocalOpen;
   const filtered = useMemo(() => {
     const needle = props.query.trim().toLocaleLowerCase();
     if (!needle) return props.items.slice(-8);
@@ -21,7 +25,7 @@ export function PresenceHistory(props: {
 
   return (
     <aside className="jp-history" data-open={open ? 'true' : 'false'}>
-      <button type="button" className="jp-history__toggle" onClick={() => setOpen(value => !value)}>
+      <button type="button" className="jp-history__toggle" onClick={() => setOpen(!open)}>
         History
       </button>
       {open ? (
