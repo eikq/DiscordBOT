@@ -486,7 +486,8 @@ test('Presence plan/history surfaces render operational evidence without fake pr
   ]);
   assert.ok(surface);
   assert.equal(surface?.title, 'Shoe Store');
-  assert.equal(surface?.nodes.find(item => item.id === 'BUILD')?.state, 'active');
+  assert.equal(surface?.nodes.find(item => item.id === 'SCAFFOLD')?.state, 'active');
+  assert.equal(surface?.nodes.find(item => item.id === 'BUILD')?.state, 'pending');
   assert.equal(JSON.stringify(surface).includes('%'), false);
   assert.equal(hidesReasoning('Visible answer'), true);
   assert.equal(hidesReasoning('<think>nope</think>'), false);
