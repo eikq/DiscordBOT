@@ -16,6 +16,7 @@ import {
   optionsFromReply,
   sanitizedRecent,
   compactResearchSpeak,
+  compactOwnerSpeak,
 } from '../src/jarvis/conversation';
 import type { ConversationState } from '../src/jarvis/conversation';
 import { DESKTOP_OPEN_SCOPED_RESOURCE } from '../src/jarvis/capabilities/actions/constants';
@@ -599,11 +600,23 @@ test('conditional chains bind test then build then preview and stop after a fail
   assert.equal(chain?.extraCalls?.[1]?.id, PROJECT_START_DEV_SERVER);
 
   for (const phrase of ['เสร็จแล้ว test build แล้วเปิดให้ดู', 'test then build then preview']) {
-    const bound = bindDiscourseToIntent(interpretDiscourse(phrase, softwareState()), softwareState(), phrase);
-    assert.equal(bound?.capabilityId, PROJECT_RUN_TESTS, phrase);
-    assert.ok((bound?.extraCalls || []).some(item => item.id === PROJECT_BUILD), phrase);
-    assert.ok((bound?.extraCalls || []).some(item => item.id === PROJECT_START_DEV_SERVER), phrase);
+    const stored = bindDiscourseToIntent(interpretDiscourse(phrase, softwareState()), softwareState(), phrase);
+    assert.equal(stored?.reasonCode, 'CONDITIONAL_STORED', phrase);
+    assert.equal(stored?.capabilityId, undefined, phrase);
   }
+  const armed = applyTurnToConversation(softwareState(), {
+    ownerText: 'เสร็จแล้ว test build แล้วเปิดให้ดู',
+    discourse: interpretDiscourse('เสร็จแล้ว test build แล้วเปิดให้ดู', softwareState()),
+    resolution: bindDiscourseToIntent(
+      interpretDiscourse('เสร็จแล้ว test build แล้วเปิดให้ดู', softwareState()),
+      softwareState(),
+      'เสร็จแล้ว test build แล้วเปิดให้ดู',
+    )!,
+  });
+  const start = bindDiscourseToIntent(interpretDiscourse('เริ่มเลย', armed), armed, 'เริ่มเลย');
+  assert.equal(start?.capabilityId, PROJECT_RUN_TESTS);
+  assert.ok((start?.extraCalls || []).some(item => item.id === PROJECT_BUILD));
+  assert.ok((start?.extraCalls || []).some(item => item.id === PROJECT_START_DEV_SERVER));
 });
 
 test('code referents let a later edit target the inspected file', () => {
@@ -975,4 +988,134 @@ test('research recommendations ignore leftover project-inventory options', () =>
   assert.notEqual(picked?.reasonCode, 'RESEARCH_RECOMMEND');
   assert.equal(picked?.capabilityId, RESEARCH_CURRENT);
   assert.ok(String(picked?.arguments?.query || '').length <= 200);
+});
+
+test('queue append and after-build-before-preview reposition the last pending item', () => {
+  let state = softwareState({
+    queue: [
+      { id: 'q1', text: 'ปรับ footer', status: 'pending', act: 'MODIFY_PROJECT' },
+      { id: 'q2', text: 'build', status: 'pending', act: 'BUILD' },
+      { id: 'q3', text: 'เปิด preview', status: 'pending', act: 'PREVIEW' },
+    ],
+  });
+  const appendText = 'เสร็จแล้วเพิ่ม loading animation ต่อท้ายด้วย';
+  const append = interpretDiscourse(appendText, state);
+  assert.equal(append.act, 'QUEUE');
+  assert.equal(append.queueOp?.kind, 'append');
+  state = applyTurnToConversation(state, {
+    ownerText: appendText,
+    discourse: append,
+    resolution: bindDiscourseToIntent(append, state, appendText)!,
+  });
+  assert.ok(state.queue.some(item => /loading animation/i.test(item.text)));
+
+  const moveText = 'แต่ทำหลัง build ก่อน preview';
+  const move = interpretDiscourse(moveText, state);
+  assert.equal(move.queueOp?.kind, 'move');
+  assert.match(String(move.queueOp?.after), /build/i);
+  assert.match(String(move.queueOp?.before), /preview/i);
+  state = applyTurnToConversation(state, {
+    ownerText: moveText,
+    discourse: move,
+    resolution: bindDiscourseToIntent(move, state, moveText)!,
+  });
+  const labels = state.queue.map(item => item.text.toLocaleLowerCase());
+  const loading = labels.findIndex(item => item.includes('loading'));
+  const build = labels.findIndex(item => item === 'build');
+  const preview = labels.findIndex(item => item.includes('preview'));
+  assert.ok(build < loading && loading < preview, labels.join(' | '));
+});
+
+test('deploy vercel is an honest gap and prepare-deploy does not fake a release', () => {
+  const gap = bindDiscourseToIntent(
+    interpretDiscourse('ถ้าผมบอกให้ deploy ขึ้น vercel ตอนนี้ล่ะ', softwareState()),
+    softwareState(),
+    'ถ้าผมบอกให้ deploy ขึ้น vercel ตอนนี้ล่ะ',
+  );
+  assert.equal(gap?.reasonCode, 'DEPLOY_UNSUPPORTED');
+  assert.match(String(gap?.userMessage), /vercel/i);
+  assert.notEqual(gap?.capabilityId, SOFTWARE_APPLY_BUILD);
+
+  const prepare = bindDiscourseToIntent(
+    interpretDiscourse('งั้นเตรียมให้พร้อม deploy ก่อน', softwareState()),
+    softwareState(),
+    'งั้นเตรียมให้พร้อม deploy ก่อน',
+  );
+  assert.equal(prepare?.reasonCode, 'DEPLOY_PREPARE');
+  assert.notEqual(prepare?.capabilityId, SOFTWARE_APPLY_BUILD);
+});
+
+test('missing recent errors are not invented, and cancel clears a pending rewrite', () => {
+  const none = bindDiscourseToIntent(
+    interpretDiscourse('error เมื่อกี้เกิดจากอะไร', softwareState()),
+    softwareState(),
+    'error เมื่อกี้เกิดจากอะไร',
+  );
+  assert.match(String(none?.userMessage), /ยังไม่มี failure/);
+
+  const pending = softwareState({ pendingChange: 'เพิ่ม animation แต่ไม่เอาหน้า contact', lastDiscourse: 'MODIFY_PROJECT' });
+  const cancel = interpretDiscourse('เมื่อกี้ cancel ก่อน', pending);
+  assert.equal(cancel.act, 'CANCEL');
+  const next = applyTurnToConversation(pending, {
+    ownerText: 'เมื่อกี้ cancel ก่อน',
+    discourse: cancel,
+    resolution: bindDiscourseToIntent(cancel, pending, 'เมื่อกี้ cancel ก่อน')!,
+  });
+  assert.equal(next.pendingChange, undefined);
+});
+
+test('change of mind retracts a matching constraint without a phrase dictionary', () => {
+  const state = softwareState({
+    constraints: ['เพิ่ม animation แต่ไม่เอาหน้า contact', 'อย่าแตะ navbar'],
+    pendingChange: 'เพิ่ม animation แต่ไม่เอาหน้า contact',
+  });
+  const discourse = interpretDiscourse('เปลี่ยนใจ เอา animation contact ด้วย', state);
+  assert.equal(discourse.act, 'CORRECT');
+  const next = applyTurnToConversation(state, {
+    ownerText: 'เปลี่ยนใจ เอา animation contact ด้วย',
+    discourse,
+    resolution: bindDiscourseToIntent(discourse, state, 'เปลี่ยนใจ เอา animation contact ด้วย')!,
+  });
+  assert.equal(next.constraints.some(item => /contact/i.test(item)), false);
+  assert.equal(next.constraints.some(item => /navbar/i.test(item)), true);
+});
+
+test('fail-stop annotates a stored chain instead of replacing it', () => {
+  const stored = applyTurnToConversation(softwareState(), {
+    ownerText: 'เสร็จแล้ว test build แล้วเปิดให้ดูด้วย',
+    discourse: interpretDiscourse('เสร็จแล้ว test build แล้วเปิดให้ดูด้วย', softwareState()),
+    resolution: bindDiscourseToIntent(
+      interpretDiscourse('เสร็จแล้ว test build แล้วเปิดให้ดูด้วย', softwareState()),
+      softwareState(),
+      'เสร็จแล้ว test build แล้วเปิดให้ดูด้วย',
+    )!,
+  });
+  const halt = interpretDiscourse('ถ้าพังก็หยุดแล้วบอก', stored);
+  assert.equal(halt.change, 'STOP_ON_FAIL');
+  const next = applyTurnToConversation(stored, {
+    ownerText: 'ถ้าพังก็หยุดแล้วบอก',
+    discourse: halt,
+    resolution: bindDiscourseToIntent(halt, stored, 'ถ้าพังก็หยุดแล้วบอก')!,
+  });
+  assert.equal(next.pendingConditional?.stopOnFail, true);
+  assert.deepEqual(next.pendingConditional?.thenActs, ['TEST', 'BUILD', 'PREVIEW']);
+});
+
+test('code-file inspect plus that-spot edit stays on the inspected file', () => {
+  const opened = bindDiscourseToIntent(
+    interpretDiscourse('เปิดดู App.jsx หน่อย', softwareState({ activeProjectSlug: 'todo-modern', projects: [{ slug: 'todo-modern', label: 'Todo App', kind: 'website' }] })),
+    softwareState({ activeProjectSlug: 'todo-modern', projects: [{ slug: 'todo-modern', label: 'Todo App', kind: 'website' }] }),
+    'เปิดดู App.jsx หน่อย',
+  );
+  assert.equal(opened?.capabilityId, PROJECT_READ_FILE);
+  assert.match(String(opened?.arguments?.relativePath), /App\.jsx/i);
+});
+
+test('short-answer preference compresses successful speak but keeps failure causes', () => {
+  assert.equal(
+    compactOwnerSpeak('ผ่านครับ Test 12/12 รายละเอียดอยู่ใน log ที่ยาวมาก', ['ตอบสั้นกว่านี้ได้ไหม']),
+    'ผ่านครับ',
+  );
+  const failure = compactOwnerSpeak('test ยังไม่ผ่าน เพราะ smoke failed on App.jsx', ['ตอบสั้น']);
+  assert.match(failure, /smoke failed/);
 });

@@ -12,6 +12,7 @@ export const DISCOURSE_ACTS = [
   'MEMORY_STORE',
   'CONTINUE',
   'PAUSE',
+  'CANCEL',
   'EXECUTE_NOW',
   'APPROVE_PLAN',
   'GRANT_PERMISSION',
@@ -133,7 +134,12 @@ export type ConversationState = {
   constraints: string[];
   remembered: string[];
   pendingChange?: string;
-  pendingConditional?: { ifKind: 'test' | 'build'; thenAct: DiscourseAct };
+  pendingConditional?: {
+    ifKind: 'test' | 'build';
+    thenAct: DiscourseAct;
+    thenActs?: DiscourseAct[];
+    stopOnFail?: boolean;
+  };
   queue: QueueItem[];
   queuePaused?: boolean;
   paused?: boolean;
@@ -160,6 +166,7 @@ export type DiscourseInterpretation = {
     b?: number;
     text?: string;
     before?: string;
+    after?: string;
   };
   statusFocus?: StatusFocus;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -181,7 +188,8 @@ export type StatusFocus =
   | 'recovery'
   | 'recent'
   | 'permission'
-  | 'capability';
+  | 'capability'
+  | 'summary';
 
 export type ResolvedReferent = {
   slot: ReferentSlot;

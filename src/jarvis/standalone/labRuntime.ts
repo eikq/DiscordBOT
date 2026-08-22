@@ -144,6 +144,7 @@ import {
   isOperationalNoise,
   slugFromWorkspacePath,
   compactResearchSpeak,
+  compactOwnerSpeak,
   type ConversationState,
   type DiscourseInterpretation,
 } from '../conversation';
@@ -1985,7 +1986,12 @@ export class JarvisLabRuntime {
     pendingConfirmation?: { proposalId?: string };
   }>(sessionId: string, output: T): T {
     const compacted = compactVisibleResearch(output);
-    const visible = String(compacted.presented?.text || '').trim();
+    const conversation = this.conversations.get(sessionId);
+    const spoken = compactOwnerSpeak(String(compacted.presented?.text || ''), conversation.remembered);
+    const visibleOutput = spoken && spoken !== compacted.presented?.text
+      ? { ...compacted, presented: { ...compacted.presented, text: spoken } }
+      : compacted;
+    const visible = String(visibleOutput.presented?.text || '').trim();
     const history = this.historyStore();
     if (history && this.activeJarvisTurnId) {
       if (visible) {
@@ -2007,9 +2013,9 @@ export class JarvisLabRuntime {
     }
     this.activeJarvisTurnId = undefined;
     this.projectMemoryView(sessionId);
-    this.recordConversationTurn(sessionId, compacted);
+    this.recordConversationTurn(sessionId, visibleOutput);
     return {
-      ...compacted,
+      ...visibleOutput,
       conversation: this.permissionSnapshot(sessionId).conversation,
     };
   }

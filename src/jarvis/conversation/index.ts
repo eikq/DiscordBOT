@@ -31,4 +31,5 @@ export {
   isPermissionPrompt,
   sanitizedRecent,
   compactResearchSpeak,
+  compactOwnerSpeak,
 } from './view';

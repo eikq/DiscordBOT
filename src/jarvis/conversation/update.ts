@@ -31,8 +31,15 @@ export function applyTurnToConversation(
     next.paused = true;
     next.queuePaused = true;
   }
+  if (input.discourse.act === 'CANCEL') {
+    next.pendingChange = undefined;
+    next.pendingConditional = undefined;
+    next.selectedOption = undefined;
+    next.paused = false;
+  }
   if (input.discourse.act === 'CORRECT' && input.discourse.change) {
     next.pendingChange = [next.pendingChange, input.discourse.change].filter(Boolean).join('\n').slice(0, 400);
+    next.constraints = next.constraints.filter(item => !constraintRetractedBy(item, input.ownerText));
   }
   if (input.discourse.act === 'RESEARCH') {
     if (next.activeTopic === 'software') {
@@ -119,7 +126,16 @@ export function applyTurnToConversation(
     next.pendingChange = input.discourse.change;
   }
   if (input.discourse.act === 'CONDITIONAL' && input.discourse.ifKind && input.discourse.thenAct) {
-    next.pendingConditional = { ifKind: input.discourse.ifKind, thenAct: input.discourse.thenAct };
+    const stopOnFail = input.discourse.change === 'STOP_ON_FAIL' || input.discourse.thenAct === 'PAUSE';
+    next.pendingConditional = {
+      ifKind: input.discourse.ifKind,
+      thenAct: input.discourse.thenAct === 'PAUSE' ? (next.pendingConditional?.thenAct || 'PREVIEW') : input.discourse.thenAct,
+      thenActs: (input.discourse.thenActs?.filter(item => item !== 'PAUSE').length
+        ? input.discourse.thenActs.filter(item => item !== 'PAUSE')
+        : next.pendingConditional?.thenActs)
+        || [input.discourse.thenAct],
+      stopOnFail: stopOnFail || next.pendingConditional?.stopOnFail,
+    };
   }
   if (input.discourse.queueItems?.length) {
     next.queue = input.discourse.queueItems.map((text, index) => ({
@@ -262,16 +278,37 @@ function applyQueueOp(
     });
     return next;
   }
-  if ((op.kind === 'insert' || op.kind === 'move') && op.text) {
-    if (op.kind === 'move') {
-      const from = findIndex(op.text);
-      if (from >= 0 && next[from]?.status !== 'running') {
-        const [item] = next.splice(from, 1);
-        const before = op.before ? findIndex(op.before) : next.length;
-        if (item) next.splice(before < 0 ? next.length : before, 0, item);
-      }
-      return next;
+  if (op.kind === 'move') {
+    const afterKey = op.after?.trim();
+    const beforeKey = op.before?.trim();
+    if (afterKey && findIndex(afterKey) < 0) {
+      next.push({ id: `q_anchor_${next.length}`, text: afterKey, status: 'pending', act: queueItemAct(afterKey, state) });
     }
+    if (beforeKey && findIndex(beforeKey) < 0) {
+      next.push({ id: `q_anchor_${next.length}`, text: beforeKey, status: 'pending', act: queueItemAct(beforeKey, state) });
+    }
+    let from = op.text ? findIndex(op.text) : -1;
+    if (from < 0) {
+      from = [...next.keys()].reverse().find(index => {
+        const item = next[index]!;
+        if (item.status === 'running') return false;
+        const hay = item.text.toLocaleLowerCase();
+        if (afterKey && hay.includes(afterKey.toLocaleLowerCase())) return false;
+        if (beforeKey && hay.includes(beforeKey.toLocaleLowerCase())) return false;
+        return item.status === 'pending';
+      }) ?? -1;
+    }
+    if (from >= 0) {
+      const [item] = next.splice(from, 1);
+      const after = afterKey ? findIndex(afterKey) : -1;
+      const before = beforeKey ? findIndex(beforeKey) : -1;
+      let dest = before >= 0 ? before : next.length;
+      if (after >= 0) dest = Math.max(dest, after + 1);
+      if (item) next.splice(Math.min(dest, next.length), 0, item);
+    }
+    return next;
+  }
+  if (op.kind === 'insert' && op.text) {
     const before = op.before ? findIndex(op.before) : next.length;
     next.splice(before < 0 ? next.length : before, 0, {
       id: `q_insert_${next.length}`,
@@ -282,4 +319,10 @@ function applyQueueOp(
     return next;
   }
   return next;
+}
+
+function constraintRetractedBy(constraint: string, correction: string): boolean {
+  if (!/เปลี่ยนใจ|actually |เอา.+ด้วย/iu.test(correction)) return false;
+  const tokens = ['contact', 'navbar', 'testimonial', 'สี', 'color'];
+  return tokens.some(token => new RegExp(token, 'iu').test(constraint) && new RegExp(token, 'iu').test(correction));
 }

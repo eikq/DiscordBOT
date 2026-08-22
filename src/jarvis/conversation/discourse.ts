@@ -57,6 +57,19 @@ export function interpretDiscourse(
   }
   if (isModelQuery(raw)) return act('MODEL_QUERY');
   if (isPause(raw) && !isContinue(raw)) return act('PAUSE');
+  if (isCancel(raw)) return act('CANCEL');
+  if (isCapabilityGap(raw)) {
+    return { ...act('STATUS_QUERY'), statusFocus: 'capability', change: 'DEPLOY_GAP' };
+  }
+  if (isPrepareDeploy(raw)) {
+    return { ...act('STATUS_QUERY'), statusFocus: 'capability', change: 'PREPARE_DEPLOY' };
+  }
+  if (isDailySummary(raw)) {
+    return { ...act('STATUS_QUERY'), statusFocus: 'summary', change: raw };
+  }
+  if (isContinueIfPending(raw)) {
+    return hasPendingWork(state) ? act('CONTINUE') : { ...act('STATUS_QUERY'), statusFocus: 'pending' };
+  }
   if (isSwitchTopic(raw)) return act('SWITCH_TOPIC');
   if (isRestoreTopic(raw, state)) return act('RESTORE_TOPIC');
   if (isStartFresh(raw)) return act('START_FRESH');
@@ -73,6 +86,7 @@ export function interpretDiscourse(
     };
   }
   if (isExecuteNow(raw)) {
+    if (state?.pendingConditional?.thenActs?.length) return act('EXECUTE_NOW');
     if (hasActiveQueue(state)) return act('CONTINUE');
     return act(state?.pendingPlanReview ? 'APPROVE_PLAN' : 'EXECUTE_NOW');
   }
@@ -81,7 +95,7 @@ export function interpretDiscourse(
     return act(state?.pendingPlanReview ? 'APPROVE_PLAN' : 'CONTINUE');
   }
 
-  const conditional = parseConditional(raw);
+  const conditional = parseConditional(raw, state);
   if (conditional) return conditional;
   const chain = parseOperationChain(raw);
   if (chain) return chain;
@@ -187,7 +201,7 @@ function isGreeting(text: string): boolean {
 }
 
 function isAck(text: string): boolean {
-  return /^(ok|okay|oke|โอเค|ครับ|ค่ะ|ได้|รับทราบ|thanks|thank you|👍+)$/iu.test(text);
+  return /^(ok|okay|oke|โอเค|ครับ|ค่ะ|ได้|รับทราบ|thanks|thank you|👍+|ที่เหลือทำได้)$/iu.test(text);
 }
 
 function isModelQuery(text: string): boolean {
@@ -197,6 +211,38 @@ function isModelQuery(text: string): boolean {
 function isPause(text: string): boolean {
   return /^(เดี๋ยวก่อน|pause|พัก(?:ไว้)?(?:ก่อน)?|หยุดก่อน)$/iu.test(text)
     || /พักเว็บนี้ไว้ก่อน/iu.test(text);
+}
+
+function isCancel(text: string): boolean {
+  return /cancel|ยกเลิก(?:ก่อน|ได้)?/iu.test(text)
+    && !/ไม่เอาหน้า|ไม่ต้องเปลี่ยน|อย่าแตะ/iu.test(text);
+}
+
+function isCapabilityGap(text: string): boolean {
+  return /deploy.{0,48}vercel|ขึ้น vercel|vercel ตอนนี้/iu.test(text)
+    && !/เตรียม|พร้อม deploy ก่อน|prepare/iu.test(text);
+}
+
+function isPrepareDeploy(text: string): boolean {
+  return /เตรียม.{0,24}deploy|พร้อม deploy|ready (?:to |for )?deploy/iu.test(text);
+}
+
+function isDailySummary(text: string): boolean {
+  return /วันนี้เราทำ|อะไรสำเร็จแล้ว|อะไรยังไม่เสร็จ|มีอะไร fail บ้าง|แล้วแก้ไปยังไง/iu.test(text);
+}
+
+function isContinueIfPending(text: string): boolean {
+  return /ถ้ามี(?:งาน|อะไร)?ทำต่อ|if (?:there(?:'s| is) )?(?:anything|work)? ?left/iu.test(text);
+}
+
+function hasPendingWork(state: ConversationState | null | undefined): boolean {
+  return Boolean(
+    state?.queue.some(item => item.status === 'pending' || item.status === 'running')
+    || state?.pendingChange
+    || state?.pendingConditional
+    || state?.pendingPlanReview
+    || state?.pendingPermission,
+  );
 }
 
 function isContinue(text: string): boolean {
@@ -238,7 +284,7 @@ function isPreview(text: string, state: ConversationState | null | undefined): b
 
 function isTest(text: string): boolean {
   return /^(test|รัน test|run tests?)$/iu.test(text)
-    || /รัน test|run (?:the )?tests?|test ด้วย|test อีก|แล้ว tests?\b|then tests?\b|ดู tests?\b/iu.test(text);
+    || /รัน test|run (?:the )?tests?|test ด้วย|test อีก|แล้ว tests?\b|then tests?\b|ดู tests?\b|test เฉพาะ|related tests?|tests? (?:for )?(?:that|this|it)/iu.test(text);
 }
 
 function isBuild(text: string, state: ConversationState | null | undefined): boolean {
@@ -252,16 +298,17 @@ function isRerun(text: string): boolean {
 }
 
 function isStatus(text: string): boolean {
-  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้/iu.test(text)
+  return /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
     || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
 function classifyStatusFocus(text: string, state: ConversationState | null | undefined): import('./types').StatusFocus {
-  if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
+  if (/เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|จำได้ไหม|what did we (?:just )?do|last (?:thing|task) we/iu.test(text)) return 'recent';
   if (/พร้อมทำงาน|พร้อมไหม|are you ready|ready to work/iu.test(text)) return 'readiness';
   if (/ผ่านไหม|ผ่าน\?/iu.test(text)) return 'verification';
   if (/สมมติ/.test(text) && /ขาว|blank|error|พัง/iu.test(text)) return 'recovery';
-  if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page/iu.test(text)) return 'failure';
+  if (/เราแก้|มีโอกาสเกิดอีก|แก้ไปยังไง/iu.test(text)) return 'recovery';
+  if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก/iu.test(text)) return 'failure';
   if (/มีงานอะไรค้าง|มีอะไรค้าง|what(?:'s| is) left/iu.test(text)) return 'pending';
   if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
   if (/มีกี่ project|project หลัก/iu.test(text)) return 'inventory';
@@ -286,7 +333,7 @@ function isInspect(text: string, state: ConversationState | null | undefined): b
 
 function isMemoryStore(text: string): boolean {
   if (/จำอะไรเกี่ยวกับ/iu.test(text)) return false;
-  return /จำไว้|remember (?:this|that)|เก็บไว้|ตอบสั้น|บอกสั้น|อย่าถามซ้ำ|ถ้า.{0,40}(?:fail|พัง).{0,40}สาเหตุ|ติดตั้ง package.{0,24}ถามก่อน|อย่าเก็บพวก|permission เดิมก็แก้|จำแบบนี้ไว้/iu.test(text);
+  return /จำไว้|remember (?:this|that)|เก็บไว้|ตอบสั้น|บอกสั้น|อย่าถามซ้ำ|ไม่ต้องบอก|technical detail|ถ้า.{0,40}(?:fail|พัง).{0,40}สาเหตุ|เวลา fail|fail.{0,24}สาเหตุ|ติดตั้ง package.{0,24}ถามก่อน|อย่าเก็บพวก|permission เดิมก็แก้|จำแบบนี้ไว้|จำสิ่งสำคัญ/iu.test(text);
 }
 
 function isMemoryQuery(text: string): boolean {
@@ -302,7 +349,7 @@ function isCorrect(text: string): boolean {
 }
 
 function isPlanRequest(text: string): boolean {
-  return /วางแผน|ขอดูแบบสั้น|ลองวางแผน|คิดมาให้หน่อย|ขอดู list|เพิ่มอะไรดี|what should we add|what to add/iu.test(text);
+  return /วางแผน|ขอดูแบบสั้น|ลองวางแผน|คิดมาให้หน่อย|ขอดู list|เพิ่มอะไรดี|what should we add|what to add|บอกแผนสั้น|ก่อนแก้บอกแผน|plan first|short plan/iu.test(text);
 }
 
 function isSwitchTopic(text: string): boolean {
@@ -359,6 +406,7 @@ function isAccumulate(text: string, state: ConversationState | null | undefined)
 }
 
 function isModify(text: string, state: ConversationState | null | undefined): boolean {
+  if (isPlanRequest(text)) return false;
   if (!hasActiveSoftware(state) && !/เว็บนี้|โปรเจกต์นี้|มัน|อันนี้|ตรงนั้น|ตรงนี้/iu.test(text)) return false;
   return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|hover|animation|dark mode|ทำตามนั้น|ให้มันดู|layout|column|ตรงนั้นแหละ|ตรงนี้แหละ|โล่ง|ว่างไป|แน่นขึ้น|navbar|footer|ใช้สีเดิม|สีเดิม|อยู่ก่อน|before /iu.test(text);
 }
@@ -418,7 +466,7 @@ function isSelfGrantQuery(text: string): boolean {
   return /qwen/i.test(text) && /สิทธิ์|grant|เพิ่มสิทธิ์|self-?grant|อนุญาตเอง/iu.test(text);
 }
 
-function parseConditional(text: string): DiscourseInterpretation | null {
+function parseConditional(text: string, state?: ConversationState | null): DiscourseInterpretation | null {
   if (!/ถ้า/.test(text) && !/\bif\b/iu.test(text)) return null;
   const acts = chainActs(text);
   if (acts.length >= 2) return chainInterpretation(text, acts);
@@ -426,6 +474,18 @@ function parseConditional(text: string): DiscourseInterpretation | null {
   const thenBuild = /\bbuild\b/iu.test(text);
   const thenPreview = /preview|เปิดให้ดู|เปิดดู/iu.test(text);
   const thenFix = /แก้|fix|แก้ไข/iu.test(text) && /ปัญหา|error|fail|พัง/iu.test(text);
+  if (ifPass && /ทั้งหมด|all (?:of )?(?:them|it|tests?)/iu.test(text)) {
+    return {
+      act: 'CONDITIONAL',
+      ifKind: 'test',
+      thenAct: 'TEST',
+      thenActs: ['TEST'],
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+      change: text,
+    };
+  }
   if (ifPass && thenBuild && thenPreview) {
     return {
       act: 'CONDITIONAL',
@@ -475,15 +535,16 @@ function parseConditional(text: string): DiscourseInterpretation | null {
     };
   }
   if (/fail|พัง/.test(text) && /หยุด|stop/.test(text)) {
+    const prior = state?.pendingConditional;
     return {
       act: 'CONDITIONAL',
-      ifKind: 'test',
-      thenAct: 'PAUSE',
-      thenActs: ['PAUSE'],
+      ifKind: prior?.ifKind || 'test',
+      thenAct: prior?.thenAct || 'PAUSE',
+      thenActs: prior?.thenActs?.length ? prior.thenActs : ['PAUSE'],
       confidence: 'HIGH',
       requiresClarification: false,
       source: 'discourse',
-      change: text,
+      change: 'STOP_ON_FAIL',
     };
   }
   return null;
@@ -534,7 +595,12 @@ function parseQueueOp(
   text: string,
   state: ConversationState | null | undefined,
 ): DiscourseInterpretation['queueOp'] | null {
-  if (!state?.queue.length) return null;
+  const append = text.match(/(?:เสร็จแล้ว)?เพิ่ม\s+(.+?)\s*ต่อท้าย|append\s+(.+)/iu);
+  if (append) return { kind: 'append', text: (append[1] || append[2] || '').trim() };
+  if (!state?.queue.length) {
+    if (/queue เป็นยังไง|queue เมื่อกี้/iu.test(text)) return { kind: 'review' };
+    return null;
+  }
   if (/ขอดู list|queue เป็นยังไง|ตอนนี้ทำถึงข้อไหน|show (?:the )?(?:queue|list)/iu.test(text)) {
     return { kind: 'review' };
   }
@@ -549,9 +615,13 @@ function parseQueueOp(
   if (skip) return { kind: 'skip', text: (skip[1] || skip[2] || '').trim() };
   const insert = text.match(/เพิ่ม\s+(.+?)\s+ก่อน\s+(.+)/iu);
   if (insert) return { kind: 'insert', text: insert[1]!.trim(), before: insert[2]!.trim() };
-  const append = text.match(/(?:เสร็จแล้ว)?เพิ่ม\s+(.+?)\s*ต่อท้าย|append\s+(.+)/iu);
-  if (append) return { kind: 'append', text: (append[1] || append[2] || '').trim() };
-  const move = text.match(/ทำหลัง\s+(.+?)\s+ก่อน\s+(.+)/iu);
-  if (move) return { kind: 'move', text: move[1]!.trim(), before: move[2]!.trim() };
+  const move = text.match(/ทำหลัง\s+(.+?)\s+ก่อน\s+(.+)|after\s+(.+?)\s+before\s+(.+)/iu);
+  if (move) {
+    return {
+      kind: 'move',
+      after: (move[1] || move[3] || '').trim(),
+      before: (move[2] || move[4] || '').trim(),
+    };
+  }
   return null;
 }

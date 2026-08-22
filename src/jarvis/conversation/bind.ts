@@ -35,6 +35,8 @@ export function bindDiscourseToIntent(
       return talk(discourse.act === 'GREET' ? 'สวัสดีครับ' : 'รับทราบครับ', discourse.act);
     case 'PAUSE':
       return talk('พักไว้ก่อนได้ครับ งานเดิมยังอยู่', 'PAUSE');
+    case 'CANCEL':
+      return talk('ยกเลิกงานค้างล่าสุดแล้วครับ ยังไม่แก้ไฟล์', 'CANCEL_PENDING');
     case 'MODEL_QUERY':
       return capability(JARVIS_RUNTIME_STATUS, {}, 'CONVERSATION_MODEL');
     case 'MEMORY_QUERY':
@@ -167,17 +169,26 @@ function continueWork(
   if (state.pendingPlanReview && discourse.act !== 'MODIFY_PROJECT' && discourse.act !== 'EXECUTE_NOW') {
     return approve(state);
   }
-  const fromRecentEdit = /MODIFY_PROJECT|ACCUMULATE_REQUIREMENTS|NEGATE|CORRECT|SELECT_ORDINAL/.test(state.lastDiscourse || '');
   if (discourse.act === 'EXECUTE_NOW' && state.pendingChange) {
     return applyChange(state, text, discourse);
   }
-  if (discourse.act === 'MODIFY_PROJECT' || discourse.change || (state.pendingChange && fromRecentEdit && discourse.act !== 'CONTINUE')) {
+  if (discourse.act === 'EXECUTE_NOW' && state.pendingConditional?.thenActs?.length) {
+    return bindConditional(state, {
+      act: 'CONDITIONAL',
+      ifKind: state.pendingConditional.ifKind,
+      thenAct: state.pendingConditional.thenAct,
+      thenActs: state.pendingConditional.thenActs,
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+      change: text,
+    });
+  }
+  const fromRecentEdit = /MODIFY_PROJECT|ACCUMULATE_REQUIREMENTS|NEGATE|CORRECT|SELECT_ORDINAL/.test(state.lastDiscourse || '');
+  if (discourse.act === 'MODIFY_PROJECT' || discourse.change) {
     if (!state.activePlanId && !state.activeProjectSlug) {
       return capability(SOFTWARE_PLAN_BUILD, { brief: discourse.change || text }, 'CONVERSATION_MODIFY_NEEDS_PLAN');
     }
-    return applyChange(state, text, discourse);
-  }
-  if (state.pendingChange && fromRecentEdit) {
     return applyChange(state, text, discourse);
   }
   if (state.queue.some(item => item.status === 'pending' || item.status === 'running')) {
@@ -208,8 +219,12 @@ function continueWork(
     if (last?.kind === 'test' && discourse.act !== 'EXECUTE_NOW' && discourse.act !== 'CONTINUE') {
       return projectCall(state, PROJECT_RUN_TESTS, 'CONVERSATION_CONTINUE_TEST');
     }
-    if (last?.kind === 'build') return projectCall(state, PROJECT_BUILD, 'CONVERSATION_CONTINUE_BUILD');
-    if (last?.kind === 'preview') return projectCall(state, PROJECT_START_DEV_SERVER, 'CONVERSATION_CONTINUE_PREVIEW');
+    if (last?.kind === 'build' && discourse.act !== 'EXECUTE_NOW' && discourse.act !== 'CONTINUE') {
+      return projectCall(state, PROJECT_BUILD, 'CONVERSATION_CONTINUE_BUILD');
+    }
+    if (last?.kind === 'preview' && discourse.act !== 'EXECUTE_NOW' && discourse.act !== 'CONTINUE') {
+      return projectCall(state, PROJECT_START_DEV_SERVER, 'CONVERSATION_CONTINUE_PREVIEW');
+    }
     if (discourse.act === 'CONTINUE' || (discourse.act === 'EXECUTE_NOW' && !state.pendingChange)) {
       const preview = state.activePreview?.url ? ` Preview ${state.activePreview.url}` : '';
       const project = state.projects.find(item => item.slug === state.activeProjectSlug)?.label || state.activeProjectSlug;
@@ -257,6 +272,15 @@ function accumulate(state: ConversationState, brief: string): IntentResolution {
 function planRequest(state: ConversationState, text: string): IntentResolution {
   if (/เพิ่มอะไรดี|what should we add|what to add/iu.test(text) && (state.activeProjectSlug || state.activePlanId)) {
     return talk(suggestAdditions(state), 'SUGGEST_ADDITIONS');
+  }
+  if (/ก่อนแก้|บอกแผนสั้น|plan first|short plan/iu.test(text) && (state.activeProjectSlug || state.referents.this_file)) {
+    const target = state.referents.this_file || state.activeProjectSlug || 'โปรเจกต์นี้';
+    const change = state.pendingChange || 'ตามที่ชี้ไว้';
+    const blocked = state.constraints.slice(-3).join(' · ');
+    return talk(
+      `แผนสั้น: แก้ ${target} — ${change}${blocked ? ` ข้อจำกัด: ${blocked}` : ''} ยังไม่เขียนไฟล์จนกว่าจะให้ทำ`,
+      'PLAN_SUMMARY',
+    );
   }
   if (state.pendingPlanReview || state.activePlanId) {
     const title = state.pendingPlanReview?.title || 'แผนปัจจุบัน';
@@ -387,13 +411,19 @@ function selectOrdinal(state: ConversationState, discourse: DiscourseInterpretat
 function bindConditional(state: ConversationState, discourse: DiscourseInterpretation): IntentResolution {
   const last = state.recentVerification;
   const thenActs = nextActsForConditional(discourse);
+  if (discourse.change === 'STOP_ON_FAIL' || thenActs.includes('PAUSE') || discourse.thenAct === 'PAUSE') {
+    return talk('จำไว้ครับ ถ้าขั้นตอนไหน fail จะหยุดแล้วบอกสาเหตุ ไม่ทำขั้นถัดไป', 'CONDITIONAL_STOP_ON_FAIL');
+  }
   if (thenActs.includes('MODIFY_PROJECT')) {
     const problem = (last && last.ok === false) || Boolean(state.lastError);
     if (!problem) return talk('ยังไม่เจอปัญหาที่ต้องแก้ครับ', 'CONDITIONAL_HELD');
     return applyChange(state, discourse.change || '', discourse);
   }
-  if (thenActs.includes('PAUSE') || discourse.thenAct === 'PAUSE') {
-    return talk('จำไว้ครับ ถ้าขั้นตอนไหน fail จะหยุดแล้วบอกสาเหตุ', 'CONDITIONAL_STOP_ON_FAIL');
+  if (shouldStoreChain(discourse.change || '', last, thenActs)) {
+    return talk(
+      `จำลำดับไว้แล้ว: ${thenActs.join(' → ').toLowerCase()} ยังไม่รันจนกว่าจะให้เริ่ม`,
+      'CONDITIONAL_STORED',
+    );
   }
   if (discourse.ifKind === 'test' && last?.kind === 'test' && last.ok === false) {
     return talk('test ยังไม่ผ่าน เลยยังไม่ทำขั้นตอนถัดไปครับ', 'CONDITIONAL_HELD');
@@ -403,7 +433,7 @@ function bindConditional(state: ConversationState, discourse: DiscourseInterpret
   }
   const resolved = uniqueSlugOrClarify(state);
   if ('message' in resolved) return clarify(resolved.message, 'NEED_PROJECT');
-  let acts = nextActsForConditional(discourse);
+  let acts = thenActs;
   if (discourse.ifKind === 'test' && last?.kind === 'test' && last.ok) {
     acts = acts.filter(item => item !== 'TEST');
   }
@@ -426,6 +456,17 @@ function bindConditional(state: ConversationState, discourse: DiscourseInterpret
     actionClass: 'ACTIONABLE',
     contextEvidence: { contextSource: 'working-memory', resolvedReferent: resolved.slug },
   };
+}
+
+function shouldStoreChain(
+  text: string,
+  last: ConversationState['recentVerification'] | undefined,
+  acts: DiscourseAct[],
+): boolean {
+  if (last?.ok === false) return false;
+  if (/ทำเลย|เริ่มเลย|ไปเลย|ต่อเลย|do it|go ahead|execute/iu.test(text)) return false;
+  if (/ถ้า.{0,24}ผ่าน|if .{0,24}pass/iu.test(text)) return false;
+  return acts.length >= 2;
 }
 
 function callForAct(
@@ -592,10 +633,22 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
     return talk('ตอนนี้ยังไม่มี failure ที่บันทึกไว้ครับ', 'STATUS_QUERY');
   }
   if (focus === 'recovery') {
-    return talk(
-      'ถ้าหน้าเว็บขาว ผมจะเช็กว่า preview ยังรัน, ดู test/build error ล่าสุด, อ่านไฟล์หลักในโปรเจกต์นี้ แล้วแก้ใน sandbox นี้ — ไม่เปิดแอปนอกโปรเจกต์',
-      'RECOVERY_PLAN',
-    );
+    if (/สมมติ/.test(text)) {
+      return talk(
+        'ถ้าหน้าเว็บขาว ผมจะเช็กว่า preview ยังรัน, ดู test/build error ล่าสุด, อ่านไฟล์หลักในโปรเจกต์นี้ แล้วแก้ใน sandbox นี้ — ไม่เปิดแอปนอกโปรเจกต์',
+        'RECOVERY_PLAN',
+      );
+    }
+    const cause = state.lastError && !isPermissionPrompt(state.lastError.summary)
+      ? state.lastError.summary
+      : state.recentVerification?.ok === false
+        ? `${state.recentVerification.kind}: ${state.recentVerification.summary || 'ยังไม่ผ่าน'}`
+        : '';
+    if (!cause) return talk('ตอนนี้ยังไม่มี failure ที่บันทึกไว้ครับ จึงยังไม่มีวิธีแก้จาก error จริง', 'STATUS_QUERY');
+    if (/มีโอกาสเกิดอีก/.test(text)) {
+      return talk(`ถ้าไม่กันด้วย test/constraint เดิม อาจเกิดซ้ำได้ครับ สาเหตุล่าสุด: ${cause}`, 'STATUS_QUERY');
+    }
+    return talk(`แก้จากสาเหตุจริง: ${cause}`, 'STATUS_QUERY');
   }
   if (focus === 'preview') {
     if (state.activePreview?.url) {
@@ -646,10 +699,25 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
     );
   }
   if (focus === 'capability') {
+    if (discourse.change === 'DEPLOY_GAP') {
+      return talk(
+        'ตอนนี้ deploy Vercel ยังทำไม่ได้ครับ ไม่มีสิทธิ์ปล่อยขึ้น production — ทำได้แค่ test/build/preview ในเครื่อง',
+        'DEPLOY_UNSUPPORTED',
+      );
+    }
+    if (discourse.change === 'PREPARE_DEPLOY') {
+      return talk(
+        'เตรียมในเครื่องได้ครับ: ตรวจ test, production build, และ preview ท้องถิ่น — ยังไม่มี Vercel token/สิทธิ์ deploy',
+        'DEPLOY_PREPARE',
+      );
+    }
     return talk(
       'ทำได้ในโปรเจกต์ที่เปิดอยู่: แก้ไฟล์ใน sandbox, test, build, preview, แผน, research แบบอ่านอย่างเดียว — ยัง deploy Vercel / คลิกเดสก์ท็อป / shell อิสระไม่ได้',
       'STATUS_QUERY',
     );
+  }
+  if (focus === 'summary') {
+    return talk(dailySummaryLine(state), 'STATUS_QUERY');
   }
   if (focus === 'preference') {
     const remembered = state.remembered.slice(-4);
@@ -703,6 +771,27 @@ function startFreshLine(state: ConversationState): string {
     return `ยังมีงานค้างอยู่: ${bits.join(' · ')} ถ้าจะเริ่มเรื่องใหม่ บอกได้เลยครับว่าอยากทำอะไร`;
   }
   return 'ได้ครับ พร้อมเริ่มงานใหม่ อยากให้ทำอะไร?';
+}
+
+function dailySummaryLine(state: ConversationState): string {
+  const project = state.projects.find(item => item.slug === state.activeProjectSlug);
+  const done = [
+    project ? `โปรเจกต์ ${project.label}` : '',
+    state.recentVerification?.ok === true ? `${state.recentVerification.kind} ผ่าน` : '',
+    state.activePreview?.url ? `preview ${state.activePreview.url}` : '',
+  ].filter(Boolean);
+  const pending = pendingWorkBits(state);
+  const failed = state.lastError && !isPermissionPrompt(state.lastError.summary)
+    ? state.lastError.summary
+    : state.recentVerification?.ok === false
+      ? `${state.recentVerification.kind} ยังไม่ผ่าน`
+      : '';
+  const bits = [
+    done.length ? `สำเร็จ: ${done.join(' · ')}` : 'ยังไม่มีรายการที่ปิดจบวันนี้',
+    pending.length ? `ค้าง: ${pending.join(' · ')}` : 'ไม่มีคิวค้าง',
+    failed ? `fail: ${failed}` : 'ไม่มี failure ที่บันทึก',
+  ];
+  return bits.join(' · ');
 }
 
 function recentWorkLine(state: ConversationState): string {

@@ -41,6 +41,15 @@ export function sanitizedRecent(summary: string | undefined): string {
   return compactRecent(summary);
 }
 
+export function compactOwnerSpeak(text: string, remembered: string[] = []): string {
+  const wantsShort = remembered.some(item => /ตอบสั้น|บอกสั้น|ไม่ต้องบอก technical/iu.test(item));
+  if (!wantsShort) return text;
+  const failure = /fail|ล้มเหลว|error|ยังไม่ผ่าน|ต้องขอสิทธิ์/i.test(text);
+  if (failure) return text.length > 420 ? `${text.slice(0, 400).trim()}…` : text;
+  const first = text.split(/(?<=[。.!?\n]|ครับ)\s+/u).filter(Boolean)[0] || text;
+  return first.length > 220 ? `${first.slice(0, 200).trim()}…` : first.trim();
+}
+
 export function compactResearchSpeak(text: string): string {
   const stripped = text
     .replace(/<untrusted_tool_output>[\s\S]*?<\/untrusted_tool_output>/giu, ' ')
