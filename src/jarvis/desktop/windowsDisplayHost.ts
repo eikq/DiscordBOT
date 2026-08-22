@@ -3,6 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DisplayInfo } from './monitorTopology';
+import {
+  buildPerceptionSnapshot,
+  parseWindowSnapshotList,
+  type DesktopPerceptionProvider,
+  type DesktopPerceptionSnapshot,
+  type WindowSnapshot,
+} from './perception';
 import { classifyWindowOnDisplays, parseWindowRectJson, type WindowRect } from './windowPlacement';
 
 export type DisplayHostRunner = (script: string) => Promise<string>;
@@ -33,16 +40,72 @@ const WIN_TYPEDEF = [
   '}',
 ].join(' ');
 
+const SEE_TYPEDEF = [
+  'using System; using System.Collections.Generic; using System.Diagnostics; using System.Runtime.InteropServices; using System.Text;',
+  'public class JarvisSee {',
+  '  public delegate bool EnumProc(IntPtr hWnd, IntPtr l);',
+  '  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);',
+  '  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);',
+  '  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);',
+  '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);',
+  '  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);',
+  '  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);',
+  '  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();',
+  '  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);',
+  '  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);',
+  '  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);',
+  '  public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }',
+  '  public static string Snapshot() {',
+  '    var fg = GetForegroundWindow();',
+  '    var rows = new List<string>();',
+  '    EnumWindows((h, l) => {',
+  '      if (!IsWindowVisible(h)) return true;',
+  '      var sb = new StringBuilder(512);',
+  '      GetWindowText(h, sb, 512);',
+  '      var title = sb.ToString();',
+  '      if (string.IsNullOrWhiteSpace(title)) return true;',
+  '      RECT r;',
+  '      if (!GetWindowRect(h, out r)) return true;',
+  '      int w = r.Right - r.Left; int ht = r.Bottom - r.Top;',
+  '      if (w < 50 || ht < 50) return true;',
+  '      uint pid; GetWindowThreadProcessId(h, out pid);',
+  '      string name = "";',
+  '      try { name = Process.GetProcessById((int)pid).ProcessName; } catch {}',
+  '      rows.Add("{\\"Handle\\":" + ((long)h) + ",\\"ProcessId\\":" + pid + ",\\"ProcessName\\":" + JsonStr(name) + ",\\"Title\\":" + JsonStr(title) + ",\\"X\\":" + r.Left + ",\\"Y\\":" + r.Top + ",\\"Width\\":" + w + ",\\"Height\\":" + ht + ",\\"Visible\\":true,\\"Minimized\\":" + (IsIconic(h) ? "true" : "false") + ",\\"Maximized\\":" + (IsZoomed(h) ? "true" : "false") + ",\\"Foreground\\":" + (h == fg ? "true" : "false") + "}");',
+  '      return true;',
+  '    }, IntPtr.Zero);',
+  '    return "[" + string.Join(",", rows.ToArray()) + "]";',
+  '  }',
+  '  static string JsonStr(string s) {',
+  '    if (s == null) return "\\"\\"";',
+  '    return "\\"" + s.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"").Replace("\\r", " ").Replace("\\n", " ") + "\\"";',
+  '  }',
+  '}',
+].join('\n');
+
 const WIN_TYPE = `Add-Type -TypeDefinition '${WIN_TYPEDEF}'`;
-const HOST_DIR = path.join(os.tmpdir(), 'jarvis-desktop-host-v2');
+export const DESKTOP_HOST_VERSION = 3;
+const HOST_DIR = path.join(os.tmpdir(), `jarvis-desktop-host-v${DESKTOP_HOST_VERSION}`);
 const HOST_DLL = path.join(HOST_DIR, 'JarvisDesktopHost.dll');
 const HOST_CS = path.join(HOST_DIR, 'JarvisDesktopHost.cs');
 const HOST_SOURCE = [
   'using System;',
+  'using System.Collections.Generic;',
+  'using System.Diagnostics;',
   'using System.Runtime.InteropServices;',
+  'using System.Text;',
   DISP_TYPEDEF.replace('using System; using System.Runtime.InteropServices;', '').trim(),
   WIN_TYPEDEF.replace('using System; using System.Runtime.InteropServices;', '').trim(),
+  SEE_TYPEDEF.replace('using System; using System.Collections.Generic; using System.Diagnostics; using System.Runtime.InteropServices; using System.Text;', '').trim(),
 ].join('\n');
+
+export function desktopHostDllPath(): string {
+  return HOST_DLL;
+}
+
+export function desktopHostUsesCachedAssembly(): boolean {
+  return fs.existsSync(HOST_DLL);
+}
 
 function psQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
@@ -168,7 +231,7 @@ export type PlaceWindowInput = {
 
 export type PlaceWindowResult =
   | { ok: true; verified: boolean; window?: WindowRect }
-  | { ok: false; reasonCode: 'WINDOW_NOT_FOUND' | 'PROCESS_NOT_ALLOWLISTED' | 'PLACE_FAILED' };
+  | { ok: false; reasonCode: 'WINDOW_NOT_FOUND' | 'PROCESS_NOT_ALLOWLISTED' | 'PLACE_FAILED' | 'PLACE_REQUIRES_MANAGED_WINDOW' };
 
 const ALLOWED_PROCESS = /^(Cursor|Code|chrome|msedge|explorer|notepad|Spotify|Discord|ApplicationFrameHost)$/u;
 
@@ -177,14 +240,7 @@ function resolveHwndScript(input: { processName: string; windowHandle?: string }
     return `$hwnd = [IntPtr]${input.windowHandle}`;
   }
   if (input.processName === 'msedge' || input.processName === 'chrome') {
-    return [
-      '$hwnd = [IntPtr]::Zero',
-      'foreach ($n in @(\'chrome\',\'msedge\')) {',
-      '  $p = Get-Process -Name $n -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1',
-      '  if ($p) { $proc = $n; $hwnd = $p.MainWindowHandle; break }',
-      '}',
-      'if ($hwnd -eq [IntPtr]::Zero) { throw "WINDOW_NOT_FOUND" }',
-    ].join('; ');
+    return 'throw "PLACE_REQUIRES_MANAGED_WINDOW"';
   }
   return [
     '$p = Get-Process -Name $proc -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1',
@@ -256,6 +312,7 @@ export async function placeAllowlistedWindow(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     if (detail.includes('WINDOW_NOT_FOUND')) return { ok: false, reasonCode: 'WINDOW_NOT_FOUND' };
+    if (detail.includes('PLACE_REQUIRES_MANAGED_WINDOW')) return { ok: false, reasonCode: 'PLACE_REQUIRES_MANAGED_WINDOW' };
     return { ok: false, reasonCode: 'PLACE_FAILED' };
   }
 }
@@ -265,7 +322,7 @@ export function processNameForApplication(applicationId: string): string | null 
     case 'cursor': return 'Cursor';
     case 'vscode': return 'Code';
     case 'chrome':
-    case 'browser': return 'msedge';
+    case 'browser': return 'chrome';
     case 'msedge': return 'msedge';
     case 'explorer': return 'explorer';
     case 'notepad': return 'notepad';
@@ -284,9 +341,83 @@ export function processNameForUrl(url: string): string | null {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
     if (!parsed.hostname) return null;
-    return 'msedge';
+    return 'chrome';
   } catch {
     return null;
+  }
+}
+
+export function buildDesktopSnapshotScript(): string {
+  return [
+    typeLoadCommand('throw "DESKTOP_HOST_MISSING"'),
+    '[JarvisSee]::Snapshot()',
+  ].join('; ');
+}
+
+export async function enumerateTopLevelWindows(
+  runner: DisplayHostRunner = runPowerShell,
+): Promise<WindowSnapshot[]> {
+  if (runner === runPowerShell) await ensureDesktopHostAssembly(runner);
+  try {
+    return parseWindowSnapshotList(await runner(buildDesktopSnapshotScript()));
+  } catch {
+    return [];
+  }
+}
+
+export function buildFocusWindowScript(windowHandle: string): string | null {
+  if (!/^[0-9]+$/u.test(windowHandle)) return null;
+  return [
+    typeLoadCommand('throw "DESKTOP_HOST_MISSING"'),
+    `$hwnd = [IntPtr]${windowHandle}`,
+    'if ([JarvisSee]::IsIconic($hwnd)) { [void][JarvisSee]::ShowWindow($hwnd, 9) } else { [void][JarvisSee]::ShowWindow($hwnd, 5) }',
+    '[void][JarvisSee]::SetForegroundWindow($hwnd)',
+    'Start-Sleep -Milliseconds 150',
+    '$fg = [JarvisSee]::GetForegroundWindow()',
+    '[pscustomobject]@{ Handle = [int64]$hwnd; Foreground = ([int64]$fg -eq [int64]$hwnd) } | ConvertTo-Json -Compress',
+  ].join('; ');
+}
+
+export type FocusWindowResult =
+  | { ok: true; verified: boolean; windowHandle: string }
+  | { ok: false; reasonCode: 'WINDOW_NOT_FOUND' | 'FOCUS_UNVERIFIED' | 'PROCESS_NOT_ALLOWLISTED' };
+
+export class WindowsDesktopPerception implements DesktopPerceptionProvider {
+  public constructor(private readonly runner: DisplayHostRunner = runPowerShell) {}
+
+  public async snapshot(): Promise<DesktopPerceptionSnapshot> {
+    if (this.runner === runPowerShell) await ensureDesktopHostAssembly(this.runner);
+    const [displays, windows] = await Promise.all([
+      enumerateWindowsDisplays(this.runner),
+      enumerateTopLevelWindows(this.runner),
+    ]);
+    return buildPerceptionSnapshot({
+      displays,
+      windows,
+      cachedHost: desktopHostUsesCachedAssembly() || this.runner !== runPowerShell,
+    });
+  }
+
+  public async getWindow(handle: string): Promise<WindowSnapshot | null> {
+    const snapshot = await this.snapshot();
+    return snapshot.windows.find(item => item.windowHandle === handle) ?? null;
+  }
+}
+
+export async function focusAllowlistedWindow(
+  input: { windowHandle: string },
+  runner: DisplayHostRunner = runPowerShell,
+): Promise<FocusWindowResult> {
+  if (runner === runPowerShell) await ensureDesktopHostAssembly(runner);
+  const script = buildFocusWindowScript(input.windowHandle);
+  if (!script) return { ok: false, reasonCode: 'WINDOW_NOT_FOUND' };
+  try {
+    const raw = await runner(script);
+    const parsed = JSON.parse(raw) as { Handle?: number; Foreground?: boolean };
+    const handle = String(parsed.Handle ?? input.windowHandle);
+    return { ok: true, verified: parsed.Foreground === true, windowHandle: handle };
+  } catch {
+    return { ok: false, reasonCode: 'FOCUS_UNVERIFIED' };
   }
 }
 
