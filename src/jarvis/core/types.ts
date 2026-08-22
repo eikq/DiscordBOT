@@ -74,6 +74,7 @@ export interface ActionResult {
   errorCode?: string;
   startedAt?: string;
   completedAt?: string;
+  structured?: Record<string, unknown>;
 }
 
 export interface CapabilityCall {

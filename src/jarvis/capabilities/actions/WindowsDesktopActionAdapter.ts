@@ -4,17 +4,28 @@ import type { DesktopActionAdapter, ScopedDesktopResult } from './DesktopActionA
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopAllowlists, DesktopLaunchResult } from './types';
 import { classifyOpenUrl } from './urlSafety';
-import { enumerateWindowsDisplays, placeAllowlistedWindow, windowPlacementAgainstDisplay } from '../../desktop/windowsDisplayHost';
+import {
+  enumerateWindowsDisplays,
+  focusAllowlistedWindow,
+  placeAllowlistedWindow,
+  processNameForApplication,
+  WindowsDesktopPerception,
+} from '../../desktop/windowsDisplayHost';
+import { verifyPlacement } from '../../desktop/perception';
 import type { DisplayInfo } from '../../desktop/monitorTopology';
 
+const NEW_WINDOW_ARG = '--new-window';
+
 export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
+  private readonly perception = new WindowsDesktopPerception();
+
   constructor(private readonly lists: DesktopAllowlists) {}
 
   public async openApplication(applicationId: string): Promise<DesktopLaunchResult> {
     const app = applicationById(this.lists, applicationId);
     if (!app) return { status: 'failed', errorCode: 'UNKNOWN_APPLICATION' };
     if (!app.installed || !app.executable) return { status: 'unavailable', errorCode: 'NOT_INSTALLED' };
-    return launchExact(app.executable, app.allowedArgs);
+    return launchExact(app.executable, app.allowedArgs, processNameForApplication(applicationId) || undefined);
   }
 
   public async openApplicationWithProject(applicationId: string, projectId: string): Promise<DesktopLaunchResult> {
@@ -26,7 +37,7 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     if (!app) return { status: 'failed', errorCode: 'UNKNOWN_APPLICATION' };
     if (!app.installed || !app.executable) return { status: 'unavailable', errorCode: 'NOT_INSTALLED' };
     if (!project?.installed || !project.path) return { status: 'unavailable', errorCode: 'PROJECT_UNAVAILABLE' };
-    return launchExact(app.executable, [project.path]);
+    return launchExact(app.executable, [project.path], processNameForApplication(applicationId) || undefined);
   }
 
   public async openProject(projectId: string): Promise<DesktopLaunchResult> {
@@ -35,7 +46,7 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     if (!project.installed || !project.path) return { status: 'unavailable', errorCode: 'PROJECT_UNAVAILABLE' };
     const explorer = this.lists.explorerExecutable;
     if (!explorer) return { status: 'unavailable', errorCode: 'EXPLORER_UNAVAILABLE' };
-    return launchExact(explorer, [project.path]);
+    return launchExact(explorer, [project.path], 'explorer');
   }
 
   public async openSettings(settingsId: string): Promise<DesktopLaunchResult> {
@@ -43,11 +54,15 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     if (!page) return { status: 'failed', errorCode: 'UNKNOWN_SETTINGS' };
     const explorer = this.lists.explorerExecutable;
     if (!explorer) return { status: 'unavailable', errorCode: 'EXPLORER_UNAVAILABLE' };
-    return launchExact(explorer, [page.uri]);
+    return launchExact(explorer, [page.uri], 'explorer');
   }
 
   public async listDisplays(): Promise<DisplayInfo[]> {
     return enumerateWindowsDisplays();
+  }
+
+  public async perceiveDesktop() {
+    return this.perception.snapshot();
   }
 
   public async placeWindow(input: {
@@ -59,21 +74,30 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     width?: number;
     height?: number;
   }): Promise<ScopedDesktopResult> {
-    const hasBounds = [input.x, input.y, input.width, input.height].every(value => Number.isInteger(value));
-    const displays = hasBounds ? [] : await this.listDisplays();
-    const display = hasBounds
-      ? {
-        id: input.displayId,
-        name: input.displayId,
-        primary: false,
-        x: input.x!,
-        y: input.y!,
-        width: input.width!,
-        height: input.height!,
-      }
-      : displays.find(item => item.id === input.displayId);
+    const displays = await this.listDisplays();
+    const display = displays.find(item => item.id === input.displayId) || (
+      [input.x, input.y, input.width, input.height].every(value => Number.isInteger(value))
+        ? {
+          id: input.displayId,
+          name: input.displayId,
+          primary: false,
+          x: input.x!,
+          y: input.y!,
+          width: input.width!,
+          height: input.height!,
+        }
+        : undefined
+    );
     if (!display) {
       return { status: 'unavailable', errorCode: 'DISPLAY_NOT_FOUND', placement: 'unverified', placementReason: 'DISPLAY_NOT_FOUND' };
+    }
+    if ((input.processName === 'chrome' || input.processName === 'msedge') && !input.windowHandle) {
+      return {
+        status: 'unavailable',
+        errorCode: 'PLACE_REQUIRES_MANAGED_WINDOW',
+        placement: 'unverified',
+        placementReason: 'PLACE_REQUIRES_MANAGED_WINDOW',
+      };
     }
     const placed = await placeAllowlistedWindow({
       processName: input.processName,
@@ -91,21 +115,38 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
         placementReason: placed.reasonCode,
       };
     }
-    const verified = windowPlacementAgainstDisplay(placed.window, [display, ...displays], display.id);
+    const observed = placed.window
+      ? { bounds: { x: placed.window.x, y: placed.window.y, width: placed.window.width, height: placed.window.height } }
+      : undefined;
+    const verified = verifyPlacement(observed, display);
     return {
       status: 'started',
-      placement: verified.verifiedOnIntended ? 'placed' : 'unverified',
-      placementReason: verified.verifiedOnIntended ? undefined : 'PLACEMENT_UNVERIFIED',
+      placement: verified.verified ? 'placed' : 'unverified',
+      placementReason: verified.verified ? undefined : 'PLACEMENT_UNVERIFIED',
       displayId: display.id,
+      displayFingerprint: verified.displayFingerprint,
+      windowVerified: Boolean(placed.window),
+      displayVerified: verified.verified,
       ...(placed.window?.handle ? { windowHandle: placed.window.handle } : {}),
     };
   }
 
-  public async focusWindow(input: { processName: string }): Promise<ScopedDesktopResult> {
-    const displays = await this.listDisplays();
-    const primary = displays.find(item => item.primary) || displays[0];
-    if (!primary) return { status: 'unavailable', errorCode: 'DISPLAY_TOPOLOGY_UNKNOWN', placement: 'unverified' };
-    return this.placeWindow({ processName: input.processName, displayId: primary.id });
+  public async focusWindow(input: { processName?: string; windowHandle?: string }): Promise<ScopedDesktopResult> {
+    if (!input.windowHandle) {
+      return { status: 'unavailable', errorCode: 'FOCUS_REQUIRES_MANAGED_WINDOW', placement: 'unverified' };
+    }
+    const focused = await focusAllowlistedWindow({ windowHandle: input.windowHandle });
+    if (focused.ok !== true) {
+      return { status: 'unavailable', errorCode: focused.reasonCode, focusVerified: false };
+    }
+    const observed = await this.perception.getWindow(focused.windowHandle);
+    const focusVerified = focused.verified || observed?.foreground === true;
+    return {
+      status: 'started',
+      windowHandle: focused.windowHandle,
+      focusVerified,
+      ...(focusVerified ? {} : { errorCode: 'FOCUS_UNVERIFIED' }),
+    };
   }
 
   public async openUrl(url: string): Promise<DesktopLaunchResult> {
@@ -113,13 +154,26 @@ export class WindowsDesktopActionAdapter implements DesktopActionAdapter {
     if (!classified.ok || !classified.normalized) {
       return { status: 'failed', errorCode: classified.reasonCode || 'URL_NOT_ALLOWED' };
     }
+    const browser = approvedBrowser(this.lists);
+    if (browser) {
+      const launched = await launchExact(browser.executable, [NEW_WINDOW_ARG, classified.normalized], browser.processName);
+      return { ...launched, dedicatedWindow: launched.status === 'started' };
+    }
     const explorer = this.lists.explorerExecutable;
     if (!explorer) return { status: 'unavailable', errorCode: 'EXPLORER_UNAVAILABLE' };
-    return launchExact(explorer, [classified.normalized]);
+    return launchExact(explorer, [classified.normalized], 'chrome');
   }
 }
 
-function launchExact(executable: string, args: readonly string[]): Promise<DesktopLaunchResult> {
+function approvedBrowser(lists: DesktopAllowlists): { executable: string; processName: string } | null {
+  const chrome = applicationById(lists, 'chrome');
+  if (chrome?.installed && chrome.executable) return { executable: chrome.executable, processName: 'chrome' };
+  const edge = applicationById(lists, 'msedge');
+  if (edge?.installed && edge.executable) return { executable: edge.executable, processName: 'msedge' };
+  return null;
+}
+
+function launchExact(executable: string, args: readonly string[], processName?: string): Promise<DesktopLaunchResult> {
   return new Promise(resolve => {
     let settled = false;
     const finish = (result: DesktopLaunchResult) => {
@@ -148,7 +202,7 @@ function launchExact(executable: string, args: readonly string[]): Promise<Deskt
       child.once('spawn', () => {
         clearTimeout(timer);
         child.unref();
-        finish({ status: 'started' });
+        finish({ status: 'started', processName, dedicatedWindow: args[0] === NEW_WINDOW_ARG });
       });
     } catch (error) {
       finish({

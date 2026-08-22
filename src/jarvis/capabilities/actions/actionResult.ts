@@ -18,6 +18,7 @@ export function capabilityResultToActionResult(result: CapabilityResult): Action
       : (typeof structured.errorCode === 'string' ? structured.errorCode : undefined),
     startedAt: typeof structured.startedAt === 'string' ? structured.startedAt : undefined,
     completedAt: typeof structured.completedAt === 'string' ? structured.completedAt : undefined,
+    structured,
   });
 }
 

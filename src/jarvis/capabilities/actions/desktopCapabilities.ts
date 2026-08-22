@@ -15,10 +15,13 @@ import { readNetworkStatus, type NetworkSnapshot } from './networkStatus';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { DesktopActionAdapter, ScopedDesktopResult } from './DesktopActionAdapter';
 import type { DesktopAllowlists, DesktopLaunchResult } from './types';
-import { processNameForApplication, processNameForUrl } from '../../desktop/windowsDisplayHost';
+import { processNameForApplication, processNameForUrl, processNamesForUrl, WindowsDesktopPerception } from '../../desktop/windowsDisplayHost';
 import { applyOwnerDisplaySelector } from '../../intent/semanticRoute';
 import { resolveDisplaySelector, sanitizeDisplaySelector, type DisplayInfo, type DisplaySelector } from '../../desktop/monitorTopology';
 import type { OwnerAliasRecord } from '../../memory/ownerSemantics';
+import { createManagedWindow, sharedManagedWindows, type ManagedWindowStore } from '../../desktop/managedWindows';
+import { observeAfterOpen } from '../../desktop/openVerify';
+import { verifyPlacement, type DesktopPerceptionProvider } from '../../desktop/perception';
 
 export type SystemStatusSnapshot = {
   cpu?: { usagePct: number; cores: number };
@@ -41,15 +44,21 @@ export function registerDesktopCapabilities(
     allowlists: DesktopAllowlists;
     systemStatus?: SystemStatusPort;
     displayAliases?: () => OwnerAliasRecord[];
+    perception?: DesktopPerceptionProvider;
+    managedWindows?: ManagedWindowStore;
   },
 ): void {
+  const perception = options.perception ?? (options.adapter.perceiveDesktop
+    ? { snapshot: () => options.adapter.perceiveDesktop!(), getWindow: async (handle) => (await options.adapter.perceiveDesktop!()).windows.find(item => item.windowHandle === handle) ?? null }
+    : new WindowsDesktopPerception());
+  const managedWindows = options.managedWindows ?? sharedManagedWindows();
   host.register(createOpenApplicationHandler(options.adapter, options.allowlists));
   host.register(createOpenProjectHandler(options.adapter, options.allowlists));
   host.register(createOpenTrustedUrlHandler(options.adapter));
   host.register(createOpenSettingsHandler(options.adapter, options.allowlists));
-  host.register(createOpenScopedResourceHandler(options.adapter, options.allowlists, options.displayAliases));
-  host.register(createPlaceWindowHandler(options.adapter, options.allowlists, options.displayAliases));
-  host.register(createFocusWindowHandler(options.adapter, options.allowlists));
+  host.register(createOpenScopedResourceHandler(options.adapter, options.allowlists, options.displayAliases, perception, managedWindows));
+  host.register(createPlaceWindowHandler(options.adapter, options.allowlists, options.displayAliases, perception, managedWindows));
+  host.register(createFocusWindowHandler(options.adapter, options.allowlists, managedWindows));
   host.register(createSystemStatusHandler(options.systemStatus));
 }
 
@@ -272,8 +281,10 @@ function createOpenTrustedUrlHandler(adapter: DesktopActionAdapter): CapabilityH
 
 function createOpenScopedResourceHandler(
   adapter: DesktopActionAdapter,
-  lists: DesktopAllowlists,
+  _lists: DesktopAllowlists,
   displayAliases?: () => OwnerAliasRecord[],
+  perception?: DesktopPerceptionProvider,
+  managedWindows?: ManagedWindowStore,
 ): CapabilityHandler {
   return {
     descriptor: () => ({
@@ -303,28 +314,95 @@ function createOpenScopedResourceHandler(
         destructive: false,
         reversible: true,
         privilege: 'standard_user',
-        targetInputFields: ['applicationId', 'url'],
+        targetInputFields: ['applicationId', 'url', 'windowHandle'],
         estimatedAffectedObjects: 1,
       }],
-      verification: { mode: 'handler_result', description: 'Confirm the trusted opener accepted the request and report placement honestly.' },
+      verification: { mode: 'structured_postcondition', description: 'Identify the resulting managed window and verify placement from observed bounds.' },
       rollback: { mode: 'not_required', strategy: 'Opening a resource does not mutate persistent owner state.' },
+      intelligence: {
+        maturity: 'REAL',
+        executionMode: 'REAL',
+        knownLimitations: [
+          'A handler start is not window verification.',
+          'Browser title is not treated as an independently verified URL.',
+          'Ambiguous new windows are reported, not guessed.',
+        ],
+      },
     }),
     availability: async () => ({ id: DESKTOP_OPEN_SCOPED_RESOURCE, availability: 'up', degraded: false }),
     invoke: async (input) => {
       const kind = input.kind === 'url' || input.url ? 'url' : 'application';
       const label = String(input.label || input.applicationId || input.url || 'resource');
+      const url = kind === 'url' ? String(input.url ?? '') : undefined;
+      const applicationId = kind === 'application' ? String(input.applicationId ?? '') : undefined;
+      const processNames = url
+        ? processNamesForUrl(url)
+        : [processNameForApplication(String(applicationId || ''))].filter((item): item is string => Boolean(item));
+      const pre = perception ? await perception.snapshot() : undefined;
       const launched = kind === 'url'
-        ? await adapter.openUrl(String(input.url ?? ''))
+        ? await adapter.openUrl(String(url ?? ''))
         : typeof input.projectId === 'string' && adapter.openApplicationWithProject
-          ? await adapter.openApplicationWithProject(String(input.applicationId ?? ''), String(input.projectId))
-          : await adapter.openApplication(String(input.applicationId ?? ''));
+          ? await adapter.openApplicationWithProject(String(applicationId ?? ''), String(input.projectId))
+          : await adapter.openApplication(String(applicationId ?? ''));
       const base = launchResult(DESKTOP_OPEN_SCOPED_RESOURCE, launched, label, kind);
-      if (launched.status !== 'started' || !input.display) return base;
+      const discovered = launched.status === 'started' && perception && processNames.length
+        ? await observeAfterOpen({
+          perception,
+          pre: pre || await perception.snapshot(),
+          expectedProcessNames: processNames,
+          url,
+          label,
+          applicationId,
+        })
+        : undefined;
+      if (discovered && discovered.ok === false && discovered.reasonCode === 'WINDOW_IDENTITY_AMBIGUOUS') {
+        return {
+          ...base,
+          structured: {
+            ...asRecord(base.structured),
+            placement: 'unverified',
+            reasonCode: 'WINDOW_IDENTITY_AMBIGUOUS',
+            windowVerified: false,
+            dedicatedWindow: false,
+          },
+          content: `${base.content} ${discovered.message}`,
+        };
+      }
+      const windowHandle = discovered && discovered.ok ? discovered.window.windowHandle : undefined;
+      const dedicatedWindow = Boolean(launched.dedicatedWindow && discovered && discovered.ok && discovered.dedicated);
+      let managed = discovered && discovered.ok && managedWindows
+        ? managedWindows.upsert(createManagedWindow({
+          openOperationId: `open_${Date.now()}`,
+          resourceId: label,
+          resourceType: url ? 'website' : applicationId === 'cursor' && input.projectId ? 'project' : 'application',
+          windowHandle: discovered.window.windowHandle,
+          processId: discovered.window.processId,
+          processName: discovered.window.processName,
+          observedTitle: discovered.window.title,
+          expectedUrl: url,
+          applicationId,
+          dedicatedWindow,
+          currentDisplay: discovered.window.displayFingerprint,
+        }))
+        : undefined;
+      if (launched.status !== 'started' || !input.display) {
+        return {
+          ...base,
+          structured: {
+            ...asRecord(base.structured),
+            ...(windowHandle ? { windowHandle } : {}),
+            ...(managed ? { managedWindowId: managed.managedWindowId } : {}),
+            windowVerified: Boolean(windowHandle),
+            resourceUrlVerified: false,
+            dedicatedWindow,
+          },
+        };
+      }
       const displays = adapter.listDisplays ? await adapter.listDisplays() : [];
       if (!displays.length || !adapter.placeWindow) {
         return {
           ...base,
-          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: 'DISPLAY_TOPOLOGY_UNKNOWN' },
+          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: 'DISPLAY_TOPOLOGY_UNKNOWN', windowVerified: Boolean(windowHandle) },
           content: `${base.content} Monitor placement could not be verified.`,
         };
       }
@@ -332,13 +410,11 @@ function createOpenScopedResourceHandler(
       if (resolved.ok === false) {
         return {
           ...base,
-          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: resolved.reasonCode },
+          structured: { ...asRecord(base.structured), placement: 'unverified', reasonCode: resolved.reasonCode, windowVerified: Boolean(windowHandle) },
           content: `${base.content} ${resolved.message}`,
         };
       }
-      const processName = kind === 'url'
-        ? processNameForUrl(String(input.url ?? ''))
-        : processNameForApplication(String(input.applicationId ?? ''));
+      const processName = launched.processName || processNames[0];
       if (!processName) {
         return {
           ...base,
@@ -346,23 +422,42 @@ function createOpenScopedResourceHandler(
           content: `${base.content} I cannot place that window yet.`,
         };
       }
-      const placed = await placeAfterOpen(adapter, processName, resolved.display);
-      const reason = placed.placementReason || placed.errorCode;
+      const placed = await placeAfterOpen(adapter, processName, resolved.display, windowHandle);
+      const observed = perception && placed.windowHandle
+        ? await perception.getWindow(placed.windowHandle)
+        : discovered && discovered.ok ? discovered.window : undefined;
+      const verified = verifyPlacement(observed, resolved.display);
+      if (managed && managedWindows && verified.verified) {
+        managed = managedWindows.upsert({
+          ...managed,
+          currentDisplay: verified.displayFingerprint || managed.currentDisplay,
+          lastVerifiedAt: Date.now(),
+          lastObservedAt: Date.now(),
+        });
+      }
+      const reason = verified.verified ? undefined : (placed.placementReason || placed.errorCode || 'PLACEMENT_UNVERIFIED');
       const thai = /[\u0E00-\u0E7F]/.test(base.content);
       return {
         ...base,
         structured: {
           ...asRecord(base.structured),
-          placement: placed.placement || 'unverified',
+          placement: verified.verified ? 'placed' : (placed.placement || 'unverified'),
           displayId: resolved.display.id,
-          ...(placed.windowHandle ? { windowHandle: placed.windowHandle } : {}),
+          ...(verified.displayFingerprint ? { displayFingerprint: verified.displayFingerprint } : {}),
+          ...(placed.windowHandle || windowHandle ? { windowHandle: placed.windowHandle || windowHandle } : {}),
+          ...(managed ? { managedWindowId: managed.managedWindowId } : {}),
+          windowVerified: Boolean(placed.windowHandle || windowHandle),
+          displayVerified: verified.verified,
+          resourceUrlVerified: false,
+          dedicatedWindow,
+          affectedTargets: [url || `application:${applicationId}`, ...(placed.windowHandle || windowHandle ? [`window:${placed.windowHandle || windowHandle}`] : [])].filter(Boolean),
           ...(reason ? { reasonCode: reason } : {}),
         },
-        content: placed.placement === 'placed'
+        content: verified.verified
           ? (thai ? `เปิด ${label} บนจอที่ขอแล้วครับ` : `${label} is open on the requested display.`)
           : thai
-            ? `${base.content} ยังย้ายหน้าต่างไปจอที่ขอไม่ได้${reason ? ` (${reason})` : ''}`
-            : `${base.content} Placement is ${placed.placement || 'unverified'}${reason ? ` (${reason})` : ''}.`,
+            ? `${base.content} ยังยืนยันตำแหน่งหน้าต่างไม่ได้${reason ? ` (${reason})` : ''}`
+            : `${base.content} Placement is unverified${reason ? ` (${reason})` : ''}.`,
       };
     },
   };
@@ -372,6 +467,8 @@ function createPlaceWindowHandler(
   adapter: DesktopActionAdapter,
   lists: DesktopAllowlists,
   displayAliases?: () => OwnerAliasRecord[],
+  perception?: DesktopPerceptionProvider,
+  managedWindows?: ManagedWindowStore,
 ): CapabilityHandler {
   return {
     descriptor: () => ({
@@ -401,11 +498,19 @@ function createPlaceWindowHandler(
         destructive: false,
         reversible: true,
         privilege: 'standard_user',
-        targetInputFields: ['applicationId', 'url'],
+        targetInputFields: ['applicationId', 'url', 'windowHandle'],
         estimatedAffectedObjects: 1,
       }],
-      verification: { mode: 'handler_result', description: 'Report whether the existing window was found and placed.' },
+      verification: { mode: 'structured_postcondition', description: 'Verify placement from observed window bounds against the target display.' },
       rollback: { mode: 'not_required', strategy: 'The owner can ask to move the same window back.' },
+      intelligence: {
+        maturity: 'REAL',
+        executionMode: 'REAL',
+        knownLimitations: [
+          'PLACE is REAL only after observed overlap or center-inside verification.',
+          'Failed or unverified placement does not update previousDisplay.',
+        ],
+      },
     }),
     availability: async () => ({ id: DESKTOP_PLACE_WINDOW, availability: adapter.placeWindow ? 'up' : 'unavailable', degraded: !adapter.placeWindow }),
     invoke: async (input) => {
@@ -413,9 +518,15 @@ function createPlaceWindowHandler(
       const url = typeof input.url === 'string' ? input.url : '';
       const app = applicationId ? applicationById(lists, applicationId) : undefined;
       const label = String(input.label || app?.displayName || applicationId || url || 'that window');
-      const processName = applicationId
-        ? processNameForApplication(applicationId)
-        : processNameForUrl(url);
+      const managed = managedWindows?.resolveOne({
+        url: url || undefined,
+        applicationId: applicationId || undefined,
+        label,
+        windowHandle: typeof input.windowHandle === 'string' ? input.windowHandle : undefined,
+      });
+      const windowHandle = typeof input.windowHandle === 'string' ? input.windowHandle : managed?.windowHandle;
+      const processName = managed?.processName
+        || (applicationId ? processNameForApplication(applicationId) : processNameForUrl(url));
       if (applicationId && !app) {
         return {
           capabilityId: DESKTOP_PLACE_WINDOW,
@@ -438,6 +549,18 @@ function createPlaceWindowHandler(
           untrustedOutput: false,
           sideEffect: 'write',
           error: 'PROCESS_NOT_ALLOWLISTED',
+        };
+      }
+      if ((processName === 'chrome' || processName === 'msedge') && !windowHandle) {
+        return {
+          capabilityId: DESKTOP_PLACE_WINDOW,
+          status: 'unavailable',
+          structured: { status: 'unavailable', reasonCode: 'PLACE_REQUIRES_MANAGED_WINDOW', risk: 'LOW_RISK_ACTION' },
+          content: `I understand you mean ${label}, but I will not guess among browser windows. I need the Jarvis-managed window first.`,
+          sourceUrls: [],
+          untrustedOutput: false,
+          sideEffect: 'write',
+          error: 'PLACE_REQUIRES_MANAGED_WINDOW',
         };
       }
       if (!adapter.placeWindow || !adapter.listDisplays) {
@@ -473,8 +596,24 @@ function createPlaceWindowHandler(
         y: resolved.display.y,
         width: resolved.display.width,
         height: resolved.display.height,
-        ...(typeof input.windowHandle === 'string' ? { windowHandle: input.windowHandle } : {}),
+        ...(windowHandle ? { windowHandle } : {}),
       });
+      const observedHandle = placed.windowHandle || windowHandle;
+      const observed = perception && observedHandle ? await perception.getWindow(observedHandle) : undefined;
+      const verified = verifyPlacement(observed, resolved.display);
+      if (managed && managedWindows && verified.verified) {
+        const nextCurrent = verified.displayFingerprint || managed.currentDisplay;
+        managedWindows.upsert({
+          ...managed,
+          previousDisplay: managed.currentDisplay && managed.currentDisplay !== nextCurrent
+            ? managed.currentDisplay
+            : managed.previousDisplay,
+          currentDisplay: nextCurrent,
+          lastVerifiedAt: Date.now(),
+          lastObservedAt: Date.now(),
+          windowHandle: observedHandle || managed.windowHandle,
+        });
+      }
       if (placed.status === 'started') {
         return {
           capabilityId: DESKTOP_PLACE_WINDOW,
@@ -482,15 +621,20 @@ function createPlaceWindowHandler(
           structured: {
             status: 'completed',
             risk: 'LOW_RISK_ACTION',
-            placement: placed.placement,
+            placement: verified.verified ? 'placed' : (placed.placement || 'unverified'),
             displayId: resolved.display.id,
-            ...(placed.windowHandle ? { windowHandle: placed.windowHandle } : {}),
+            ...(verified.displayFingerprint ? { displayFingerprint: verified.displayFingerprint } : {}),
+            displayVerified: verified.verified,
+            windowVerified: Boolean(observedHandle),
+            resourceUrlVerified: false,
+            ...(observedHandle ? { windowHandle: observedHandle } : {}),
+            ...(managed ? { managedWindowId: managed.managedWindowId } : {}),
+            affectedTargets: [url || `application:${applicationId}`, ...(observedHandle ? [`window:${observedHandle}`] : [])].filter(Boolean),
+            ...(verified.verified ? {} : { reasonCode: placed.placementReason || 'PLACEMENT_UNVERIFIED' }),
           },
-          content: placed.placement === 'placed'
-            ? url
-              ? `Moved the trusted browser window for ${label}. If that browser has several tabs, I cannot move only that tab.`
-              : `Moved ${label} to the requested display.`
-            : `I found ${label}, but placement is ${placed.placement || 'unverified'}.`,
+          content: verified.verified
+            ? `Moved ${label} to the requested display.`
+            : `I found ${label}, but placement is unverified.`,
           sourceUrls: [],
           untrustedOutput: false,
           sideEffect: 'write',
@@ -525,42 +669,96 @@ function createPlaceWindowHandler(
 function createFocusWindowHandler(
   adapter: DesktopActionAdapter,
   lists: DesktopAllowlists,
+  managedWindows?: ManagedWindowStore,
 ): CapabilityHandler {
   return {
     descriptor: () => ({
       id: DESKTOP_FOCUS_WINDOW,
-      description: 'Focus an allowlisted application window.',
+      description: 'Focus one Jarvis-managed window after identity is known.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
-        required: ['applicationId'],
-        properties: { applicationId: { type: 'string' } },
+        properties: {
+          applicationId: { type: 'string' },
+          url: { type: 'string' },
+          label: { type: 'string' },
+          windowHandle: { type: 'string' },
+          managedWindowId: { type: 'string' },
+        },
       },
       outputSchema: { type: 'object' },
       sideEffect: 'write',
       requiredService: 'desktop',
       providerKind: 'local',
-      timeoutMs: 5_000,
+      timeoutMs: 8_000,
       untrustedOutput: false,
+      effects: [{
+        kind: 'APPLICATION_LAUNCH',
+        description: 'Focus one Jarvis-managed window.',
+        destructive: false,
+        reversible: true,
+        privilege: 'standard_user',
+        targetInputFields: ['windowHandle', 'url', 'applicationId'],
+        estimatedAffectedObjects: 1,
+      }],
+      verification: { mode: 'structured_postcondition', description: 'Read back the foreground window handle.' },
+      intelligence: {
+        maturity: 'REAL',
+        executionMode: 'REAL',
+        knownLimitations: [
+          'FOCUS operates only on a Jarvis-managed window handle.',
+          'Foreground read-back is required before claiming success.',
+        ],
+      },
     }),
     availability: async () => ({ id: DESKTOP_FOCUS_WINDOW, availability: adapter.focusWindow ? 'up' : 'unavailable', degraded: !adapter.focusWindow }),
     invoke: async (input) => {
-      const applicationId = String(input.applicationId ?? '');
-      const app = applicationById(lists, applicationId);
-      if (!app || !adapter.focusWindow) {
+      const applicationId = typeof input.applicationId === 'string' ? input.applicationId : '';
+      const url = typeof input.url === 'string' ? input.url : '';
+      const label = String(input.label || applicationById(lists, applicationId)?.displayName || applicationId || url || 'that window');
+      const managed = managedWindows?.resolveOne({
+        applicationId: applicationId || undefined,
+        url: url || undefined,
+        label,
+        windowHandle: typeof input.windowHandle === 'string' ? input.windowHandle : undefined,
+        managedWindowId: typeof input.managedWindowId === 'string' ? input.managedWindowId : undefined,
+      });
+      const windowHandle = typeof input.windowHandle === 'string' ? input.windowHandle : managed?.windowHandle;
+      if (!windowHandle || !adapter.focusWindow) {
         return {
           capabilityId: DESKTOP_FOCUS_WINDOW,
           status: 'unavailable',
-          structured: { status: 'unavailable', reasonCode: app ? 'FOCUS_UNAVAILABLE' : 'UNKNOWN_APPLICATION', risk: 'LOW_RISK_ACTION' },
-          content: app ? 'Focus is unavailable on this host.' : 'That application is not on the open allowlist.',
+          structured: { status: 'unavailable', reasonCode: 'FOCUS_REQUIRES_MANAGED_WINDOW', risk: 'LOW_RISK_ACTION' },
+          content: `I can focus ${label} only after I have a Jarvis-managed window for it.`,
           sourceUrls: [],
           untrustedOutput: false,
           sideEffect: 'write',
-          error: app ? 'FOCUS_UNAVAILABLE' : 'UNKNOWN_APPLICATION',
+          error: 'FOCUS_REQUIRES_MANAGED_WINDOW',
         };
       }
-      const focused = await adapter.focusWindow({ processName: applicationId });
-      return launchResult(DESKTOP_FOCUS_WINDOW, focused, app.displayName, `focus:${applicationId}`);
+      const focused = await adapter.focusWindow({ windowHandle, processName: managed?.processName });
+      const verified = focused.focusVerified === true;
+      return {
+        capabilityId: DESKTOP_FOCUS_WINDOW,
+        status: focused.status === 'started' ? 'ok' : 'unavailable',
+        structured: {
+          status: focused.status === 'started' ? 'completed' : 'unavailable',
+          reasonCode: verified ? undefined : (focused.errorCode || 'FOCUS_UNVERIFIED'),
+          risk: 'LOW_RISK_ACTION',
+          windowHandle,
+          managedWindowId: managed?.managedWindowId,
+          windowVerified: true,
+          focusVerified: verified,
+          affectedTargets: [`window:${windowHandle}`],
+        },
+        content: verified
+          ? `Brought ${label} to the front.`
+          : `I tried to focus ${label}, but could not verify the foreground window.`,
+        sourceUrls: [],
+        untrustedOutput: false,
+        sideEffect: 'write',
+        ...(verified ? {} : { error: focused.errorCode || 'FOCUS_UNVERIFIED' }),
+      };
     },
   };
 }

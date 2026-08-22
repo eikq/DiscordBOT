@@ -1045,7 +1045,7 @@ function describeProposal(
     return { displayName: name, summary: `Move ${name}`, target: name, risk: 'LOW_RISK_ACTION' };
   }
   if (capabilityId === 'desktop.focusWindow') {
-    const name = String(input.applicationId || 'window');
+    const name = String(input.label || input.applicationId || input.url || 'window');
     return { displayName: name, summary: `Focus ${name}`, target: name, risk: 'LOW_RISK_ACTION' };
   }
   if (capabilityId === 'desktop.openSettings') {

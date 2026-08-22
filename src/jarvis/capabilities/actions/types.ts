@@ -63,6 +63,8 @@ export type DesktopLaunchResult = {
   status: DesktopLaunchStatus;
   errorCode?: string;
   message?: string;
+  processName?: string;
+  dedicatedWindow?: boolean;
 };
 
 export type ApplicationRecord = {

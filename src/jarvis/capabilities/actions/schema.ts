@@ -260,15 +260,21 @@ export function validateActionInput(
   }
 
   if (capabilityId === DESKTOP_FOCUS_WINDOW) {
-    if (!onlyKeys(input, ['applicationId', 'display'])) {
-      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only applicationId and display are allowed.' };
+    if (!onlyKeys(input, ['applicationId', 'url', 'label', 'windowHandle', 'managedWindowId', 'display'])) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Only applicationId, url, label, windowHandle, and managedWindowId are allowed.' };
     }
-    if (typeof input.applicationId !== 'string' || !SAFE_ID_PATTERN.test(input.applicationId)) {
-      return { ok: false, reasonCode: 'INVALID_APPLICATION_ID', userMessage: 'Unknown or invalid application.' };
+    const value: Record<string, unknown> = {};
+    if (typeof input.applicationId === 'string' && SAFE_ID_PATTERN.test(input.applicationId)) value.applicationId = input.applicationId;
+    if (typeof input.url === 'string') {
+      const classified = classifyOpenUrl(input.url, lists);
+      if (classified.ok) value.url = classified.normalized;
     }
-    const value: Record<string, unknown> = { applicationId: input.applicationId };
-    const display = sanitizeDisplaySelector(input.display);
-    if (display) value.display = display;
+    if (typeof input.label === 'string') value.label = input.label.slice(0, 80);
+    if (typeof input.windowHandle === 'string' && /^[0-9]{1,20}$/u.test(input.windowHandle)) value.windowHandle = input.windowHandle;
+    if (typeof input.managedWindowId === 'string' && /^[a-z0-9_-]{4,80}$/iu.test(input.managedWindowId)) value.managedWindowId = input.managedWindowId;
+    if (!value.windowHandle && !value.managedWindowId && !value.applicationId && !value.url) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Focus needs a managed window or a known resource.' };
+    }
     return { ok: true, value };
   }
 

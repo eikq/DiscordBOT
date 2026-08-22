@@ -5,7 +5,14 @@ export type ScopedDesktopResult = DesktopLaunchResult & {
   placement?: 'placed' | 'skipped' | 'unverified' | 'failed';
   placementReason?: string;
   displayId?: string;
+  displayFingerprint?: string;
   windowHandle?: string;
+  managedWindowId?: string;
+  windowVerified?: boolean;
+  displayVerified?: boolean;
+  resourceUrlVerified?: boolean;
+  focusVerified?: boolean;
+  dedicatedWindow?: boolean;
 };
 
 export interface DesktopActionAdapter {
@@ -23,6 +30,7 @@ export interface DesktopActionAdapter {
     width?: number;
     height?: number;
   }): Promise<ScopedDesktopResult>;
-  focusWindow?(input: { processName: string }): Promise<ScopedDesktopResult>;
+  focusWindow?(input: { processName?: string; windowHandle?: string }): Promise<ScopedDesktopResult>;
   openApplicationWithProject?(applicationId: string, projectId: string): Promise<DesktopLaunchResult>;
+  perceiveDesktop?(): Promise<import('../../desktop/perception').DesktopPerceptionSnapshot>;
 }

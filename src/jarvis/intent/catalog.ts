@@ -34,8 +34,8 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     sideEffectClass: 'LOW_RISK_ACTION',
   },
   'desktop.focusWindow': {
-    shortDescription: 'Focus an allowlisted application window.',
-    argumentSchemaSummary: 'applicationId',
+    shortDescription: 'Focus one Jarvis-managed window.',
+    argumentSchemaSummary: 'windowHandle|url|applicationId',
     sideEffectClass: 'LOW_RISK_ACTION',
   },
   'system.status': {

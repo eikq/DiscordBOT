@@ -78,6 +78,11 @@ export function createStandaloneCapabilityHost(
       systemStatus: options.actions?.systemStatus ?? { snapshot: systemHealthSnapshot },
       displayAliases: options.actions?.displayAliases,
     });
+    if (adapter instanceof WindowsDesktopActionAdapter) {
+      void import('../desktop/windowsDisplayHost').then(mod => {
+        void mod.ensureDesktopHostAssembly();
+      });
+    }
     try {
       registerRuntimeCapabilities(registry, {
         allowlists,
