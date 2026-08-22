@@ -16,7 +16,7 @@ import { DESKTOP_OPEN_SCOPED_RESOURCE, JARVIS_RUNTIME_STATUS } from '../capabili
 import { RESEARCH_CURRENT } from '../research/constants';
 import type { IntentResolution } from '../intent/types';
 import type { ConversationState, DiscourseAct, DiscourseInterpretation, OfferedOption } from './types';
-import { uniqueSlugOrClarify, restoreProject } from './referents';
+import { uniqueSlugOrClarify, restoreProject, projectForOwnerText } from './referents';
 import { interpretDiscourse } from './discourse';
 import { sanitizedRecent, isPermissionPrompt, extractComparisonOptions, pickRecommendedOption } from './view';
 
@@ -31,8 +31,12 @@ export function bindDiscourseToIntent(
 
   switch (discourse.act) {
     case 'GREET':
+      return talk('สวัสดีครับ', discourse.act);
     case 'ACKNOWLEDGE':
-      return talk(discourse.act === 'GREET' ? 'สวัสดีครับ' : 'รับทราบครับ', discourse.act);
+      if (discourse.change === 'HOLD_MUTATION') {
+        return talk('รับทราบครับ ยังไม่แก้เว็บตามที่เลือกไว้', 'HOLD_MUTATION');
+      }
+      return talk('รับทราบครับ', discourse.act);
     case 'PAUSE':
       return talk('พักไว้ก่อนได้ครับ งานเดิมยังอยู่', 'PAUSE');
     case 'CANCEL':
@@ -75,15 +79,15 @@ export function bindDiscourseToIntent(
     case 'ACCUMULATE_REQUIREMENTS':
       return accumulate(state, discourse.change || text);
     case 'PREVIEW':
-      return projectCall(state, PROJECT_START_DEV_SERVER, 'CONVERSATION_PREVIEW');
+      return projectCall(state, PROJECT_START_DEV_SERVER, 'CONVERSATION_PREVIEW', text);
     case 'STOP_PREVIEW':
-      return projectCall(state, PROJECT_STOP_DEV_SERVER, 'CONVERSATION_STOP_PREVIEW');
+      return projectCall(state, PROJECT_STOP_DEV_SERVER, 'CONVERSATION_STOP_PREVIEW', text);
     case 'RESTART_PREVIEW':
       return restartPreview(state);
     case 'TEST':
-      return projectCall(state, PROJECT_RUN_TESTS, 'CONVERSATION_TEST');
+      return projectCall(state, PROJECT_RUN_TESTS, 'CONVERSATION_TEST', text);
     case 'BUILD':
-      return projectCall(state, PROJECT_BUILD, 'CONVERSATION_BUILD');
+      return projectCall(state, PROJECT_BUILD, 'CONVERSATION_BUILD', text);
     case 'RERUN':
       return rerun(state);
     case 'INSPECT_PROJECT':
@@ -114,6 +118,16 @@ export function rewriteWrongRoute(
   text: string,
 ): IntentResolution {
   const id = resolution.capabilityId || '';
+  if (id === DESKTOP_OPEN_SCOPED_RESOURCE && looksLikeMemoryRecall(text)) {
+    const recalled = bindDiscourseToIntent({
+      act: 'MEMORY_QUERY',
+      change: text,
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+    }, state, text);
+    if (recalled) return recalled;
+  }
   if (id === DESKTOP_OPEN_SCOPED_RESOURCE && looksLikeProjectFollowUp(text, state)) {
     const preview = bindDiscourseToIntent({
       act: /preview|เปิดให้ดู|เปิดดู/iu.test(text) ? 'PREVIEW' : 'MODIFY_PROJECT',
@@ -148,8 +162,13 @@ export function rewriteWrongRoute(
 
 export function looksLikeProjectFollowUp(text: string, state: ConversationState): boolean {
   if (!state.activeProjectSlug && !state.activePlanId && !state.pendingPlanReview) return false;
+  if (looksLikeMemoryRecall(text)) return false;
   return /เปิดให้ดู|เปิดดู|preview|เพิ่มปุ่ม|dark mode|animation|navbar|hover|เว็บนี้|โปรเจกต์นี้|\b(it|this|that)\b|มัน|อันนี้|รันใหม่|build ใหม่|\badd\b|\bchange\b|\bmake\b|ขาวหมด|blank|console|สมมติ/iu.test(text)
     && !/chrome|youtube|notepad|spotify|cursor|vscode/iu.test(text);
+}
+
+function looksLikeMemoryRecall(text: string): boolean {
+  return /สีเว็บ|สีที่เราคุย|สีที่ผมเลือก|สีของเว็บ|เราคุยอะไร|เราคุยกัน|จำอะไรเกี่ยวกับ|เมื่อกี้เราคุย/iu.test(text);
 }
 
 function continueWork(
@@ -245,9 +264,10 @@ function applyChange(
   text: string,
   discourse: DiscourseInterpretation,
 ): IntentResolution {
+  const project = projectForOwnerText(state, text);
   return capability(SOFTWARE_APPLY_BUILD, {
-    planId: state.activePlanId,
-    goalId: state.activeGoalId,
+    planId: project?.planId || state.activePlanId,
+    goalId: project?.goalId || state.activeGoalId,
     brief: changeBrief(state, text, discourse),
     merge: true,
   }, 'CONVERSATION_MODIFY');
@@ -509,7 +529,9 @@ function restore(state: ConversationState, text = ''): IntentResolution {
   return talk(`กลับไปที่ ${label} ครับ`, 'RESTORE_TOPIC');
 }
 
-function projectCall(state: ConversationState, capabilityId: string, reasonCode: string): IntentResolution {
+function projectCall(state: ConversationState, capabilityId: string, reasonCode: string, text = ''): IntentResolution {
+  const targeted = projectForOwnerText(state, text);
+  if (targeted?.slug) return capability(capabilityId, { slug: targeted.slug }, reasonCode, targeted.slug);
   const resolved = uniqueSlugOrClarify(state);
   if ('message' in resolved) return clarify(resolved.message, 'NEED_PROJECT');
   return capability(capabilityId, { slug: resolved.slug }, reasonCode, resolved.slug);
@@ -568,7 +590,7 @@ function bindMemoryQuery(state: ConversationState, text: string): IntentResoluti
       'CONVERSATION_MEMORY',
     );
   }
-  if (/สีที่ผมเลือก|ตอนแรกผมบอกสี|สีอะไร/iu.test(text)) {
+  if (/สีที่ผมเลือก|ตอนแรกผมบอกสี|สีอะไร|สีเว็บ|สีที่เราคุย|สีของเว็บ/iu.test(text)) {
     const color = [...state.remembered, ...state.constraints, state.pendingChange || '', state.lastOwnerIntent || '']
       .find(item => /ดำ|ฟ้า|ม่วง|black|blue|purple|palette|โทน|สีหลัก/iu.test(item));
     return talk(
@@ -591,7 +613,7 @@ function bindMemoryQuery(state: ConversationState, text: string): IntentResoluti
       'CONVERSATION_MEMORY',
     );
   }
-  if (/เราคุยอะไร/iu.test(text)) {
+  if (/เราคุยอะไร|เราคุยกัน|เมื่อกี้เราคุย/iu.test(text)) {
     return talk(recentWorkLine(state), 'CONVERSATION_MEMORY');
   }
   return talk(rememberedLine(state), 'CONVERSATION_MEMORY');
@@ -657,7 +679,7 @@ function bindStatus(state: ConversationState, discourse: DiscourseInterpretation
   }
   if (focus === 'inventory') {
     const active = state.projects.find(item => item.slug === state.activeProjectSlug);
-    if (/หลัก|main project|current project/iu.test(text) && active) {
+    if (/หลัก|main project|current project|กำลังทำอยู่|project ที่(?:เรา)?กำลังทำ|which project/iu.test(text) && active) {
       return talk(`โปรเจกต์หลักคือ ${active.label} (${active.slug})`, 'STATUS_QUERY');
     }
     if (!state.projects.length) return talk('ยังไม่มีโปรเจกต์ในบริบทนี้ครับ', 'STATUS_QUERY');
@@ -797,11 +819,13 @@ function dailySummaryLine(state: ConversationState): string {
 function recentWorkLine(state: ConversationState): string {
   const project = state.projects.find(item => item.slug === state.activeProjectSlug);
   const recent = sanitizedRecent(state.recentOperation?.summary);
+  const research = state.lastResearchQuery ? `คุยเรื่อง ${state.lastResearchQuery.slice(0, 80)}` : '';
   const bits = [
-    project ? `งานล่าสุดคือ ${project.label}` : state.activeTopic !== 'idle' ? `หัวข้อล่าสุดคือ ${state.activeTopic}` : '',
+    research,
+    project && !research ? `งานล่าสุดคือ ${project.label}` : '',
     recent ? `เพิ่ง ${recent}` : '',
-    state.lastOwnerIntent ? `คำขอล่าสุด: ${state.lastOwnerIntent}` : '',
-    state.lastJarvisAction && !/MISSING_CAPABILITY|unbound\.apply/i.test(state.lastJarvisAction)
+    !research && state.lastOwnerIntent ? `คำขอล่าสุด: ${state.lastOwnerIntent}` : '',
+    !research && state.lastJarvisAction && !/MISSING_CAPABILITY|unbound\.apply|desktop\.open/i.test(state.lastJarvisAction)
       ? `JARVIS ทำ: ${state.lastJarvisAction}`
       : '',
   ].filter(Boolean);
@@ -932,9 +956,13 @@ function recommendResearch(
 }
 
 function usableChoiceOptions(state: ConversationState): OfferedOption[] {
+  const research = extractComparisonOptions(state.lastResearchQuery || state.lastOwnerIntent);
+  if ((state.activeTopic === 'research' || state.lastDiscourse === 'RESEARCH') && research.length) {
+    return research;
+  }
   const options = state.offeredOptions.filter(item => !looksLikeInventoryOption(item.label));
   if (options.length) return options;
-  return extractComparisonOptions(state.lastResearchQuery || state.lastOwnerIntent);
+  return research;
 }
 
 function looksLikeInventoryOption(label: string): boolean {

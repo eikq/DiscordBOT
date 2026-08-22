@@ -14,7 +14,7 @@ export type {
 } from './types';
 export { DISCOURSE_ACTS, emptyConversationState, isDiscourseAct, REFERENT_SLOTS } from './types';
 export { interpretDiscourse, stripOwnerAddress, discoursePreemptsPendingGoal } from './discourse';
-export { activeProject, projectByOrdinal, resolvePronounProject, resolveReferent, uniqueSlugOrClarify, restoreProject } from './referents';
+export { activeProject, projectByOrdinal, resolvePronounProject, resolveReferent, uniqueSlugOrClarify, restoreProject, projectForOwnerText } from './referents';
 export { bindDiscourseToIntent, looksLikeProjectFollowUp, rewriteWrongRoute } from './bind';
 export { ConversationStateStore, defaultConversationStatePath } from './store';
 export type { ConversationHydration } from './store';

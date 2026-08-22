@@ -114,16 +114,34 @@ export function mentionedProject(state: ConversationState | null | undefined, te
   return identity[0];
 }
 
+export function projectForOwnerText(state: ConversationState, text = ''): ProjectRecord | undefined {
+  const mentioned = mentionedProject(state, text);
+  if (mentioned) return mentioned;
+  if (/(?:เว็บนี้|this site|this website|ให้เว็บนี้)/iu.test(text) && !/\b(?:todo|แอป|แอพ)\b/iu.test(text)) {
+    const siteSlug = state.referents.this_site;
+    return state.projects.find(item => item.slug === siteSlug && item.kind === 'website')
+      || state.projects.find(item => item.slug === 'portfolio')
+      || state.projects.find(item => item.kind === 'website' && /portfolio/iu.test(`${item.slug} ${item.label}`))
+      || state.projects.find(item => item.kind === 'website' && item.slug === state.activeProjectSlug)
+      || state.projects.find(item => item.kind === 'website' && !/todo/iu.test(`${item.slug} ${item.label}`));
+  }
+  return activeProject(state);
+}
+
+function firstProject(state: ConversationState): ProjectRecord | undefined {
+  const oldestStacked = state.topicStack.find(frame => frame.projectSlug)?.projectSlug;
+  return state.projects.find(item => item.slug === 'portfolio')
+    || state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`) && item.kind === 'website')
+    || state.projects.find(item => item.slug === oldestStacked)
+    || state.projects.find(item => item.kind === 'website' && !/todo/iu.test(`${item.slug} ${item.label}`))
+    || state.projects[0];
+}
+
 export function restoreProject(state: ConversationState, text: string): ProjectRecord | undefined {
   const mentioned = mentionedProject(state, text);
   if (mentioned) return mentioned;
-  if (/อันแรก|the first/iu.test(text) && state.projects.length > 1) {
-    const previous = [...state.topicStack].reverse().find(frame => (
-      frame.projectSlug && frame.projectSlug !== state.activeProjectSlug
-    ));
-    return state.projects.find(item => item.slug === previous?.projectSlug)
-      || state.projects.find(item => /portfolio/iu.test(`${item.slug} ${item.label}`))
-      || state.projects.find(item => item.kind === 'website' && item.slug !== state.activeProjectSlug)
+  if (/อันแรก|the first/iu.test(text) && (state.projects.length > 1 || state.topicStack.length)) {
+    return firstProject(state)
       || state.projects.find(item => item.slug !== state.activeProjectSlug)
       || state.projects[0];
   }

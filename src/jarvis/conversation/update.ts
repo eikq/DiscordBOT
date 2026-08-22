@@ -1,6 +1,6 @@
 import type { IntentResolution } from '../intent/types';
 import type { ConversationState, DiscourseAct, DiscourseInterpretation, ProjectRecord, QueueItem } from './types';
-import { activeProject, restoreProject } from './referents';
+import { activeProject, restoreProject, projectForOwnerText } from './referents';
 import { optionsFromReply, isOperationalNoise, isPermissionPrompt, extractComparisonOptions, pickRecommendedOption } from './view';
 import { interpretDiscourse } from './discourse';
 
@@ -63,7 +63,7 @@ export function applyTurnToConversation(
         next.lastResearchQuery = query;
       }
       const extracted = extractComparisonOptions(query);
-      if (extracted.length && !next.offeredOptions.length) next.offeredOptions = extracted;
+      if (extracted.length) next.offeredOptions = extracted;
     }
     if (input.discourse.recommend || input.resolution.reasonCode === 'RESEARCH_RECOMMEND') {
       const options = next.offeredOptions.length
@@ -119,6 +119,9 @@ export function applyTurnToConversation(
       }
     }
   }
+  if (input.discourse.act === 'ACKNOWLEDGE' && input.discourse.change === 'HOLD_MUTATION') {
+    next.constraints = unique([...next.constraints, (input.discourse.constraint || input.ownerText).slice(0, 160)]);
+  }
   if (input.discourse.act === 'NEGATE' && input.discourse.constraint) {
     next.constraints = unique([...next.constraints, input.discourse.constraint.slice(0, 160)]);
   }
@@ -172,6 +175,12 @@ export function applyTurnToConversation(
     const topicLocked = input.discourse.act === 'RESTORE_TOPIC'
       && next.activeProjectSlug
       && next.activeProjectSlug !== record.slug;
+    const siteTarget = projectForOwnerText(next, input.ownerText);
+    const siteLocked = Boolean(
+      siteTarget?.slug
+      && siteTarget.slug !== record.slug
+      && /เว็บนี้|this site|this website|ให้เว็บนี้/iu.test(input.ownerText),
+    );
     if (input.discourse.act === 'NEW_PROJECT' && next.activeProjectSlug && next.activeProjectSlug !== record.slug) {
       next.topicStack.push({
         topic: 'software',
@@ -181,7 +190,7 @@ export function applyTurnToConversation(
         label: activeProject(next)?.label,
       });
     }
-    if (!topicLocked) {
+    if (!topicLocked && !siteLocked) {
       next.activeProjectSlug = record.slug;
       next.activeGoalId = record.goalId || next.activeGoalId;
       next.activePlanId = record.planId || next.activePlanId;
@@ -202,6 +211,16 @@ export function applyTurnToConversation(
   if (slug) next.activeProjectSlug = slug;
   if (planId) next.activePlanId = planId;
   if (relativePath) next.referents.this_file = relativePath;
+  if (/เว็บนี้|this site|this website|ให้เว็บนี้/iu.test(input.ownerText) && !/\b(?:todo|แอป|แอพ)\b/iu.test(input.ownerText)) {
+    const site = projectForOwnerText(next, input.ownerText);
+    if (site?.slug) {
+      next.activeProjectSlug = site.slug;
+      next.activePlanId = site.planId || next.activePlanId;
+      next.activeGoalId = site.goalId || next.activeGoalId;
+      next.referents.this_project = site.slug;
+      next.referents.this_site = site.slug;
+    }
+  }
   if (input.preview) {
     next.activePreview = input.preview;
     next.referents.this_preview = input.preview.url;

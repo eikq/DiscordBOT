@@ -20,7 +20,7 @@ export function conversationView(state: ConversationState): ConversationView {
 
 export function isOperationalNoise(summary: string | undefined): boolean {
   if (!summary) return false;
-  return /Blocked for|MISSING_CAPABILITY|unbound\.apply|Safest next path|Current blocker|Those software arguments are not allowed|ต้องขอสิทธิ์/i.test(summary);
+  return /Blocked for|MISSING_CAPABILITY|unbound\.apply|Safest next path|Current blocker|Those software arguments are not allowed|ต้องขอสิทธิ์|A scoped open needs|desktop\.openScopedResource/i.test(summary);
 }
 
 export function isPermissionPrompt(summary: string | undefined): boolean {

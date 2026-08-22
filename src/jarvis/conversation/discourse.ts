@@ -75,6 +75,9 @@ export function interpretDiscourse(
   if (isNamedProjectResume(raw, state) || isRestoreTopic(raw, state)) return act('RESTORE_TOPIC');
   if (isStartFresh(raw)) return act('START_FRESH');
   if (isGrant(raw)) return act(state?.pendingPermission ? 'GRANT_PERMISSION' : 'EXECUTE_NOW');
+  if (isAcceptAndHold(raw)) {
+    return { ...act('ACKNOWLEDGE'), change: 'HOLD_MUTATION', constraint: raw };
+  }
   if (isApprovePlan(raw) && state?.pendingPlanReview) return act('APPROVE_PLAN');
   const queueOp = parseQueueOp(raw, state);
   if (queueOp) {
@@ -269,6 +272,12 @@ function isGrant(text: string): boolean {
   return /^(อนุญาต(?:งานนี้|ครั้งนี้)?|allow(?: once)?|allow this goal)$/iu.test(text);
 }
 
+function isAcceptAndHold(text: string): boolean {
+  const accept = /เอาตามนั้น|ตามที่แนะนำ|ตามนั้น|go with that|use that|เอาตามที่/iu.test(text);
+  const hold = /ยังไม่ต้องแก้|ยังไม่ต้องแตะ|ยังไม่ต้องเปลี่ยน|don't (?:change|edit|touch)|ไม่ต้องแก้เว็บ|ยังไม่ต้องแตะโค้ด/iu.test(text);
+  return accept && hold;
+}
+
 function isStopPreview(text: string): boolean {
   return /หยุด preview|stop (?:the )?preview|stop (?:the )?dev server/iu.test(text);
 }
@@ -305,8 +314,8 @@ function isRerun(text: string): boolean {
 
 function isStatus(text: string): boolean {
   return /^(ผ่าน)$/u.test(text)
-    || /ถึงไหนแล้ว|กำลังทำอะไร|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
-    || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
+    || /ถึงไหนแล้ว|กำลังทำอะไร|กำลังทำอยู่|มีอะไรพัง|มีงานอะไรค้าง|พร้อมทำงาน|พร้อมไหม|ตอนนี้ล่ะ|เป็นไงบ้าง|ผ่านไหม|ผ่าน\?|มีอะไรค้าง|project หลัก|มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|queue (?:เมื่อกี้|เป็นยังไง)|ตอนนี้ทำถึงข้อไหน|ตอนนี้ตอบผมแบบไหน|preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม|เรื่องที่เราทำล่าสุด|ทำอะไรไปล่าสุด|เราทำอะไรล่าสุด|มือถือเป็นไง|บนมือถือ|responsive เป็นไง|เช็กให้หน่อย|ดีขึ้นไหม|มี error|error เมื่อกี้|เมื่อกี้เกิดจาก|เราแก้|มีโอกาสเกิดอีก|สมมติ|permission อะไร|ครอบคลุมอะไร|ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้|จำได้ไหม|เว็บเราเป็นไง/iu.test(text)
+    || /how far|what(?:'s| is) left|what failed|are you ready|ready to work|what did we (?:just )?do|last (?:thing|task) we|\bstatus\b|main project|current project|what projects|which project|check (?:it|that|the site|for (?:me|errors?))/iu.test(text);
 }
 
 function classifyStatusFocus(text: string, state: ConversationState | null | undefined): import('./types').StatusFocus {
@@ -318,7 +327,10 @@ function classifyStatusFocus(text: string, state: ConversationState | null | und
   if (/มีอะไรพัง|what failed|มี error ใน console|console error|ขาวหมด|blank page|error เมื่อกี้|เมื่อกี้เกิดจาก/iu.test(text)) return 'failure';
   if (/มีงานอะไรค้าง|มีอะไรค้าง|what(?:'s| is) left/iu.test(text)) return 'pending';
   if (/preview อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return 'preview';
-  if (/มีกี่ project|project หลัก|main project|current project/iu.test(text)) return 'inventory';
+  if (/มีกี่ project|มี project อะไร|โปรเจกต์อะไรบ้าง|มีโปรเจกต์อะไร|what projects/iu.test(text)) return 'inventory';
+  if (/project หลัก|main project|current project|กำลังทำอยู่คืออันไหน|project ที่(?:เรา)?กำลังทำ|which project/iu.test(text)) {
+    return 'inventory';
+  }
   if (/ตอนนี้ตอบผมแบบไหน/iu.test(text)) return 'preference';
   if (/permission อะไร|ครอบคลุมอะไร/iu.test(text)) return 'permission';
   if (/ทำอะไรกับ project ได้บ้าง|อะไรที่ยังทำไม่ได้/iu.test(text)) return 'capability';
@@ -344,7 +356,7 @@ function isMemoryStore(text: string): boolean {
 }
 
 function isMemoryQuery(text: string): boolean {
-  return /จำอะไรเกี่ยวกับ|สีที่ผมเลือก|memory ของ project|ตอนแรกผมบอก|เราคุยอะไร|ย้อนแค่เรื่อง|เปลี่ยนใจตรงไหน|ถ้าผมกลับมาพรุ่งนี้|จำบทสนทนา|ได้ทั้งหมดไหม|เปิด history|show history|open history|เปิดประวัติ/iu.test(text);
+  return /จำอะไรเกี่ยวกับ|สีที่ผมเลือก|สีเว็บ|สีที่เราคุย|สีของเว็บ|memory ของ project|ตอนแรกผมบอก|เราคุยอะไร|เราคุยกัน|ย้อนแค่เรื่อง|เปลี่ยนใจตรงไหน|ถ้าผมกลับมาพรุ่งนี้|จำบทสนทนา|ได้ทั้งหมดไหม|เปิด history|show history|open history|เปิดประวัติ/iu.test(text);
 }
 
 function isNegate(text: string): boolean {
@@ -408,9 +420,10 @@ function isResearchRecommend(text: string, state: ConversationState | null | und
 
 function isResearchFollowUp(text: string, state: ConversationState | null | undefined): boolean {
   if (state?.lastDiscourse !== 'RESEARCH' && state?.activeTopic !== 'research') return false;
+  if (isAcceptAndHold(text)) return false;
   if (/ใส่ในแผน|เพิ่มหน้า|แก้ไฟล์|ติดตั้ง|กลับไปทำเว็บ|preview|รัน test/iu.test(text)) return false;
   if (isResearchRecommend(text, state)) return false;
-  return /เบากว่า|สวยกว่า|เหมาะ|อันไหน|animation|framer|gsap|library|official docs|docs ด้วย/iu.test(text)
+  return /เบากว่า|สวยกว่า|เหมาะ|อันไหน|animation|framer|gsap|library|official docs|docs ด้วย|ทำไม/iu.test(text)
     || (text.length < 72 && !/เพิ่มปุ่ม|dark mode|navbar|hover/iu.test(text));
 }
 
@@ -487,7 +500,11 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
   const acts = chainActs(text);
   if (acts.length >= 2) return chainInterpretation(text, acts);
   const ifPass = /ถ้าผ่าน|if (?:it |they |that |the tests? |tests? )?pass/iu.test(text);
-  const thenBuild = /\bbuild\b/iu.test(text);
+  const ifBuildPass = /ถ้า\s*build\s*ผ่าน|if (?:the )?build pass/iu.test(text);
+  const thenBuild = (
+    /(?:ก็|แล้ว|then)\s+build|build ต่อ/iu.test(text)
+    || (/\bbuild\b/iu.test(text) && !ifBuildPass)
+  );
   const thenPreview = /preview|เปิดให้ดู|เปิดดู/iu.test(text);
   const thenFix = /แก้|fix|แก้ไข/iu.test(text) && /ปัญหา|error|fail|พัง/iu.test(text);
   if (ifPass && /ทั้งหมด|all (?:of )?(?:them|it|tests?)/iu.test(text)) {
@@ -496,6 +513,18 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
       ifKind: 'test',
       thenAct: 'TEST',
       thenActs: ['TEST'],
+      confidence: 'HIGH',
+      requiresClarification: false,
+      source: 'discourse',
+      change: text,
+    };
+  }
+  if (ifBuildPass && thenPreview && !/ถ้า\s*test|if (?:the )?tests?/iu.test(text)) {
+    return {
+      act: 'CONDITIONAL',
+      ifKind: 'build',
+      thenAct: 'PREVIEW',
+      thenActs: ['BUILD', 'PREVIEW'],
       confidence: 'HIGH',
       requiresClarification: false,
       source: 'discourse',

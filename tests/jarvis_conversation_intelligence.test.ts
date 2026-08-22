@@ -1240,3 +1240,147 @@ test('short-answer preference compresses successful speak but keeps failure caus
   const options = compactOwnerSpeak('1. Hero stats\n2. Featured project section\n3. Testimonials', ['ตอบสั้นกว่านี้ได้ไหม']);
   assert.match(options, /Featured project section/);
 });
+
+test('research choose-one uses the comparison set, not leftover plan options', () => {
+  const state = softwareState({
+    lastDiscourse: 'RESEARCH',
+    activeTopic: 'research',
+    lastResearchQuery: 'Framer Motion vs GSAP for this portfolio',
+    lastOwnerIntent: 'เดี๋ยวก่อน Framer Motion กับ GSAP ถ้าเป็นเว็บนี้อันไหนเหมาะกว่า',
+    offeredOptions: [
+      { index: 1, label: 'Hero stats' },
+      { index: 2, label: 'Featured project section' },
+      { index: 3, label: 'Skills grid' },
+    ],
+    pendingChange: 'เอาแบบเบาๆ และไม่รก',
+  });
+  const pick = bindDiscourseToIntent(interpretDiscourse('เลือกมาอันเดียว', state), state, 'เลือกมาอันเดียว');
+  assert.equal(pick?.reasonCode, 'RESEARCH_RECOMMEND');
+  assert.match(String(pick?.userMessage || ''), /Framer|Motion/i);
+  assert.doesNotMatch(String(pick?.userMessage || ''), /Hero stats|Skills grid/i);
+});
+
+test('accepting a research pick without editing is hold, not another research call', () => {
+  const state = softwareState({
+    lastDiscourse: 'RESEARCH',
+    activeTopic: 'research',
+    lastResearchQuery: 'Framer Motion vs GSAP',
+    selectedOption: { index: 1, label: 'Framer Motion' },
+  });
+  for (const phrase of ['โอเค เอาตามนั้น แต่ยังไม่ต้องแก้เว็บ', 'เอาตามที่แนะนำ ยังไม่ต้องแตะโค้ด']) {
+    const discourse = interpretDiscourse(phrase, state);
+    assert.equal(discourse.act, 'ACKNOWLEDGE', phrase);
+    assert.equal(discourse.change, 'HOLD_MUTATION', phrase);
+    const bound = bindDiscourseToIntent(discourse, state, phrase);
+    assert.equal(bound?.reasonCode, 'HOLD_MUTATION', phrase);
+    assert.equal(bound?.capabilityId, undefined, phrase);
+    assert.match(String(bound?.userMessage || ''), /ยังไม่แก้/i, phrase);
+  }
+});
+
+test('site color recall is memory, not a desktop open', async () => {
+  const state = softwareState({
+    remembered: ['สีหลักเอาประมาณดำ ฟ้า ม่วง'],
+    lastResearchQuery: 'Framer Motion vs GSAP',
+  });
+  const phrase = 'สีเว็บที่เราคุยกันคืออะไร';
+  const discourse = interpretDiscourse(phrase, state);
+  assert.equal(discourse.act, 'MEMORY_QUERY');
+  const bound = bindDiscourseToIntent(discourse, state, phrase);
+  assert.equal(bound?.reasonCode, 'CONVERSATION_MEMORY');
+  assert.match(String(bound?.userMessage || ''), /ดำ|ฟ้า|ม่วง/i);
+  assert.notEqual(bound?.capabilityId, DESKTOP_OPEN_SCOPED_RESOURCE);
+  const rewritten = rewriteWrongRoute({
+    kind: 'CAPABILITY',
+    capabilityId: DESKTOP_OPEN_SCOPED_RESOURCE,
+    arguments: {},
+    confidence: 'HIGH',
+    reasonCode: 'SEMANTIC_SCOPED_WEB',
+    consumed: true,
+    source: 'semantic',
+    actionClass: 'ACTIONABLE',
+  }, state, phrase);
+  assert.notEqual(rewritten.capabilityId, DESKTOP_OPEN_SCOPED_RESOURCE);
+  const recap = bindDiscourseToIntent(interpretDiscourse('เมื่อกี้เราคุยอะไรกัน', state), state, 'เมื่อกี้เราคุยอะไรกัน');
+  assert.match(String(recap?.userMessage || ''), /Framer|GSAP/i);
+  assert.doesNotMatch(String(recap?.userMessage || ''), /scoped open/i);
+});
+
+test('inventory and current-project status stay on conversation projects', () => {
+  const state = softwareState({
+    projects: [
+      { slug: 'portfolio', label: 'Portfolio', kind: 'website', planId: 'plan_portfolio' },
+      { slug: 'todo-app', label: 'Todo App', kind: 'software', planId: 'plan_todo' },
+    ],
+  });
+  const list = bindDiscourseToIntent(
+    interpretDiscourse('ตอนนี้มี project อะไรบ้าง', state),
+    state,
+    'ตอนนี้มี project อะไรบ้าง',
+  );
+  assert.match(String(list?.userMessage || ''), /1\. Portfolio/);
+  assert.match(String(list?.userMessage || ''), /Todo App/);
+  const current = bindDiscourseToIntent(
+    interpretDiscourse('แต่ project ที่เรากำลังทำอยู่คืออันไหน', state),
+    state,
+    'แต่ project ที่เรากำลังทำอยู่คืออันไหน',
+  );
+  assert.match(String(current?.userMessage || ''), /Portfolio \(portfolio\)/);
+  assert.doesNotMatch(String(current?.userMessage || ''), /jarvis-project/i);
+});
+
+test('first-project restore stays on the original site, not the leftover previous app', () => {
+  const onSite = softwareState({
+    topicStack: [
+      { topic: 'software', projectSlug: 'todo-app', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo', label: 'Todo App' },
+    ],
+    projects: [
+      { slug: 'todo-app', label: 'Todo App', kind: 'software', planId: 'plan_todo' },
+      { slug: 'portfolio', label: 'Portfolio', kind: 'website', planId: 'plan_portfolio' },
+    ],
+  });
+  const stay = bindDiscourseToIntent(interpretDiscourse('กลับไปอันแรก', onSite), onSite, 'กลับไปอันแรก');
+  assert.match(String(stay?.userMessage || ''), /Portfolio/i);
+  assert.doesNotMatch(String(stay?.userMessage || ''), /Todo/i);
+});
+
+test('this-site edits bind the website even if a software app is active', () => {
+  const onTodo = softwareState({
+    activeProjectSlug: 'todo-app',
+    activeGoalId: 'BUILD_SOFTWARE',
+    activePlanId: 'plan_todo',
+    referents: { this_project: 'todo-app', this_app: 'todo-app', this_site: 'portfolio' },
+    projects: [
+      { slug: 'todo-app', label: 'Todo App', kind: 'software', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
+      { slug: 'portfolio', label: 'Portfolio', kind: 'website', goalId: 'BUILD_WEBSITE', planId: 'plan_portfolio' },
+    ],
+  });
+  const phrase = 'เพิ่มหน้า skills ให้เว็บนี้';
+  const discourse = interpretDiscourse(phrase, onTodo);
+  assert.equal(discourse.act, 'MODIFY_PROJECT');
+  const bound = bindDiscourseToIntent(discourse, onTodo, phrase);
+  assert.equal(bound?.capabilityId, SOFTWARE_APPLY_BUILD);
+  assert.equal(bound?.arguments?.planId, 'plan_portfolio');
+  const next = applyTurnToConversation(onTodo, {
+    ownerText: phrase,
+    discourse,
+    resolution: bound!,
+    project: { slug: 'todo-app', label: 'Todo App', kind: 'software', goalId: 'BUILD_SOFTWARE', planId: 'plan_todo' },
+  });
+  assert.equal(next.activeProjectSlug, 'portfolio');
+  assert.equal(next.activePlanId, 'plan_portfolio');
+});
+
+test('if-build-passed-then-preview does not rerun build when the last build already passed', () => {
+  const state = softwareState({
+    recentVerification: { kind: 'build', ok: true, summary: 'Ran build', at: 9, slug: 'portfolio' },
+  });
+  const phrase = 'ถ้า build ผ่านเปิด preview ต่อเลย';
+  const discourse = interpretDiscourse(phrase, state);
+  assert.equal(discourse.act, 'CONDITIONAL');
+  assert.equal(discourse.ifKind, 'build');
+  const bound = bindDiscourseToIntent(discourse, state, phrase);
+  assert.equal(bound?.capabilityId, PROJECT_START_DEV_SERVER);
+  assert.notEqual(bound?.capabilityId, PROJECT_BUILD);
+  assert.equal((bound?.extraCalls || []).length, 0);
+});

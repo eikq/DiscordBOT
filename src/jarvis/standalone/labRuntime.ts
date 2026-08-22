@@ -1988,7 +1988,12 @@ export class JarvisLabRuntime {
   }>(sessionId: string, output: T): T {
     const compacted = compactVisibleResearch(output);
     const conversation = this.conversations.get(sessionId);
-    const spoken = compactOwnerSpeak(String(compacted.presented?.text || ''), conversation.remembered);
+    const researchOutput = (output.result as { toolResults?: Array<{ name?: string; capabilityId?: string }>; verifiedFacts?: Array<{ key?: string }> } | undefined);
+    const researched = (researchOutput?.toolResults || []).some(item => String(item.capabilityId || item.name || '').startsWith('research.'))
+      || (researchOutput?.verifiedFacts || []).some(item => String(item.key || '').startsWith('citation.'));
+    const spoken = researched
+      ? String(compacted.presented?.text || '')
+      : compactOwnerSpeak(String(compacted.presented?.text || ''), conversation.remembered);
     const visibleOutput = spoken && spoken !== compacted.presented?.text
       ? { ...compacted, presented: { ...compacted.presented, text: spoken } }
       : compacted;
