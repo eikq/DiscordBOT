@@ -339,6 +339,9 @@ test('community documentation and launcher artifacts exist', () => {
     'docs/COMMUNITY_SUBMISSION_CHECKLIST.md',
     'Start-Jarvis-Community.ps1',
     'scripts/start_jarvis_community.ts',
+    'Start JARVIS.cmd',
+    'Stop JARVIS.cmd',
+    'scripts/launch_jarvis_community.ts',
   ]) {
     assert.equal(fs.existsSync(path.join(process.cwd(), file)), true, file);
   }
