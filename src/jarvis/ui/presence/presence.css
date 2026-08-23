@@ -1,4 +1,12 @@
 .jp {
+  --jp-z-webgl: 0;
+  --jp-z-ambient: 5;
+  --jp-z-hud: 20;
+  --jp-z-side: 30;
+  --jp-z-dock: 40;
+  --jp-z-scrim: 80;
+  --jp-z-modal: 100;
+  --jp-z-toast: 120;
   --jp-void: #02040a;
   --jp-graphite: #070b12;
   --jp-cyan: #5ee7ff;
@@ -55,9 +63,14 @@
 .jp-core {
   position: absolute;
   inset: 8% 18% 22%;
-  z-index: 1;
+  z-index: var(--jp-z-webgl);
   display: grid;
   place-items: center;
+  pointer-events: none;
+}
+
+.jp-core canvas {
+  pointer-events: none;
 }
 
 .jp-core > * {
@@ -75,7 +88,7 @@
   position: absolute;
   top: 1.4rem;
   left: 1.6rem;
-  z-index: 5;
+  z-index: var(--jp-z-hud);
   display: grid;
   gap: 0.15rem;
 }
@@ -109,7 +122,7 @@
   position: absolute;
   top: 1.4rem;
   right: 1.6rem;
-  z-index: 5;
+  z-index: var(--jp-z-hud);
   text-align: right;
 }
 
@@ -237,7 +250,7 @@
   position: absolute;
   left: 50%;
   bottom: 1.3rem;
-  z-index: 5;
+  z-index: var(--jp-z-dock);
   transform: translateX(-50%);
   width: min(46rem, calc(100vw - 2.4rem));
   display: grid;
@@ -294,17 +307,62 @@
 .jp-icon:disabled,
 .jp-send:disabled { opacity: 0.45; cursor: not-allowed; }
 
+.jp-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: var(--jp-z-scrim);
+  border: 0;
+  background: rgb(2 4 10 / 0.55);
+  pointer-events: auto;
+}
+
 .jp-approve {
   position: absolute;
-  left: 1.6rem;
+  left: 50%;
   top: 50%;
-  z-index: 6;
-  transform: translateY(-40%);
-  width: min(24rem, 36vw);
+  z-index: var(--jp-z-modal);
+  transform: translate(-50%, -50%);
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: min(78vh, 42rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 1rem;
   border: 1px solid rgb(240 195 106 / 0.32);
-  background: rgb(8 10 14 / 0.88);
+  background: rgb(8 10 14 / 0.92);
   backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.jp-approve__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.jp-approve__row {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.45rem;
+  padding-top: 0.65rem;
+  background: inherit;
+}
+
+.jp[data-permission="open"] .jp-context,
+.jp[data-permission="open"] .jp-context-debug {
+  display: none;
+}
+
+.jp[data-permission="open"] .jp-core {
+  opacity: 0.72;
+}
+
+.jp[data-permission="open"] .jp-build,
+.jp[data-permission="open"] .jp-history,
+.jp[data-permission="open"] .jp-services {
+  opacity: 0.38;
+  pointer-events: none;
 }
 
 .jp-approve header {
@@ -322,7 +380,6 @@
 .jp-approve dt { color: var(--jp-muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.62rem; }
 .jp-approve dd { margin: 0; }
 .jp-approve__ask { margin: 0.85rem 0 0.55rem; }
-.jp-approve__row { display: flex; gap: 0.45rem; }
 .jp-approve__note,
 .jp-approve__once,
 .jp-approve__more { margin-top: 0.7rem; color: var(--jp-muted); font-size: 0.72rem; }
@@ -390,7 +447,7 @@
   position: absolute;
   left: 50%;
   top: 5.8rem;
-  z-index: 6;
+  z-index: var(--jp-z-side);
   width: min(28rem, 86vw);
   transform: translateX(-50%);
   padding: 0.75rem 0.9rem;
@@ -455,7 +512,7 @@
   position: absolute;
   left: 1.6rem;
   bottom: 7.4rem;
-  z-index: 6;
+  z-index: var(--jp-z-hud);
   width: min(26rem, 42vw);
   pointer-events: auto;
 }
@@ -508,7 +565,7 @@
   position: absolute;
   right: 1.5rem;
   top: 18%;
-  z-index: 5;
+  z-index: var(--jp-z-side);
   width: min(22rem, 28vw);
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--jp-line);
@@ -543,7 +600,7 @@
   position: absolute;
   right: 1.5rem;
   bottom: 1.4rem;
-  z-index: 5;
+  z-index: var(--jp-z-side);
   width: min(22rem, 32vw);
 }
 
@@ -608,3 +665,28 @@
   .jp-hud,
   .jp-approve { transition: none; }
 }
+
+.jp-services {
+  margin: 0 auto 0.4rem;
+  max-width: min(34rem, 70vw);
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgb(94 231 255 / 0.14);
+  background: rgb(4 10 18 / 0.52);
+  font-size: 0.68rem;
+}
+.jp-services > span {
+  display: block;
+  letter-spacing: 0.14em;
+  color: var(--jp-cyan);
+  margin-bottom: 0.3rem;
+}
+.jp-services ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.45rem; }
+.jp-services button {
+  margin-right: 0.3rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--jp-line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.jp-services__err { color: var(--jp-alert); }

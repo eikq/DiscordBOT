@@ -82,12 +82,15 @@
 .jp[data-cinematic="true"] .jp-state,
 .jp[data-cinematic="true"] .jp-attention,
 .jp[data-cinematic="true"] .jp-panel,
-.jp[data-cinematic="true"] .jp-approve,
-.jp[data-cinematic="true"] .jp-dock,
 .jp[data-cinematic="true"] .jp-ghost,
 .jp[data-cinematic="true"] .jp-error,
 .jp[data-cinematic="true"] .jp-perf {
-  z-index: 4;
+  z-index: var(--jp-z-hud, 20);
+}
+
+.jp[data-cinematic="true"] .jp-core,
+.jp[data-cinematic="true"] .jp-core canvas {
+  pointer-events: none;
 }
 
 .jp-state {
@@ -219,14 +222,32 @@
 
 .jp-approve {
   left: 50%;
-  top: 56%;
-  transform: translate(-50%, -30%);
-  width: min(26rem, 42vw);
-  z-index: 6;
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: min(78vh, 42rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: var(--jp-z-modal, 100);
+  pointer-events: auto;
 }
 
-.jp-dock { width: min(34rem, calc(100vw - 2.4rem)); }
+.jp-approve__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.jp-approve__row {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+}
+
+.jp-dock {
+  width: min(34rem, calc(100vw - 2.4rem));
+  z-index: var(--jp-z-dock, 40);
+}
 .jp-context,
 .jp-context-debug {
   margin: 0 auto 0.4rem;

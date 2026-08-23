@@ -236,7 +236,12 @@ export function presencePhaseToLab(phase: PresencePhase): LabCorePhase {
   }
 }
 
-export function presencePhaseLabel(phase: PresencePhase): string {
+export function presencePhaseLabel(phase: PresencePhase, edition?: 'owner' | 'community'): string {
+  if (edition !== 'owner') {
+    if (phase === 'IDLE') return 'JARVIS READY';
+    if (phase === 'OFFLINE') return 'MODEL OFFLINE';
+    if (phase === 'WAITING_OWNER') return 'WAITING FOR YOU';
+  }
   switch (phase) {
     case 'IDLE':
       return 'Awaiting the owner';
@@ -551,6 +556,10 @@ export function isPresenceAmbientPath(pathname: string, search = ''): boolean {
 
 export function isPresencePath(pathname: string): boolean {
   return pathname === '/jarvis' || pathname.startsWith('/jarvis/');
+}
+
+export function isSetupPath(pathname: string): boolean {
+  return pathname === '/setup' || pathname.startsWith('/setup/');
 }
 
 export function isControlCenterPath(pathname: string): boolean {
