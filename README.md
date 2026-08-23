@@ -79,32 +79,36 @@ Private device, CCTV, desktop automation, private-browser / Whonix, Night Agent,
 
 ## 🚀 Quick Start
 
+1. Install [Node.js 18+](https://nodejs.org/).
+2. Double-click `Start JARVIS.cmd`.
+3. Follow the Setup Wizard the first time.
+4. JARVIS opens at `http://127.0.0.1:3012/jarvis`.
+
+You do not need to type `npm` commands for normal use.
+
+The first launch opens `/setup`. Use `Stop JARVIS.cmd` to stop JARVIS-owned processes only.
+
+Community binds `127.0.0.1` only. It does not require Administrator. If no model is running, Presence stays usable and shows **LOCAL MODEL OFFLINE**. It does not invent answers.
+
+Advanced manual start:
+
 ```powershell
 git clone https://github.com/eikq/DiscordBOT.git
 cd DiscordBOT
 npm ci
 Copy-Item .env.community.example .env.community
+npm run jarvis:community
 ```
 
-Point `.env.community` at any OpenAI-compatible local model:
+or `.\Start-Jarvis-Community.ps1`
+
+Point `.env.community` at any OpenAI-compatible local model, or choose the same options in the Setup Wizard:
 
 ```
 JARVIS_LLM_BASE_URL=http://127.0.0.1:8086/v1
 JARVIS_LLM_MODEL=<id from GET /v1/models>
 JARVIS_LLM_API_KEY=
 ```
-
-Then:
-
-```powershell
-npm run jarvis:community
-```
-
-or `.\Start-Jarvis-Community.ps1`
-
-Open http://127.0.0.1:3012/jarvis (or `3013` if `3012` is busy). Community binds `127.0.0.1` only. Start the local model separately.
-
-If no model is running, Presence stays usable and shows **LOCAL MODEL OFFLINE**. It does not invent answers.
 
 Full guide: [`COMMUNITY_EDITION.md`](COMMUNITY_EDITION.md) · architecture: [`docs/COMMUNITY_ARCHITECTURE.md`](docs/COMMUNITY_ARCHITECTURE.md) · demo: [`docs/COMMUNITY_DEMO_SCRIPT.md`](docs/COMMUNITY_DEMO_SCRIPT.md)
 
