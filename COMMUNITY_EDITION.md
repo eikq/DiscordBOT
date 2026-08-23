@@ -35,6 +35,21 @@ The Presence view is the product. Lab at `/jarvis-lab` is a smaller Community co
 
 ## Quick start
 
+1. Install [Node.js 18+](https://nodejs.org/).
+2. Double-click `Start JARVIS.cmd`.
+3. Follow the Setup Wizard the first time.
+4. JARVIS opens in your browser at `http://127.0.0.1:3012/jarvis`.
+
+That is the normal path. You do not need to type `npm` commands.
+
+Windows PowerShell shortcut (same Community runtime):
+
+```powershell
+.\Start-Jarvis-Community.ps1
+```
+
+Advanced manual start:
+
 ```powershell
 git clone https://github.com/eikq/DiscordBOT.git
 cd DiscordBOT
@@ -43,15 +58,17 @@ Copy-Item .env.community.example .env.community
 npm run jarvis:community
 ```
 
-Windows shortcut:
-
-```powershell
-.\Start-Jarvis-Community.ps1
-```
-
-Then open `http://127.0.0.1:3012/jarvis` (or `3013` if 3012 is already in use).
-
 Community binds `127.0.0.1` only. It does not require Administrator, Discord, or a specific GPU model.
+
+## First run and stopping
+
+The first launch opens `/setup`. Presence at `/jarvis` redirects there until setup is saved.
+
+The wizard is Thai/English. You can finish without a live model. Presence then shows **LOCAL MODEL OFFLINE** instead of inventing answers.
+
+Double-click `Stop JARVIS.cmd` to stop JARVIS-owned processes only. External local models (for example something you started yourself) are left running.
+
+Presence includes a Services panel. Stop on a process JARVIS did not start returns **NOT OWNED**.
 
 ## Model setup
 

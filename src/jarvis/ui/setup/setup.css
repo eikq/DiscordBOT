@@ -1,0 +1,77 @@
+.js {
+  min-height: 100vh;
+  padding: 2rem 1.4rem 3rem;
+  color: #d7f7ff;
+  background:
+    radial-gradient(42% 48% at 50% 18%, rgb(8 48 72 / 0.42), transparent 62%),
+    #02040a;
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+.js header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.js-steps {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0;
+  margin: 1.4rem 0;
+  list-style: none;
+  color: #7d97a8;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.js-steps li[data-on="true"] { color: #5ee7ff; }
+.js section {
+  max-width: 36rem;
+  display: grid;
+  gap: 0.7rem;
+}
+.js h1 { margin: 0; font-size: 1.6rem; }
+.js label { display: grid; gap: 0.25rem; font-size: 0.82rem; color: #7d97a8; }
+.js input[type="text"],
+.js input[type="password"],
+.js input:not([type]) {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgb(94 231 255 / 0.2);
+  background: rgb(5 10 16 / 0.8);
+  color: inherit;
+}
+.js button, .js a {
+  width: fit-content;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid rgb(94 231 255 / 0.28);
+  background: rgb(94 231 255 / 0.08);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.js-checks { display: grid; gap: 0.55rem; padding: 0; list-style: none; }
+.js-checks li { display: grid; grid-template-columns: 1fr auto; gap: 0.2rem 0.8rem; }
+.js-checks p { margin: 0; grid-column: 1 / -1; color: #7d97a8; font-size: 0.78rem; }
+.js-error { color: #ff6b7a; }
+
+.jp-services {
+  margin: 0 auto 0.4rem;
+  max-width: min(34rem, 70vw);
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgb(94 231 255 / 0.14);
+  background: rgb(4 10 18 / 0.52);
+  font-size: 0.68rem;
+}
+.jp-services span { display: block; letter-spacing: 0.14em; color: #5ee7ff; margin-bottom: 0.3rem; }
+.jp-services ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.45rem; }
+.jp-services em { letter-spacing: 0.08em; }
+.jp-services button {
+  margin-right: 0.3rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid rgb(94 231 255 / 0.2);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.jp-services__err { color: #ff6b7a; }

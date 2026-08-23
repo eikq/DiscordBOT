@@ -24,6 +24,7 @@ import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from 
 import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parseOperatorReason, parsePermissionGrant, parsePrivilegeLeaseId, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
 import { applyCommunityEditionEnv, communityRejectedDemoScenario, communityRejectedHttpPath, isCommunityEdition, jarvisDataRoot } from "./src/jarvis/edition";
+import { registerCommunityRuntimeRoutes } from "./src/jarvis/community/http";
 
 dotenv.config({ path: ".env.community", quiet: true });
 if (isCommunityEdition()) {
@@ -138,6 +139,12 @@ async function startServer() {
     return false;
   };
 
+  app.use(express.json({ limit: "100kb" }));
+
+  if (isCommunityEdition()) {
+    registerCommunityRuntimeRoutes(app, rejectIfMutationBlocked);
+  }
+
   const parseLabCapabilityCalls = (raw: unknown): { ok: true; calls?: Array<{ id: string; input: Record<string, unknown> }> } | { ok: false } => {
     if (raw === undefined) return { ok: true };
     if (!Array.isArray(raw)) return { ok: false };
@@ -179,8 +186,6 @@ async function startServer() {
   };
 
   // API routes
-  app.use(express.json({ limit: "100kb" }));
-
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
