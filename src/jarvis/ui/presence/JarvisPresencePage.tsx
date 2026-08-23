@@ -48,6 +48,9 @@ import {
   presenceShouldForwardToJarvis,
   resolvePresenceApproval,
 } from './presenceRuntime';
+import { livePendingConfirmation } from './presenceLayers';
+import { shouldRedirectToCommunitySetup } from '../../community/setup/store';
+import CommunityServicesPanel from './CommunityServicesPanel';
 import '../jarvis-lab.css';
 import './presence.css';
 import './cinematic/cinematic.css';
@@ -206,9 +209,9 @@ export default function JarvisPresencePage() {
       surface.previewUrl = ops.snapshot.preview.url;
     }
     setBuildSurface(surface);
-    if (ops.snapshot?.pendingPermission?.proposalId && ops.snapshot.pendingPermission.token) {
-      setPendingConfirmation(ops.snapshot.pendingPermission);
-    }
+    setPendingConfirmation(livePendingConfirmation(ops.snapshot?.pendingPermission, {
+      requireExpiry: editionRef.current === 'community',
+    }));
     if (ops.snapshot?.conversation) setConversation(ops.snapshot.conversation);
   }, []);
   const refreshSystem = useCallback(() => readJson<SystemHealthView>('/api/jarvis/system').then(setSystem).catch(() => undefined), []);
@@ -231,6 +234,16 @@ export default function JarvisPresencePage() {
     void refreshReminders();
     void refreshResearch();
     try { setQualityMode(parseQualityMode(window.localStorage.getItem(QUALITY_STORAGE_KEY))); } catch { /* optional */ }
+  }, []);
+
+  useEffect(() => {
+    void fetch('/api/jarvis/setup')
+      .then(async reply => {
+        if (!reply.ok) return;
+        const setup = await reply.json() as { completed?: boolean };
+        if (shouldRedirectToCommunitySetup(setup, true)) window.location.replace('/setup');
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -280,7 +293,9 @@ export default function JarvisPresencePage() {
         if (isResearchOperationType(payload.type) || stage) void refreshResearch();
         if (payload.type === 'PERMISSION_SNAPSHOT') {
           const pending = payload.payload?.pendingPermission as LabPendingConfirmation | undefined;
-          if (pending?.proposalId && pending.token) setPendingConfirmation(pending);
+          setPendingConfirmation(livePendingConfirmation(pending, {
+            requireExpiry: editionRef.current === 'community',
+          }));
           const previewUrl = typeof (payload.payload?.preview as { url?: string } | undefined)?.url === 'string'
             ? (payload.payload?.preview as { url: string }).url
             : undefined;
@@ -974,7 +989,7 @@ export default function JarvisPresencePage() {
   ) : <PresenceCoreFallback phase={visual.phase} />;
 
   return (
-    <div className="jp jai" data-cinematic="true" data-edition={status?.edition || 'owner'} data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase}>
+    <div className="jp jai" data-cinematic="true" data-permission={showPermission ? 'open' : 'closed'} data-edition={status?.edition || 'owner'} data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase}>
       {visual.fixtureLabel ? <div className="jp-fixture" role="status">{visual.fixtureLabel}</div> : null}
       <div className="jp-orbit" aria-hidden="true" />
       <header className="jp-mark">
@@ -993,8 +1008,8 @@ export default function JarvisPresencePage() {
         <small>{dateLabel}</small>
       </div>
       <div className="jp-state" data-tone={tone}>
-        <em>{visual.phase.replaceAll('_', ' ')}</em>
-        <p>{presencePhaseLabel(visual.phase)}</p>
+        <em>{status?.edition === 'community' && visual.phase === 'WAITING_OWNER' ? 'WAITING FOR YOU' : visual.phase.replaceAll('_', ' ')}</em>
+        <p>{presencePhaseLabel(visual.phase, status?.edition)}</p>
       </div>
       {attention[0] && visual.hud?.kind !== 'permission' && (ambientNow || attention[0].tone !== 'info') ? (
         <div className="jp-attention" data-tone={attention[0].tone}>
@@ -1107,7 +1122,8 @@ export default function JarvisPresencePage() {
       ) : null}
       {!ambientNow ? (
         <div className="jp-dock">
-          {!ambientNow && (conversation?.project || conversation?.goal || conversation?.current) ? (
+          {status?.edition === 'community' ? <CommunityServicesPanel /> : null}
+          {!ambientNow && !showPermission && (conversation?.project || conversation?.goal || conversation?.current) ? (
             <aside className="jp-context" aria-label="JARVIS context">
               <span>JARVIS CONTEXT</span>
               {conversation.project ? <p>Working on <strong>{conversation.project}</strong></p> : null}
