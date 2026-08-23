@@ -1,6 +1,0 @@
-{
-  "name": "Digital Me",
-  "description": "Thai-First Real-Time Discord Digital Twin — Fully Local Zero-Cost AI Architecture",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

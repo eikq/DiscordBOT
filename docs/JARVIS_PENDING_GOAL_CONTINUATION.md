@@ -88,8 +88,8 @@ when its linked task is still at the non-mutating `WAITING_INPUT` boundary.
 
 This does not replace capability permission. Recovery after an interrupted
 already-running mutating step is now also recorded in the persistent execution
-journal (`docs/JARVIS_EXECUTION_JOURNAL.md`) together with the existing
-checkpoint, containment, verification, and no-blind-retry rules.
+journal together with the existing checkpoint, containment, verification, and
+no-blind-retry rules.
 
 ## WorkAgent and Activity
 

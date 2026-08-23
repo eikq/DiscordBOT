@@ -393,8 +393,8 @@ test('17 project alias resolves through registry not memory text', () => {
 });
 
 test('18 model memory cannot fabricate a workspace path', () => {
-  assert.equal(looksLikeFilesystemPath('C:\\Users\\piriy\\secret'), true);
-  const resolved = resolveRegisteredWorkspace('C:\\Users\\piriy\\secret', {
+  assert.equal(looksLikeFilesystemPath('C:\\Users\\someone\\secret'), true);
+  const resolved = resolveRegisteredWorkspace('C:\\Users\\someone\\secret', {
     workspaces: [{ id: 'jarvis-project', displayName: 'Jarvis Project' }],
   });
   assert.equal(resolved.ok, false);

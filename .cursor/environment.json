@@ -1,7 +1,0 @@
-{
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
-  },
-  "install": "npm ci || npm install"
-}

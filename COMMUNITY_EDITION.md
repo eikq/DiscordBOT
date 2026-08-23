@@ -38,7 +38,6 @@ The Presence view is the product. Lab at `/jarvis-lab` is a smaller Community co
 ```powershell
 git clone https://github.com/eikq/DiscordBOT.git
 cd DiscordBOT
-git checkout release/jarvis-community-edition-v1-2026-08-23
 npm ci
 Copy-Item .env.community.example .env.community
 npm run jarvis:community

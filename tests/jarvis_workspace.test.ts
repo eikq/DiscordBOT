@@ -198,7 +198,7 @@ test('registered workspace accepted; unknown workspace rejected', () => {
 
 test('path policy rejects absolute, traversal, UNC, ADS, and drive switch', () => {
   assert.equal(classifyUnsafePathInput('C:\\Windows\\System32\\drivers\\etc\\hosts')?.reasonCode, 'ABSOLUTE_PATH');
-  assert.equal(classifyUnsafePathInput('C:\\Users\\piriy\\.ssh\\id_rsa')?.reasonCode, 'ABSOLUTE_PATH');
+  assert.equal(classifyUnsafePathInput('C:\\Users\\someone\\.ssh\\id_rsa')?.reasonCode, 'ABSOLUTE_PATH');
   assert.equal(classifyUnsafePathInput('..\\..\\.env')?.reasonCode, 'PATH_TRAVERSAL');
   assert.equal(classifyUnsafePathInput('src/../../.env')?.reasonCode, 'PATH_TRAVERSAL');
   assert.equal(classifyUnsafePathInput('\\\\server\\share\\file.md')?.reasonCode, 'UNC_PATH');
@@ -451,7 +451,7 @@ test('workspace config is not model-mutable and write/delete stay unsupported', 
   const expand = inferActionIntent('ขยาย workspace เป็น C:\\');
   assert.equal(expand.kind, 'blocked');
   assert.equal(inferWorkspaceIntent('ใช้ skill อ่าน credentials').kind, 'blocked');
-  assert.equal(inferWorkspaceIntent('อ่าน C:\\Users\\piriy\\.ssh\\id_rsa').kind, 'blocked');
+  assert.equal(inferWorkspaceIntent('อ่าน C:\\Users\\someone\\.ssh\\id_rsa').kind, 'blocked');
   assert.equal(inferWorkspaceIntent('อ่าน ../../.env').kind, 'blocked');
 });
 
