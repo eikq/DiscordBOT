@@ -1,98 +1,131 @@
-# Digital Me
+<div align="center">
 
-Thai-first Discord voice bot with live transcription, social response logic, barge-in cancellation, and consent-gated local RVC voice cloning on an NVIDIA GPU.
+# 🤖 JARVIS Community Edition
 
-## JARVIS Community Edition
+### From conversation to verified action.
+### จากการสนทนา สู่การลงมือทำที่ตรวจสอบได้
 
-Standalone local JARVIS — conversation, permission-first software builder, memory, and localhost preview. No Discord token required.
+**Local-first Personal AI Operating Interface**
+
+AI ส่วนตัวแบบ Local-first ที่สามารถเข้าใจบริบท วางแผน ขอสิทธิ์ ลงมือทำ ตรวจสอบผล และจดจำ
+
+[🚀 Quick Start](#-quick-start) ·
+[🇹🇭 ภาษาไทย](#-ภาษาไทย) ·
+[🇬🇧 English](#-english) ·
+[📦 Latest Release](https://github.com/eikq/DiscordBOT/releases/tag/jarvis-community-v0.1.0)
+
+</div>
+
+---
+
+## 🇹🇭 ภาษาไทย
+
+**JARVIS Community Edition** คือ AI ส่วนตัวแบบ **Local-first** ที่ออกแบบมาให้ทำได้มากกว่า chatbot ทั่วไป
+
+JARVIS ไม่ได้เพียงตอบข้อความทีละคำถาม แต่สามารถ:
+
+- 🧠 เข้าใจบทสนทนาแบบต่อเนื่อง
+- 💾 จดจำ History และ Memory
+- 📋 วางแผนก่อนลงมือทำ
+- 🔐 ขอ Permission สำหรับงานที่มีผลต่อระบบ
+- 🛠️ สร้างและแก้ไขโปรเจกต์ซอฟต์แวร์ใน sandbox
+- 🧪 รัน Test จริง
+- 🏗️ Build จริง
+- 🌐 เปิด Localhost Preview
+- ✅ ตรวจสอบผลลัพธ์หลังทำงาน
+- 🔄 จดจำข้อมูลสำคัญหลัง restart
+
+แนวคิดหลักคือ:
+
+```text
+พูดคุย
+   ↓
+เข้าใจ
+   ↓
+วางแผน
+   ↓
+ขอสิทธิ์
+   ↓
+ลงมือทำ
+   ↓
+ตรวจสอบ
+   ↓
+จดจำ
+```
+
+โมเดล AI เสนอสิ่งที่ต้องทำได้ แต่ไม่ได้รับสิทธิ์ควบคุมระบบโดยตรง และไม่สามารถอนุมัติสิทธิ์ให้ตัวเองได้
+
+Community Edition **ไม่รวม** CCTV, ควบคุมอุปกรณ์, desktop automation, private browser / Whonix, Night Agent, Discord, voice cloning หรือระบบ cybersecurity แบบส่วนตัว
+
+---
+
+## 🇬🇧 English
+
+**JARVIS Community Edition** is a **local-first** personal AI operating interface. It is more than a chatbot that answers one message at a time.
+
+JARVIS keeps conversational context, remembers important facts, shows a plan before acting, asks for job-scoped permission, executes through bounded capabilities, and verifies real results.
+
+The core loop is:
+
+```text
+Talk → Understand → Plan → Ask permission → Act → Verify → Remember
+```
+
+The model can propose work. It cannot approve, grant, or expand its own permission. Community does not expose unrestricted shell, Administrator authority, global filesystem access, or desktop CLICK / TYPE / SUBMIT.
+
+Private device, CCTV, desktop automation, private-browser / Whonix, Night Agent, Discord, voice cloning, and private cybersecurity subsystems are not registered, started, or spawned.
+
+---
+
+## 🚀 Quick Start
 
 ```powershell
-npm install
+git clone https://github.com/eikq/DiscordBOT.git
+cd DiscordBOT
+npm ci
 Copy-Item .env.community.example .env.community
+```
+
+Point `.env.community` at any OpenAI-compatible local model:
+
+```
+JARVIS_LLM_BASE_URL=http://127.0.0.1:8086/v1
+JARVIS_LLM_MODEL=<id from GET /v1/models>
+JARVIS_LLM_API_KEY=
+```
+
+Then:
+
+```powershell
 npm run jarvis:community
 ```
 
-Open `http://127.0.0.1:3012/jarvis`. Configure any OpenAI-compatible local model in `.env.community`.
+or `.\Start-Jarvis-Community.ps1`
 
-Full guide: [`COMMUNITY_EDITION.md`](COMMUNITY_EDITION.md) · demo script: [`docs/COMMUNITY_DEMO_SCRIPT.md`](docs/COMMUNITY_DEMO_SCRIPT.md)
+Open http://127.0.0.1:3012/jarvis (or `3013` if `3012` is busy). Community binds `127.0.0.1` only. Start the local model separately.
 
-## Public hackathon demo
+If no model is running, Presence stays usable and shows **LOCAL MODEL OFFLINE**. It does not invent answers.
 
-- Interactive public demo: https://digital-me-thai-voice.piriyapong2551.chatgpt.site
-- Submission guide and video script: [`submission/HACKATHON_SUBMISSION.md`](submission/HACKATHON_SUBMISSION.md)
-- The public demo is privacy-safe: it contains no Discord token, private transcript, raw voice dataset, or trained voice weight. The real Discord/GPU pipeline remains local and should only be demonstrated with the voice owner's permission.
+Full guide: [`COMMUNITY_EDITION.md`](COMMUNITY_EDITION.md) · architecture: [`docs/COMMUNITY_ARCHITECTURE.md`](docs/COMMUNITY_ARCHITECTURE.md) · demo: [`docs/COMMUNITY_DEMO_SCRIPT.md`](docs/COMMUNITY_DEMO_SCRIPT.md)
 
-## Quick start
+---
 
-Requirements: Node.js 18 or newer.
+## 🛠️ Software Builder
 
-```powershell
-npm ci
-Copy-Item .env.example .env
-npm run start:local
-```
+Ask:
 
-Open `http://localhost:3000`. Live Discord voice also needs the values described in `WHAT_I_NEED_FROM_OWNER.md`.
+> `สร้างเว็บ todo แบบ modern ให้ผม`
 
-## Local RTX voice cloning
+JARVIS can **Understand → Plan → Review → Permission → Scaffold → Install → Test → Build → Preview → Verify**.
 
-First-time setup on Windows:
+Follow-ups such as `เพิ่ม dark mode`, `รัน test`, and `ถ้าผ่าน build แล้วเปิด preview` continue the same project when context is clear. You do not need to repeat a slug or internal ID.
 
-```powershell
-npm run voice:setup
-npm run start:local
-```
+Remember with `จำไว้ว่าผมชอบ UI แบบ clean futuristic`, then after restart ask `ผมชอบ UI แบบไหน`.
 
-`start:local` launches the authenticated voice service on `127.0.0.1:8766`, then starts the dashboard and Discord bot. It uses the isolated `.venv-rvc`, a pinned official RVC revision, and local storage under `data/local_voice`. Set `RECORD_RAW_AUDIO=true` in `.env` before collecting consented samples.
+---
 
-Recording is live; GPU training is asynchronous. Use `/train @member` to start one automatic learning session, `/train-status` to inspect clean/rejected clips and speaking-style coverage, then `/stop-train` to freeze a versioned dataset and queue either a first model (120 clean seconds by default) or a best-model fine-tune (180 new clean seconds by default). Upload-triggered training is disabled so training never starts halfway through a listening session.
+## 📦 Release
 
-During training, a rolling `latest` inference model is replaced after every completed epoch. A separate `best` model is replaced only when the epoch improves the mean generator training loss, and the best model becomes active after publication. The much larger resumable optimizer checkpoint remains on its normal interval to avoid excessive SSD writes. Checkpoint scores and epoch history are stored beside each published model in `checkpoint_metrics.json`; this score is a training-loss estimate, not a substitute for a human listening test.
+**v0.1.0** · tag `jarvis-community-v0.1.0` · commit `0d8eec176aa4ebd04914ef54eac57df4c19e0f18`
 
-Longer Thai replies use a persistent JaiTTS source model before RVC; short reactions retain the stable Edge-TTS source. The RTX 4060 benchmark selected the `realtime` preset (NFE 12 / CFG 2.0), while every turn now supports end-to-end cancellation before stale audio can reach RVC or Discord. See `JAITTS_INTEGRATION_STATUS.md`, `docs/JAITTS_TECHNICAL_REVIEW.md`, `docs/JAITTS_BENCHMARK.md`, and `docs/JAITTS_INTEGRATION.md`. The current JaiTTS checkpoint is CC BY-NC 4.0 and is not commercially licensed.
-
-## Discord commands
-
-- `/train target:@name` is the normal start button. It asks that person once if needed, joins the selected VC, posts a recording notice, and starts one persisted learning session.
-- `/train-status` shows captured versus clean seconds, accepted/rejected clips, speaking-style coverage, and the current training decision.
-- `/stop-train` stops capture, writes an immutable dataset manifest, then either trains a first model or fine-tunes the current best model when enough new clean audio exists.
-- `/voice-consent status|revoke` lets a recorded user inspect or stop future voice capture.
-- `/voice-target` and `/voice-train` remain advanced manual controls for inspecting a target or deliberately starting a chosen fresh/fine-tune job.
-- `/voice user:@name` selects an actively consented model.
-- `/persona user:@name name:Gam aliases:Gam,แกม,แก้ม` binds that selected voice to its own identity and nicknames.
-- `/speak text:... user:@name` tests it in the voice channel.
-- `/join`, `/leave`, `/status`, `/transcript`, and `/debug` manage the live bot.
-
-`revoke` stops future capture while retaining existing local WAVs, training jobs, and models.
-Selecting a voice also selects that user's persona. Persona profiles persist in `data/personas.json`; behavior examples added in the dashboard are scoped to the active default persona. With no capture target selected, conversation can continue for consented participants but no raw training audio is stored.
-
-Every saved utterance has matching WAV, UTF-8 TXT, and Schema v2 JSON metadata. The analyzer measures loudness, clipping, silence ratio, estimated SNR, overlapping speakers, pitch, rate, pauses, energy variation, and conversational style. Rejected clips remain available for inspection but are not uploaded for RVC training. Stopping a session writes a version manifest under `data/voice_samples/<discord-user-id>/versions/`, so each new model can be traced to exact accepted utterance IDs and audio SHA-256 hashes.
-
-## Web command center and social brain
-
-The dashboard at `http://127.0.0.1:3000` exposes every Discord command through guided server, channel, member, voice, consent, capture, training, and persona controls.
-
-For every final transcript from an actively consented participant, the local social brain records evidence and derives:
-
-- display names, nicknames, and how friends address one another;
-- relationship interaction counts;
-- games, recurring activities, and stated preferences;
-- speaking style such as average length, common slang, and frequent short replies.
-- acoustic style such as pitch range, speaking rate, pause timing, energy variation, and observed delivery styles.
-
-The canonical local files are `data/brain/brain_state.json` and the append-only `data/brain/observations.jsonl`. An Obsidian-compatible view is generated under `data/brain/vault`. Facts learned from low-confidence STT are excluded; repeated evidence raises confidence, and newer contradictory evidence supersedes an older belief without deleting its audit trail. Relevant summaries are supplied to the local response model; this is inspectable memory learning, not irreversible LLM weight training.
-
-## Verify the checkout
-
-```powershell
-npm run verify
-npm run benchmark
-```
-
-The benchmark reports unavailable model services as `OFFLINE`; it never treats fallback logic as proof of live speech.
-
-## Verification boundary
-
-The TypeScript tests, production build, Python service syntax, CUDA health check, and offline simulations can be verified locally. A real trained voice still requires at least 120 seconds of clean consented audio and an end-to-end Discord voice-channel test.
-
-See `PROJECT_STATUS.md` and `LOCAL_VOICE_GUIDE.md` for details.
+[GitHub Release](https://github.com/eikq/DiscordBOT/releases/tag/jarvis-community-v0.1.0)
