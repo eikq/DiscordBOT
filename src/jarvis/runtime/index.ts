@@ -10,4 +10,4 @@ export type { HermesRuntimeAdapterOptions } from './HermesRuntimeAdapter';
 export function createConfiguredAgentRuntime(env: NodeJS.ProcessEnv = process.env): AgentRuntime | undefined {
   if (configuredAgentRuntime(env) !== 'hermes') return undefined;
   return new HermesRuntimeAdapter(resolveHermesRuntimeConfig(env));
-}
+}export * from './binding';
