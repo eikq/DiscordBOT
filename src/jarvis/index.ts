@@ -47,6 +47,8 @@ export type {
 export { LocalLlmJarvisCore } from './standalone/LocalLlmJarvisCore';
 export type { LocalLlmJarvisCoreOptions, StandaloneLlm, TimedCoreResult } from './standalone/LocalLlmJarvisCore';
 export { applyJarvisInteractiveProfile, describeJarvisRuntimeProfile } from './standalone/runtimeProfile';
+export { createConfiguredAgentRuntime, HermesRuntimeAdapter, HermesRuntimeError, configuredAgentRuntime, resolveHermesRuntimeConfig, isAgentRunTerminal } from './runtime';
+export type { AgentRuntime, AgentRun, AgentRunInput, AgentRunStatus, AgentEvent, RuntimeCapabilities, ApprovalDecision, WaitForRunOptions, AgentRuntimeKind, HermesRuntimeConfig, HermesRuntimeAdapterOptions } from './runtime';
 export { compactTurnTimings } from './standalone/turnTimings';
 export type { TurnTimings, LlmTurnMetrics } from './standalone/turnTimings';
 export {
