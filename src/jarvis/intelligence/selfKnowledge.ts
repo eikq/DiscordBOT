@@ -6,6 +6,8 @@ import { buildGoalKnowledge, createDefaultGoalCatalog, type GoalCatalog } from '
 import type { CapabilitySelfModel } from '../evolution/selfModel';
 import type { ModelCertificationRegistry } from '../models/ModelCertificationRegistry';
 import type { ModelProfileRegistry } from '../models/ModelProfileRegistry';
+import type { AgentRuntime } from '../runtime/types';
+import { syncAgentRuntimeCapabilities } from './runtimeCapabilitySync';
 import type {
   DeclaredCapabilityEvidence,
   SelfKnowledgeCapability,
@@ -21,6 +23,7 @@ export type SelfKnowledgeOptions = {
   modelProviderState?: ReadonlyMap<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>;
   services?: SelfKnowledgeService[];
   declarations?: DeclaredCapabilityEvidence[];
+  agentRuntime?: AgentRuntime;
   goalCatalog?: GoalCatalog;
   now?: () => number;
 };
@@ -29,12 +32,15 @@ export async function buildSelfKnowledgeSnapshot(options: SelfKnowledgeOptions):
   const now = options.now ?? Date.now;
   const checkedAt = new Date(now()).toISOString();
   const assessments = new Map((options.selfModel?.matrix() ?? []).map(item => [item.capability, item]));
+  const runtimeSync = options.agentRuntime
+    ? await syncAgentRuntimeCapabilities(options.agentRuntime, checkedAt)
+    : undefined;
   const registered = await Promise.all((options.host?.list() ?? []).map(async descriptor => {
     const availability = await safeAvailability(options.host!, descriptor.id);
     return capabilityFromDescriptor(descriptor, availability, checkedAt, assessments.get(descriptor.id));
   }));
   const known = new Set(registered.map(item => item.id));
-  const declared = (options.declarations ?? [])
+  const declared = [...(options.declarations ?? []), ...(runtimeSync?.declarations ?? [])]
     .filter(item => !known.has(item.id))
     .map(item => capabilityFromDeclaration(item, checkedAt, assessments.get(item.id)));
   const capabilities = [...registered, ...declared].sort((a, b) => a.id.localeCompare(b.id));
@@ -75,11 +81,12 @@ export async function buildSelfKnowledgeSnapshot(options: SelfKnowledgeOptions):
         'DISCOVER != REVIEW != INSTALL != TRUST != EXECUTE',
         'The model cannot bypass CapabilityHost, policy, permission, Emergency Stop, verification, rollback, or containment.',
         'Jarvis cannot raise the owner autonomy ceiling or approve its own privilege escalation.',
+        'Runtime discovery is evidence only and cannot register or authorize a JARVIS capability.',
       ],
     },
     models,
     capabilities,
-    services: (options.services ?? []).map(service => ({
+    services: [...(options.services ?? []), ...(runtimeSync ? [runtimeSync.service] : [])].map(service => ({
       ...service,
       ...(service.detail ? { detail: redactSecrets(service.detail) } : {}),
       evidence: service.evidence.map(redactSecrets),
@@ -89,7 +96,7 @@ export async function buildSelfKnowledgeSnapshot(options: SelfKnowledgeOptions):
     goals: [],
     unknowns: [
       ...(models.length === 0 ? ['No configured model profile was observable.'] : []),
-      ...(options.services === undefined ? ['Service inventory was not supplied to Self Knowledge.'] : []),
+      ...(options.services === undefined && !runtimeSync ? ['Service inventory was not supplied to Self Knowledge.'] : []),
     ],
   };
   snapshot.goals = buildGoalKnowledge(options.goalCatalog ?? createDefaultGoalCatalog(), snapshot);

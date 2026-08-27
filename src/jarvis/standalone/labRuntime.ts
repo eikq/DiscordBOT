@@ -136,6 +136,7 @@ import { classifySpeechEvent, decideSpeech, type SpeechMode } from '../speech/sp
 import { isDuplicateUtterance, shapeSpokenText } from '../speech/speechShape';
 import { LocalLlmJarvisCore, type StandaloneLlm } from './LocalLlmJarvisCore';
 import { describeJarvisRuntimeProfile, type JarvisRuntimeProfile } from './runtimeProfile';
+import type { AgentRuntime } from '../runtime/types';
 import { runStandaloneTextTurn, type StandaloneTextTurnOutput } from './textHarness';
 import { CommandCenterRuntime, sharedCommandCenter } from './commandCenter';
 import { routeJarvisRequest, shouldUseWorkAgent, type RouteDecision } from '../intent/requestRouter';
@@ -296,6 +297,7 @@ export type JarvisLabRuntimeOptions = {
   commandCenter?: CommandCenterRuntime | false;
   modelProfiles?: ModelProfileRegistry;
   modelCertifications?: ModelCertificationRegistry;
+  agentRuntime?: AgentRuntime;
 };
 
 export class JarvisLabRuntime {
@@ -324,6 +326,7 @@ export class JarvisLabRuntime {
   private commandCenter?: CommandCenterRuntime;
   private readonly modelProfiles: ModelProfileRegistry;
   private readonly modelCertifications: ModelCertificationRegistry;
+  private readonly agentRuntime?: AgentRuntime;
   private readonly plans?: BuildPlanStore;
   private readonly conversations: ConversationStateStore;
   private activeJarvisTurnId?: string;
@@ -384,6 +387,7 @@ export class JarvisLabRuntime {
     );
     this.modelProfiles = options.modelProfiles ?? new ModelProfileRegistry();
     this.modelCertifications = options.modelCertifications ?? new ModelCertificationRegistry();
+    this.agentRuntime = options.agentRuntime;
     this.persona = options.persona ?? (options.attachDefaultPresentation ? new FileBehaviorPersonaProvider() : undefined);
     this.speech = options.speech ?? (options.attachDefaultSpeech ? new StandaloneVoiceRouter() : undefined);
     this.voices = options.voices
@@ -521,6 +525,7 @@ export class JarvisLabRuntime {
       modelProfiles: this.modelProfiles,
       modelCertifications: this.modelCertifications,
       modelProviderState: providerState,
+      agentRuntime: isCommunityEdition() ? undefined : this.agentRuntime,
       services: (input.services ?? await this.serviceSnapshot() ?? []).map(service => ({
         id: service.id,
         state: service.health === 'healthy'
