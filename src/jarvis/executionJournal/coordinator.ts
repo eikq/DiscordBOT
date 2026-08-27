@@ -2,6 +2,7 @@ import type { RecoveryCheckpointStore } from '../recovery/checkpointStore';
 import type { FailureContainment } from '../safety/failureContainment';
 import type { JarvisEventBus } from '../security/eventBus';
 import {
+  assertPersistableJournalValue,
   fingerprintAction,
   fingerprintScope,
   hashIdempotencyIdentity,
@@ -155,6 +156,27 @@ export class ExecutionJournalCoordinator {
     return saved;
   }
 
+  public recordEvidence(
+    operationId: string,
+    evidenceRefs: string[],
+    actor: JournalActor = 'system',
+  ): ExecutionJournalRecord {
+    this.assertWritable();
+    if (actor === 'model' || actor === 'jarvis') {
+      throw journalError('MODEL_CANNOT_SET_JOURNAL_STATE', 'Model identity cannot write authoritative execution journal evidence.');
+    }
+    const current = this.require(operationId);
+    const evidence = [...new Set(evidenceRefs.map(item => String(item).trim()).filter(Boolean))].slice(-32);
+    if (evidence.length === 0) return current;
+    assertPersistableJournalValue({ evidenceRefs: evidence }, 'journal evidence');
+    const saved = this.store.put({
+      ...current,
+      evidenceRefs: mergeEvidence(current.evidenceRefs, evidence),
+      updatedAt: iso(this.now()),
+    });
+    this.emit('JOURNAL_RECONCILED', 'Execution journal recorded external runtime evidence without changing authority or state.', saved);
+    return saved;
+  }
   public recordCheckpoint(operationId: string, checkpointId: string, actor: JournalActor = 'system'): ExecutionJournalRecord {
     this.assertWritable();
     const current = this.require(operationId);

@@ -11,3 +11,4 @@ export function createConfiguredAgentRuntime(env: NodeJS.ProcessEnv = process.en
   if (configuredAgentRuntime(env) !== 'hermes') return undefined;
   return new HermesRuntimeAdapter(resolveHermesRuntimeConfig(env));
 }export * from './binding';
+export * from './journalBridge';
