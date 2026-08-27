@@ -1,6 +1,8 @@
 import { isForbiddenGenericShell } from '../security/constants';
 import { resolveCapabilityGoal } from './capabilityGraph';
 import { CapabilityGapResolver } from './gapResolver';
+import { isSoftwareWorkRequest } from '../goals/resolver';
+import { preferredLanguage, speakInLanguage } from '../intent/conversationLanguage';
 import { isModelIdentityQuestion, spokenTrustedModelIdentity, trustedRuntimeModelIdentity } from '../models/runtimeIdentity';
 import type {
   CapabilityGoalDefinition,
@@ -54,6 +56,7 @@ const UNAVAILABLE_STATUSES = [
 export function selfKnowledgeQuestionKind(text: string): SelfKnowledgeAnswerKind | undefined {
   const raw = text.trim();
   if (!raw) return undefined;
+  if (isSoftwareWorkRequest(raw)) return undefined;
   if (isModelIdentityQuestion(raw)) return 'MODEL_IDENTITY';
   if (/\b(cctv|camera|nvr|rtsp|onvif)\b|กล้องวงจรปิด|กล้องบ้าน/iu.test(raw)) return 'CCTV_STATUS';
   if (/can you.*(?:control|use).*(?:computer|pc|screen)|ควบคุม.*(?:คอม|พีซี|หน้าจอ)/iu.test(raw)) return 'DEVICE_CONTROL';
@@ -136,6 +139,7 @@ export function answerFromSelfKnowledge(
   gap?: GapResolutionPlan,
   question?: string,
 ): SelfKnowledgeAnswer {
+  const language = preferredLanguage(question || '', null);
   if (kind === 'CCTV_STATUS') return cctvAnswer(snapshot, gap);
   if (kind === 'MODEL_IDENTITY') return modelIdentityAnswer();
   if (kind === 'DEVICE_CONTROL') return deviceControlAnswer(snapshot);
@@ -144,11 +148,11 @@ export function answerFromSelfKnowledge(
   if (kind === 'NEEDS_SETUP') return listAnswer('NEEDS_SETUP', setupCapabilities(snapshot), 'These capabilities need setup, a provider, owner input, or local acceptance', 'No registered capability currently reports a setup gap.');
   if (kind === 'NEEDS_PERMISSION') return permissionAnswer(snapshot);
   if (kind === 'AFTER_SETUP') return afterSetupAnswer(snapshot);
-  if (kind === 'AVAILABLE_NOW') return availableNowAnswer(snapshot);
+  if (kind === 'AVAILABLE_NOW') return availableNowAnswer(snapshot, language);
   if (kind === 'GAP_EXPLANATION') {
     return gapExplanationAnswer(snapshot, gap, question ? interpretRequestedCapability(question, snapshot) : undefined);
   }
-  return capabilitySummaryAnswer(snapshot);
+  return capabilitySummaryAnswer(snapshot, language);
 }
 
 function modelIdentityAnswer(): SelfKnowledgeAnswer {
@@ -166,7 +170,7 @@ function modelIdentityAnswer(): SelfKnowledgeAnswer {
   };
 }
 
-function capabilitySummaryAnswer(snapshot: SelfKnowledgeSnapshot): SelfKnowledgeAnswer {
+function capabilitySummaryAnswer(snapshot: SelfKnowledgeSnapshot, language: 'th' | 'en' = 'en'): SelfKnowledgeAnswer {
   const ready = availableCapabilities(snapshot);
   const simulations = snapshot.capabilities.filter(item => item.status === 'SIMULATION');
   const setup = setupCapabilities(snapshot);
@@ -176,33 +180,54 @@ function capabilitySummaryAnswer(snapshot: SelfKnowledgeSnapshot): SelfKnowledge
   const goalSetup = snapshot.goals.filter(item => item.status === 'AFTER_SETUP');
   return {
     kind: 'CAPABILITY_SUMMARY',
-    text: [
-      `I am Jarvis, the owner's local operational assistant. ${ready.length} registered capabilities currently report available.`,
-      names.length ? `Available now: ${names.join(', ')}.` : 'No capability currently has enough runtime evidence to report AVAILABLE.',
-      goalNow.length ? `End-to-end goals ready now: ${goalNow.map(item => item.name).join(', ')}.` : 'No end-to-end goal currently has complete runtime evidence.',
-      goalApproval.length ? `${goalApproval.length} declared goal routes need owner approval.` : '',
-      goalSetup.length ? `${goalSetup.length} declared goal routes need setup or provider evidence.` : '',
-      simulations.length ? `${simulations.length} capability contracts are simulation-only.` : '',
-      setup.length ? `${setup.length} capabilities need setup, a provider, or precise owner input.` : '',
-      'My model can propose plans, but CapabilityHost, policy, permission, Emergency Stop, verification, rollback, and containment determine what I can actually execute.',
-    ].filter(Boolean).join(' '),
+    text: speakInLanguage(language, {
+      en: [
+        `I am Jarvis, the owner's local operational assistant. ${ready.length} registered capabilities currently report available.`,
+        names.length ? `Available now: ${names.join(', ')}.` : 'No capability currently has enough runtime evidence to report AVAILABLE.',
+        goalNow.length ? `End-to-end goals ready now: ${goalNow.map(item => item.name).join(', ')}.` : 'No end-to-end goal currently has complete runtime evidence.',
+        goalApproval.length ? `${goalApproval.length} declared goal routes need owner approval.` : '',
+        goalSetup.length ? `${goalSetup.length} declared goal routes need setup or provider evidence.` : '',
+        simulations.length ? `${simulations.length} capability contracts are simulation-only.` : '',
+        setup.length ? `${setup.length} capabilities need setup, a provider, or precise owner input.` : '',
+        'My model can propose plans, but CapabilityHost, policy, permission, Emergency Stop, verification, rollback, and containment determine what I can actually execute.',
+      ].filter(Boolean).join(' '),
+      th: [
+        `ผมคือ Jarvis ผู้ช่วยปฏิบัติการในเครื่องของคุณ ตอนนี้มีความสามารถที่หลักฐานรันไทม์รายงานว่าใช้ได้ ${ready.length} รายการ`,
+        names.length ? `ใช้ได้ตอนนี้: ${names.join(', ')}` : 'ยังไม่มีความสามารถที่มีหลักฐานพอจะรายงานว่า AVAILABLE',
+        goalNow.length ? `งานปลายทางที่พร้อมทำได้เลย: ${goalNow.map(item => item.name).join(', ')}` : 'ยังไม่มีงานปลายทางที่มีหลักฐานครบ',
+        goalApproval.length ? `เส้นทางเป้าหมาย ${goalApproval.length} รายการต้องให้อนุญาตก่อน` : '',
+        goalSetup.length ? `เส้นทางเป้าหมาย ${goalSetup.length} รายการต้องตั้งค่าหรือมีหลักฐานจากผู้ให้บริการก่อน` : '',
+        simulations.length ? `สัญญาความสามารถ ${simulations.length} รายการเป็น simulation เท่านั้น` : '',
+        setup.length ? `ความสามารถ ${setup.length} รายการยังต้องตั้งค่า ผู้ให้บริการ หรือข้อมูลจากเจ้าของ` : '',
+        'โมเดลช่วยวางแผนได้ แต่การลงมือทำจริงผ่าน CapabilityHost นโยบาย permission Emergency Stop การตรวจหลักฐาน rollback และ containment ถ้าให้สร้างโปรเจกต์จริง ผมจะเริ่มจากแผน แล้วขออนุญาตก่อนเขียนไฟล์',
+      ].filter(Boolean).join(' '),
+    }),
     capabilityIds: ready.map(item => item.id),
     evidence: [...goalNow.flatMap(item => item.evidence), ...ready.flatMap(item => item.evidence)].slice(0, 16),
   };
 }
 
-function availableNowAnswer(snapshot: SelfKnowledgeSnapshot): SelfKnowledgeAnswer {
+function availableNowAnswer(snapshot: SelfKnowledgeSnapshot, language: 'th' | 'en' = 'en'): SelfKnowledgeAnswer {
   const ready = availableCapabilities(snapshot);
   const goalNow = snapshot.goals.filter(item => item.status === 'CAN_DO_NOW');
   return {
     kind: 'AVAILABLE_NOW',
-    text: [
-      ready.length
-        ? `Right now, runtime evidence reports these capabilities available: ${ready.slice(0, 12).map(item => item.displayName).join(', ')}.`
-        : 'No capability currently has enough runtime evidence to report AVAILABLE.',
-      goalNow.length ? `End-to-end goals ready now: ${goalNow.map(item => item.name).join(', ')}.` : 'No end-to-end goal currently has complete runtime evidence.',
-      'Availability comes from CapabilityHost evidence, not from the conversational model.',
-    ].join(' '),
+    text: speakInLanguage(language, {
+      en: [
+        ready.length
+          ? `Right now, runtime evidence reports these capabilities available: ${ready.slice(0, 12).map(item => item.displayName).join(', ')}.`
+          : 'No capability currently has enough runtime evidence to report AVAILABLE.',
+        goalNow.length ? `End-to-end goals ready now: ${goalNow.map(item => item.name).join(', ')}.` : 'No end-to-end goal currently has complete runtime evidence.',
+        'Availability comes from CapabilityHost evidence, not from the conversational model.',
+      ].join(' '),
+      th: [
+        ready.length
+          ? `ตอนนี้หลักฐานรันไทม์รายงานว่าใช้ได้: ${ready.slice(0, 12).map(item => item.displayName).join(', ')}`
+          : 'ยังไม่มีความสามารถที่มีหลักฐานพอจะรายงานว่า AVAILABLE',
+        goalNow.length ? `งานปลายทางที่พร้อมทำได้เลย: ${goalNow.map(item => item.name).join(', ')}` : 'ยังไม่มีงานปลายทางที่มีหลักฐานครบ',
+        'ความพร้อมมาจากหลักฐานของ CapabilityHost ไม่ใช่จากโมเดลสนทนา ถ้าให้สร้างโปรเจกต์จริง ผมจะวางแผนแล้วขออนุญาตก่อนลงมือ',
+      ].join(' '),
+    }),
     capabilityIds: ready.map(item => item.id),
     evidence: [...ready, ...goalNow].flatMap(item => item.evidence).slice(0, 16),
   };

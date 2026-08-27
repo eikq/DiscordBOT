@@ -82,12 +82,19 @@
 .jp[data-cinematic="true"] .jp-state,
 .jp[data-cinematic="true"] .jp-attention,
 .jp[data-cinematic="true"] .jp-panel,
-.jp[data-cinematic="true"] .jp-approve,
 .jp[data-cinematic="true"] .jp-dock,
 .jp[data-cinematic="true"] .jp-ghost,
 .jp[data-cinematic="true"] .jp-error,
 .jp[data-cinematic="true"] .jp-perf {
   z-index: 4;
+}
+
+.jp[data-cinematic="true"] .jp-approve-layer {
+  z-index: 80;
+}
+
+.jp[data-cinematic="true"] .jp-approve {
+  z-index: 90;
 }
 
 .jp-state {
@@ -219,11 +226,53 @@
 
 .jp-approve {
   left: 50%;
-  top: 56%;
-  transform: translate(-50%, -30%);
+  top: 46%;
+  transform: translate(-50%, -50%);
   width: min(26rem, 42vw);
-  z-index: 6;
+  max-height: min(72vh, calc(100vh - 8rem));
+  overflow: auto;
+  z-index: 90;
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+}
+
+.jp-approve-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  padding: 4.5rem 1rem 5.5rem;
+  background: rgb(1 4 10 / 0.78);
+  pointer-events: auto;
+}
+
+.jp-approve-layer .jp-approve {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  width: min(28rem, 92vw);
+  max-height: min(72vh, calc(100vh - 8rem));
+}
+
+.jp:has(.jp-approve-layer) .jp-context,
+.jp:has(.jp-approve-layer) .jp-context-debug,
+.jp:has(.jp-approve-layer) .jp-caption,
+.jp[data-permission="true"] .jp-context,
+.jp[data-permission="true"] .jp-context-debug,
+.jp[data-permission="true"] .jp-caption {
+  display: none !important;
+}
+
+.jp:has(.jp-approve-layer) .jp-dock,
+.jp[data-permission="true"] .jp-dock {
+  z-index: 4;
+  pointer-events: none;
+}
+
+.jp:has(.jp-approve-layer) .jp-composer {
+  pointer-events: none;
 }
 
 .jp-dock { width: min(34rem, calc(100vw - 2.4rem)); }
@@ -324,11 +373,15 @@
 }
 
 @media (max-width: 900px) {
-  .jp-panel,
-  .jp-approve {
+  .jp-panel {
     position: static;
     transform: none;
     width: auto;
     margin: 0 1rem 0.6rem;
+  }
+  .jp-approve-layer .jp-approve {
+    position: relative;
+    width: min(28rem, 92vw);
+    margin: 0;
   }
 }

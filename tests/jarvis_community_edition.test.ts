@@ -339,6 +339,12 @@ test('community documentation and launcher artifacts exist', () => {
     'docs/COMMUNITY_SUBMISSION_CHECKLIST.md',
     'Start-Jarvis-Community.ps1',
     'scripts/start_jarvis_community.ts',
+    'launchers/shared.ps1',
+    'launchers/owner/start.cmd',
+    'launchers/owner/stop.cmd',
+    'launchers/community/start.cmd',
+    'launchers/community/stop.cmd',
+    'launchers/install-desktop-shortcuts.cmd',
   ]) {
     assert.equal(fs.existsSync(path.join(process.cwd(), file)), true, file);
   }
@@ -347,4 +353,25 @@ test('community documentation and launcher artifacts exist', () => {
   assert.match(envExample, /JARVIS_LLM_BASE_URL/);
   assert.doesNotMatch(envExample, /DISCORD_TOKEN=/);
   assert.doesNotMatch(envExample, /qwen38-cyber/);
+
+  const ownerStart = fs.readFileSync(path.join(process.cwd(), 'launchers/owner/start.ps1'), 'utf8');
+  assert.match(ownerStart, /npm run dev/);
+  assert.match(ownerStart, /3010/);
+  assert.doesNotMatch(ownerStart, /npm run jarvis:community/);
+  assert.doesNotMatch(ownerStart, /JARVIS_EDITION\s*=\s*'community'/);
+
+  const communityStart = fs.readFileSync(path.join(process.cwd(), 'launchers/community/start.ps1'), 'utf8');
+  assert.match(communityStart, /npm run jarvis:community/);
+  assert.match(communityStart, /3012/);
+  assert.match(communityStart, /JARVIS_EDITION/);
+  assert.doesNotMatch(communityStart, /npm run dev/);
+
+  const shared = fs.readFileSync(path.join(process.cwd(), 'launchers/shared.ps1'), 'utf8');
+  assert.match(shared, /\/api\/health/);
+  assert.match(shared, /8086/);
+  assert.match(shared, /llama-server/);
+  assert.match(shared, /qwen38-cyber/);
+  assert.match(shared, /JARVIS_QWEN_GGUF/);
+  assert.match(shared, /11434/);
+  assert.match(shared, /npm(\.cmd)? ci/);
 });

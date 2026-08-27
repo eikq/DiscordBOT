@@ -19,7 +19,7 @@ export type JarvisRuntimeProfile = {
 
 const VOICE_KEEP_ALIVE_DEFAULT = '10m';
 const INTERACTIVE_KEEP_ALIVE_DEFAULT = '30m';
-const INTERACTIVE_CONTEXT_DEFAULT = 4096;
+const INTERACTIVE_CONTEXT_DEFAULT = 24_576;
 const VOICE_CONTEXT_DEFAULT = 8192;
 
 export function resolveJarvisRuntimeProfileId(env: NodeJS.ProcessEnv = process.env): JarvisRuntimeProfileId {

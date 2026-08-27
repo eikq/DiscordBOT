@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { composePresenceHud, permissionSupersedesResearch } from '../src/jarvis/ui/presence/cinematic/hudComposition';
+import { composePresenceHud, permissionHidesContextChrome, permissionSupersedesResearch } from '../src/jarvis/ui/presence/cinematic/hudComposition';
 import { presenceCoreMotion } from '../src/jarvis/ui/presence/cinematic/coreMotion';
 import { pcmAmplitude } from '../src/jarvis/ui/presence/cinematic/pcmAmplitude';
 import { composePresenceVisual, researchActiveFromRuntime } from '../src/jarvis/ui/presence/cinematic/presenceVisualModel';
@@ -105,6 +105,24 @@ test('research completion calms the live presentation', () => {
   assert.equal(view?.complete, true);
   assert.match(view?.stageLabel ?? '', /COMPLETE|PARTIALLY/);
   assert.equal(researchActiveFromRuntime({ phase: 'IDLE', liveStage: 'RESEARCH_COMPLETED', currentAskResearch: true }), false);
+});
+
+test('permission HUD hides JARVIS CONTEXT chrome so grant buttons stay clickable', () => {
+  assert.equal(permissionHidesContextChrome({ waitingPermission: true }), true);
+  assert.equal(permissionHidesContextChrome({ hudKind: 'permission' }), true);
+  assert.equal(permissionHidesContextChrome({ phase: 'WAITING_OWNER' }), true);
+  assert.equal(permissionHidesContextChrome({ waitingPermission: false, hudKind: 'research' }), false);
+  const css = fs.readFileSync(path.join(process.cwd(), 'src/jarvis/ui/presence/cinematic/cinematic.css'), 'utf8');
+  assert.match(css, /:has\(\.jp-approve-layer\) \.jp-context/);
+  assert.match(css, /:has\(\.jp-approve-layer\) \.jp-caption/);
+  assert.match(css, /\[data-permission="true"\] \.jp-context/);
+  assert.match(css, /\.jp-approve-layer \{[\s\S]*?inset: 0;/);
+  assert.match(css, /\.jp\[data-cinematic="true"\] \.jp-approve-layer \{\s*z-index: 80;/);
+  assert.match(css, /\.jp\[data-cinematic="true"\] \.jp-approve \{\s*z-index: 90;/);
+  const page = fs.readFileSync(path.join(process.cwd(), 'src/jarvis/ui/presence/JarvisPresencePage.tsx'), 'utf8');
+  assert.match(page, /data-permission=\{hideContextChrome/);
+  assert.match(page, /!hideContextChrome &&/);
+  assert.match(page, /jp-approve-layer/);
 });
 
 test('permission and Emergency Stop supersede research presentation', () => {

@@ -17,6 +17,7 @@ import { ProjectWorkspace } from '../project/workspace';
 import { createProjectCommandRunner, skipLiveCommandsInTests } from '../project/commands';
 import type { ProjectCommandRunner } from '../project/types';
 import type { DevServerRegistry } from '../project/devServer';
+import type { OpenCodeHarness } from '../coding/openCodeHarness';
 
 export type SoftwareCapabilityDeps = {
   plans: BuildPlanStore;
@@ -25,6 +26,7 @@ export type SoftwareCapabilityDeps = {
   runner?: ProjectCommandRunner;
   devServers?: DevServerRegistry;
   workspace?: ProjectWorkspace;
+  openCode?: OpenCodeHarness;
 };
 
 const WRITABLE = new Set(['APPROVED', 'EXECUTING', 'VERIFYING', 'COMPLETED']);
@@ -129,7 +131,7 @@ function invokePlan(
   if (existing && (input.merge === true || existing.status === 'DRAFT' || existing.status === 'READY_FOR_REVIEW')) {
     const plan = deps.plans.save({
       ...existing,
-      brief: `${existing.brief}\n${brief}`.slice(0, 800),
+      brief: `${existing.brief}\n${brief}`.slice(0, 8_000),
       requirements: [...existing.requirements, `Owner update: ${brief.slice(0, 160)}`].slice(0, 24),
     });
     deps.events?.emit('PLAN_CREATED', 'updated requirements', {
@@ -194,7 +196,7 @@ async function invokeApply(
   if (brief) {
     plan = deps.plans.save({
       ...plan,
-      requirements: [...plan.requirements, brief.slice(0, 200)].slice(0, 24),
+      requirements: [...plan.requirements, brief.slice(0, 2_000)].slice(0, 24),
     });
   }
   if (plan.status === 'READY_FOR_REVIEW' || plan.status === 'DRAFT') {
@@ -221,15 +223,23 @@ async function invokeApply(
     devServers: deps.devServers,
     events: deps.events,
     mode: workspace.exists(plan.slug) ? 'revise' : 'create',
+    openCode: deps.openCode,
   });
   deps.plans.save(executed.plan);
   const exists = sandboxExists({ slug: executed.plan.slug }, workspace.sandboxRoot) || workspace.exists(executed.plan.slug);
   const testsOk = !executed.tests || executed.tests.skipped || executed.tests.exitCode === 0;
   const ok = executed.plan.status === 'COMPLETED' && exists && testsOk;
+  const openCodeNote = executed.openCode?.status === 'completed'
+    ? ' ช่วยเขียนไฟล์ผ่าน OpenCode ใน workspace นี้แล้ว (bash ถูกปิด)'
+    : executed.openCode?.status === 'unavailable'
+      ? ' OpenCode ยังไม่มีบนเครื่อง เลยใช้ตัวสร้างในตัวของ JARVIS แทน'
+      : executed.openCode?.status === 'failed'
+        ? ' OpenCode รันไม่สำเร็จ เลยใช้ตัวสร้างในตัวต่อ'
+        : '';
   const content = ok
-    ? executed.preview
+    ? `${executed.preview
       ? `สร้างโปรเจกต์ ${executed.plan.title} แล้ว Preview ${executed.preview.url}`
-      : `สร้างโปรเจกต์ ${executed.plan.title} ใน ${executed.workspace}`
+      : `สร้างโปรเจกต์ ${executed.plan.title} ใน ${executed.workspace}`}${openCodeNote}`
     : executed.correction?.summary || 'สร้างโปรเจกต์ไม่สำเร็จ';
   return {
     capabilityId: SOFTWARE_APPLY_BUILD,
@@ -247,6 +257,7 @@ async function invokeApply(
       tests: executed.tests,
       preview: executed.preview,
       correction: executed.correction,
+      openCode: executed.openCode,
     },
     content,
     sourceUrls: [],

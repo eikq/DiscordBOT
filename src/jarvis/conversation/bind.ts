@@ -982,7 +982,7 @@ function changeBrief(
   return [discourse.change || state.pendingChange || text, selected, here, ...state.constraints]
     .filter(Boolean)
     .join('\n')
-    .slice(0, 400);
+    .slice(0, 8_000);
 }
 
 function researchQuery(

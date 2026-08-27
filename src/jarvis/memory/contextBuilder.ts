@@ -3,8 +3,8 @@ import type { CompactMemoryItem } from './service';
 import type { BuildPlan } from '../build/types';
 import type { PermissionProposal } from '../security/permissionProposal';
 
-export const CONTEXT_DYNAMIC_BUDGET_TOKENS = 19_000;
-export const CONTEXT_RECENT_TURN_LIMIT = 10;
+export const CONTEXT_DYNAMIC_BUDGET_TOKENS = 24_000;
+export const CONTEXT_RECENT_TURN_LIMIT = 24;
 
 export type ContextBuilderInput = {
   ownerRequest: string;
@@ -41,8 +41,8 @@ export function buildJarvisContext(input: ContextBuilderInput): BuiltContext {
     included.push(label);
   };
 
-  push('request', `Current OWNER request:\n${input.ownerRequest.slice(0, 2_000)}`);
-  if (input.sessionSummary) push('summary', `Session summary:\n${input.sessionSummary.slice(0, 1_200)}`);
+  push('request', `Current OWNER request:\n${input.ownerRequest.slice(0, 8_000)}`);
+  if (input.sessionSummary) push('summary', `Session summary:\n${input.sessionSummary.slice(0, 4_000)}`);
   if (input.activeGoal) {
     push('goal', `Active goal: ${input.activeGoal.id}${input.activeGoal.name ? ` (${input.activeGoal.name})` : ''}${input.activeGoal.status ? ` [${input.activeGoal.status}]` : ''}`);
   }
@@ -60,7 +60,7 @@ export function buildJarvisContext(input: ContextBuilderInput): BuiltContext {
   const recent = (input.recentTurns || [])
     .filter(turn => turn.status === 'completed')
     .slice(-CONTEXT_RECENT_TURN_LIMIT)
-    .map(turn => `${turn.role}: ${turn.visibleText.slice(0, 500)}`)
+    .map(turn => `${turn.role}: ${turn.visibleText.slice(0, 2_000)}`)
     .join('\n');
   if (recent) push('turns', `Recent visible turns:\n${recent}`);
   const memories = (input.memories || [])

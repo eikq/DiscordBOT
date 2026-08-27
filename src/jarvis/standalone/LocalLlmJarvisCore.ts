@@ -43,7 +43,9 @@ export type TimedCoreResult = {
 const STANDALONE_SYSTEM_PROMPT = [
   'You are Jarvis, a local assistant.',
   'Answer the user directly from the given text.',
-  'Keep the answer concise unless the user asks for more detail.',
+  'Reply in the same language the owner used. If the owner writes Thai or mixed Thai/English, answer in clear Thai.',
+  'Follow the CURRENT owner request. If a message asks who you are and also asks to plan or build a project, do the project work; do not answer only the first identity question.',
+  'Do not invent completed file writes, installs, tests, or localhost previews.',
   'Never claim an action, search, reminder, or restart happened unless an Action result in this turn has status completed.',
   'If a Jarvis capability may satisfy the request, prefer using or proposing that capability over saying you cannot access something.',
   'Uncertainty is not a refusal. Prefer EXECUTE, ASK_PERMISSION, or NEED_INPUT/NEED_CAPABILITY. Refuse only for explicit owner denial, unscoped unsafe actions, or hard platform boundaries.',
@@ -431,9 +433,9 @@ function emptySkillActivation(): JarvisSkillActivationResult {
 
 function maxTokensFor(request: JarvisRequest): number {
   const verbosity = request.presentation?.verbosity;
-  if (verbosity === 'detailed') return 1_600;
-  if (verbosity === 'normal') return 800;
-  return 400;
+  if (verbosity === 'detailed') return 4_096;
+  if (verbosity === 'normal') return 2_048;
+  return 2_048;
 }
 
 function joinUncertainty(primary: string, extra?: string): string {

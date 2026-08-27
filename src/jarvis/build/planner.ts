@@ -4,13 +4,15 @@ import { workspaceLogicalPath, workspaceRootLogicalPath } from '../edition/types
 import type { BuildPlan, BuildProjectType, BuildStage } from './types';
 
 export function inferProjectType(brief: string): BuildProjectType {
-  if (/สร้างเว็บ|ทำเว็บ|เว็บไซต์|website|portfolio|landing|ร้าน(?:ค้า)?/iu.test(brief)) {
+  if (/สร้างเว็บ|ทำเว็บ|เว็บไซต์|website|portfolio|landing|ร้าน(?:ค้า)?|slide|deck|สไลด์|พรีเซนต์|BUILD_WEBSITE|React\s*\+\s*Vite/iu.test(brief)) {
     return 'WEBSITE';
   }
   return 'SOFTWARE';
 }
 
 export function slugFromBrief(brief: string): string {
+  if (/slide|deck|สไลด์|พรีเซนต์/iu.test(brief)) return 'jarvis-capability-deck';
+  if (/todo/iu.test(brief)) return 'todo-app';
   const ascii = brief
     .normalize('NFKD')
     .replace(/[^\w\s-]+/gu, ' ')
@@ -22,7 +24,6 @@ export function slugFromBrief(brief: string): string {
   if (ascii.length >= 3) return ascii;
   if (/portfolio/iu.test(brief)) return 'portfolio';
   if (/รองเท้า|shoe/iu.test(brief)) return 'shoe-store';
-  if (/todo/iu.test(brief)) return 'todo-app';
   if (/dashboard/iu.test(brief)) return 'dashboard';
   return inferProjectType(brief) === 'WEBSITE' ? 'website' : 'software';
 }
@@ -41,7 +42,7 @@ export function createBuildPlan(input: {
   goalId?: string;
   sessionId?: string;
 }): BuildPlan {
-  const brief = input.brief.trim().slice(0, 400);
+  const brief = input.brief.trim().slice(0, 8_000);
   const projectType = inferProjectType(brief);
   const slug = slugFromBrief(brief);
   const title = titleFrom(brief, projectType);
@@ -83,6 +84,7 @@ export function createBuildPlan(input: {
 }
 
 function titleFrom(brief: string, projectType: BuildProjectType): string {
+  if (/slide|deck|สไลด์|พรีเซนต์/iu.test(brief)) return 'JARVIS Capability Deck';
   if (/portfolio/iu.test(brief)) return 'Portfolio';
   if (/รองเท้า|shoe/iu.test(brief)) return 'Shoe Store';
   if (/todo/iu.test(brief)) return 'Todo App';
@@ -92,15 +94,23 @@ function titleFrom(brief: string, projectType: BuildProjectType): string {
 }
 
 function requirementsFor(brief: string, projectType: BuildProjectType): string[] {
+  if (/slide|deck|สไลด์|พรีเซนต์/iu.test(brief)) {
+    return [
+      `Owner brief: ${brief.slice(0, 2_000)}`,
+      'Seven-slide cinematic presentation of current JARVIS capabilities.',
+      'React + Vite, Thai-first copy, motion and 3D interactive feeling.',
+      'Plan first, then owner permission, then files/install/build/test/localhost preview.',
+    ];
+  }
   if (projectType === 'WEBSITE') {
     return [
-      `Owner brief: ${brief.slice(0, 160)}`,
+      `Owner brief: ${brief.slice(0, 2_000)}`,
       'Intro, work, and contact sections.',
       'Responsive layout.',
     ];
   }
   return [
-    `Owner brief: ${brief.slice(0, 160)}`,
+    `Owner brief: ${brief.slice(0, 2_000)}`,
     'Runnable local project skeleton.',
     'A smoke test file for later verification.',
   ];

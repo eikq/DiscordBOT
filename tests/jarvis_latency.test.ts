@@ -44,7 +44,7 @@ test('interactive profile does not apply the voice GPU cap', () => {
   const profile = applyJarvisInteractiveProfile(env);
   assert.equal(profile.id, 'interactive');
   assert.equal(profile.keepAlive, '30m');
-  assert.equal(profile.contextTokens, 4096);
+  assert.equal(profile.contextTokens, 24576);
   assert.equal(profile.timeoutMs, 120000);
   assert.equal(profile.gpuLayers, 999);
   assert.equal(profile.voiceGpuCapApplied, false);

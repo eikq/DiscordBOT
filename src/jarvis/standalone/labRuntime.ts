@@ -98,7 +98,7 @@ import {
   rememberOwnerPreference,
 } from '../memory/ownerSemantics';
 import { extractDurableOwnerMemory } from '../memory/durableExtract';
-import { buildJarvisContext } from '../memory/contextBuilder';
+import { buildJarvisContext, CONTEXT_RECENT_TURN_LIMIT } from '../memory/contextBuilder';
 import { projectObsidianVault } from '../memory/obsidianProjection';
 import { BuildPlanStore } from '../build/planStore';
 import { isPlanApprovalUtterance } from '../build/planner';
@@ -2111,7 +2111,7 @@ export class JarvisLabRuntime {
     const view = conversationView(conversation);
     const built = buildJarvisContext({
       ownerRequest,
-      recentTurns: history?.recentTurns(sessionId, 10),
+      recentTurns: history?.recentTurns(sessionId, CONTEXT_RECENT_TURN_LIMIT),
       sessionSummary: history?.getSession(sessionId)?.summary,
       activeGoal: conversation.activeGoalId
         ? { id: conversation.activeGoalId }

@@ -107,6 +107,10 @@ export function interpretDiscourse(
     return act(state?.pendingPlanReview ? 'APPROVE_PLAN' : 'CONTINUE');
   }
 
+  if (isNewProject(raw, state)) {
+    return { ...act('NEW_PROJECT'), change: raw };
+  }
+
   const conditional = parseConditional(raw, state);
   if (conditional) return conditional;
   const chain = parseOperationChain(raw);
@@ -139,6 +143,7 @@ export function interpretDiscourse(
     }
     return { ...act('CORRECT'), change: raw };
   }
+
   if (isPlanRequest(raw)) return act('PLAN_REQUEST');
 
   if (isDestructiveAmbiguous(raw)) {
@@ -151,9 +156,6 @@ export function interpretDiscourse(
     };
   }
 
-  if (isNewProject(raw, state)) {
-    return { ...act('NEW_PROJECT'), change: raw };
-  }
   if (isResearchRecommend(raw, state)) {
     return { ...act('RESEARCH'), researchQuery: raw, change: raw, recommend: true };
   }
@@ -204,6 +206,7 @@ const PREEMPT_PENDING_GOAL: ReadonlySet<DiscourseAct> = new Set([
   'RESEARCH',
   'PLAN_REQUEST',
   'MODIFY_PROJECT',
+  'NEW_PROJECT',
 ]);
 
 export function discoursePreemptsPendingGoal(discourse: DiscourseInterpretation): boolean {
@@ -308,6 +311,7 @@ function isRestartPreview(text: string): boolean {
 }
 
 function isPreview(text: string, state: ConversationState | null | undefined): boolean {
+  if (isNewProject(text, state)) return false;
   if (/\.(jsx?|tsx?|css|json)\b|history|ประวัติ/iu.test(text)) return false;
   if (/อยู่ port|port ไหน|เปิดอยู่ไหม|preview อยู่ไหม/iu.test(text)) return false;
   if (/เปิดให้ดู|เปิดดู|show me(?: the site)?|open (?:the |its )?preview|เปิด preview|preview ของมัน|preview(?: หน่อย)?$/iu.test(text)) return true;
@@ -423,12 +427,30 @@ function isRestoreTopic(text: string, state: ConversationState | null | undefine
   return false;
 }
 
+function isSoftwareCreateBrief(text: string): boolean {
+  return /BUILD_WEBSITE|ProjectWorkspace|React\s*\+\s*Vite/iu.test(text)
+    && /สร้างเว็บ|ทำเว็บ|สร้างโปรเจกต์|slide deck|สไลด์|พรีเซนต์|เว็บพรีเซนต์/iu.test(text);
+}
+
 function isNewProject(text: string, state: ConversationState | null | undefined): boolean {
-  const create = /อยากทำเว็บ|สร้างเว็บ|ทำเว็บ|build (?:a |an )?(?:web|site|portfolio)|สร้างแอป|สร้างแอพ|สร้าง todo|todo app เล็ก/iu.test(text);
+  const create = /อยากทำเว็บ|สร้างเว็บ|ทำเว็บ|build (?:a |an )?(?:web|site|portfolio)|สร้างแอป|สร้างแอพ|สร้าง todo|todo app เล็ก|BUILD_WEBSITE|slide deck|สไลด์|พรีเซนต์|เว็บพรีเซนต์|สร้างโปรเจกต์จริง|ProjectWorkspace|React\s*\+\s*Vite/iu.test(text);
   if (!create) return false;
   if (/อีกอัน|อีกโปรเจกต์|โปรเจกต์ใหม่|another (?:app|site|project)/iu.test(text)) return true;
   if (!state?.activeProjectSlug && !state?.pendingPlanReview) return true;
   if (/portfolio ใหม่|เว็บ .+ ใหม่/iu.test(text) && !/build ใหม่|rebuild/iu.test(text)) return true;
+  return isDistinctWebsiteProduct(text, state);
+}
+
+function isDistinctWebsiteProduct(text: string, state: ConversationState | null | undefined): boolean {
+  const active = `${state?.activeProjectSlug || ''} ${state?.projects.find(item => item.slug === state?.activeProjectSlug)?.label || ''}`;
+  const wantsSlides = /slide|deck|สไลด์|พรีเซนต์/iu.test(text);
+  const wantsTodo = /todo/iu.test(text);
+  const activeSlides = /slide|deck|present/iu.test(active);
+  const activeTodo = /todo/iu.test(active);
+  const activePortfolio = /portfolio/iu.test(active);
+  if (wantsSlides && !activeSlides) return true;
+  if (wantsTodo && !activeTodo && !wantsSlides) return true;
+  if (/BUILD_WEBSITE|ProjectWorkspace|React\s*\+\s*Vite/iu.test(text) && (wantsSlides || wantsTodo) && activePortfolio) return true;
   return false;
 }
 
@@ -472,7 +494,7 @@ function isAccumulate(text: string, state: ConversationState | null | undefined)
 }
 
 function isModify(text: string, state: ConversationState | null | undefined): boolean {
-  if (isPlanRequest(text)) return false;
+  if (isNewProject(text, state) || isPlanRequest(text)) return false;
   if (!hasActiveSoftware(state) && !/เว็บนี้|โปรเจกต์นี้|มัน|อันนี้|ตรงนั้น|ตรงนี้/iu.test(text)) return false;
   return /เพิ่ม|แก้|เปลี่ยน|ใส่|ปรับ|hover|animation|dark mode|ทำตามนั้น|ให้มันดู|layout|column|ตรงนั้นแหละ|ตรงนี้แหละ|โล่ง|ว่างไป|แน่นขึ้น|navbar|footer|ใช้สีเดิม|สีเดิม|อยู่ก่อน|before /iu.test(text);
 }
@@ -540,6 +562,7 @@ function isSelfGrantQuery(text: string): boolean {
 }
 
 function parseConditional(text: string, state?: ConversationState | null): DiscourseInterpretation | null {
+  if (isSoftwareCreateBrief(text)) return null;
   if (!/ถ้า/.test(text) && !/\bif\b/iu.test(text)) return null;
   const acts = chainActs(text);
   if (acts.length >= 2) return chainInterpretation(text, acts);
@@ -667,6 +690,7 @@ function parseConditional(text: string, state?: ConversationState | null): Disco
 }
 
 function parseOperationChain(text: string): DiscourseInterpretation | null {
+  if (isSoftwareCreateBrief(text)) return null;
   if (!/แล้ว|then|เสร็จแล้ว|ผ่านแล้วให้|and then/iu.test(text)) return null;
   const acts = chainActs(text);
   if (acts.length < 2) return null;
@@ -702,6 +726,7 @@ function chainInterpretation(text: string, acts = chainActs(text)): DiscourseInt
 }
 
 function parseQueue(text: string): string[] | null {
+  if (/BUILD_WEBSITE|สร้างเว็บ|ProjectWorkspace|slide deck|สไลด์|พรีเซนต์/iu.test(text)) return null;
   const lines = text.split(/\r?\n/).map(line => line.replace(/^[-*•\d.)\s]+/, '').trim()).filter(Boolean);
   if (lines.length >= 3 && lines.length <= 12) return lines;
   return null;

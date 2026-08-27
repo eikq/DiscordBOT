@@ -14,6 +14,12 @@ import type { DevServerRegistry } from '../project/devServer';
 import { ProjectWorkspace } from '../project/workspace';
 import { writeWebsite } from '../project/siteRender';
 import type { PreviewArtifact } from '../project/types';
+import {
+  createOpenCodeHarness,
+  shouldUseOpenCodeHarness,
+  type OpenCodeHarness,
+  type OpenCodeHarnessResult,
+} from '../coding/openCodeHarness';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -24,6 +30,7 @@ export type ApprovedBuildRuntime = {
   events?: JarvisEventBus;
   now?: () => number;
   mode?: 'create' | 'revise';
+  openCode?: OpenCodeHarness;
 };
 
 export type ApprovedBuildResult = {
@@ -37,6 +44,7 @@ export type ApprovedBuildResult = {
   failedStage?: string;
   failureClass?: string;
   correction?: ReturnType<typeof correctionProposalFromFailure>;
+  openCode?: OpenCodeHarnessResult;
 };
 
 export async function executeApprovedBuild(
@@ -61,11 +69,28 @@ export async function executeApprovedBuild(
 
   emit('PLAN_STAGE_STARTED', 'scaffolding workspace', { stage: 'SCAFFOLD' }, 'EXECUTING');
   const mode = deps.mode === 'revise' && deps.workspace.exists(plan.slug) ? 'revise' : 'create';
-  const files = writeWebsite(plan, deps.workspace, mode);
+  let files = writeWebsite(plan, deps.workspace, mode);
   emit('ARTIFACT_CREATED', 'workspace files written', { stage: 'SCAFFOLD', files, mode }, 'EXECUTING');
 
   const workspace = deps.workspace.rootOf(plan.slug);
   const result: ApprovedBuildResult = { plan, files, workspace };
+
+  if (mode === 'create' && shouldUseOpenCodeHarness(plan.brief)) {
+    const harness = deps.openCode ?? createOpenCodeHarness();
+    result.openCode = await harness.run({
+      workspaceDir: workspace,
+      brief: plan.brief,
+      title: plan.title,
+    });
+    if (result.openCode.status === 'completed') {
+      result.files = deps.workspace.listFiles(plan.slug);
+      files = result.files;
+    }
+    emit('ARTIFACT_UPDATED', `opencode ${result.openCode.status}`, {
+      stage: 'OPENCODE',
+      openCode: result.openCode,
+    }, 'EXECUTING');
+  }
   const nodeModules = path.join(workspace, 'node_modules');
   const skipInstall = mode === 'revise' && fs.existsSync(nodeModules);
 

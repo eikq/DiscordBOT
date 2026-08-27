@@ -60,7 +60,7 @@ function defaultInputFor(id: string, task: WorkTask, step: PlanStep): Record<str
     return { query: String(extra.query || task.objective).slice(0, 200), ...extra };
   }
   if (id === 'software.planBuild' || id === 'software.applyBuild') {
-    const brief = String(extra.brief || extra.query || task.objective).slice(0, 400);
+    const brief = String(extra.brief || extra.query || task.objective).slice(0, 8_000);
     return { brief, query: brief, ...extra };
   }
   return extra;

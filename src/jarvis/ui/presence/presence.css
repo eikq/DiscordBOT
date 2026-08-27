@@ -298,13 +298,48 @@
   position: absolute;
   left: 1.6rem;
   top: 50%;
-  z-index: 6;
+  z-index: 90;
   transform: translateY(-40%);
   width: min(24rem, 36vw);
+  max-height: min(72vh, calc(100vh - 8rem));
+  overflow: auto;
   padding: 1rem;
   border: 1px solid rgb(240 195 106 / 0.32);
   background: rgb(8 10 14 / 0.88);
   backdrop-filter: blur(18px);
+}
+
+.jp-approve-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  background: rgb(1 4 10 / 0.78);
+  pointer-events: auto;
+}
+
+.jp-approve-layer .jp-approve {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+}
+
+.jp:has(.jp-approve-layer) .jp-context,
+.jp:has(.jp-approve-layer) .jp-context-debug,
+.jp:has(.jp-approve-layer) .jp-caption,
+.jp[data-permission="true"] .jp-context,
+.jp[data-permission="true"] .jp-context-debug,
+.jp[data-permission="true"] .jp-caption {
+  display: none !important;
+}
+
+.jp:has(.jp-approve-layer) .jp-dock,
+.jp[data-permission="true"] .jp-dock {
+  z-index: 4;
+  pointer-events: none;
 }
 
 .jp-approve header {
@@ -591,13 +626,16 @@
 @media (max-width: 900px) {
   .jp-core { inset: 16% 6% 28%; }
   .jp-hud,
-  .jp-approve,
   .jp-build,
   .jp-history {
     position: static;
     transform: none;
     width: auto;
     margin: 0 1rem;
+  }
+  .jp-approve-layer {
+    inset: 0;
+    padding: 1rem;
   }
   .jp-orbit { display: none; }
 }

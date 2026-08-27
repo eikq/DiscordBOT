@@ -2,7 +2,9 @@ import type { BuildPlan } from '../build/types';
 import { ProjectWorkspace } from './workspace';
 
 export function writeWebsite(plan: BuildPlan, workspace: ProjectWorkspace, mode: 'create' | 'revise' = 'create'): string[] {
-  const files = plan.projectType === 'WEBSITE' ? portfolioFiles(plan) : todoFiles(plan);
+  const files = wantsPresentation(plan)
+    ? presentationFiles(plan)
+    : plan.projectType === 'WEBSITE' ? portfolioFiles(plan) : todoFiles(plan);
   workspace.create(plan);
   const written: string[] = [];
   for (const [relative, contents] of files) {
@@ -47,6 +49,272 @@ function portfolioFiles(plan: BuildPlan): Array<[string, string]> {
     ['src/styles.css', portfolioStyles(plan)],
     ['tests/smoke.test.mjs', smokeTest(plan, 'portfolio')],
   ];
+}
+
+function wantsPresentation(plan: BuildPlan): boolean {
+  return /slide|deck|สไลด์|พรีเซนต์|capability deck|เว็บพรีเซนต์/iu.test(
+    `${plan.brief}\n${plan.requirements.join('\n')}\n${plan.slug}\n${plan.title}`,
+  );
+}
+
+function presentationFiles(plan: BuildPlan): Array<[string, string]> {
+  return [
+    ['README.md', readme(plan)],
+    ['package.json', packageJson(plan)],
+    ['vite.config.js', viteConfig()],
+    ['index.html', indexHtml(plan)],
+    ['src/main.jsx', mainJsx()],
+    ['src/App.jsx', presentationApp(plan)],
+    ['src/styles.css', presentationStyles()],
+    ['tests/smoke.test.mjs', smokeTest(plan, 'presentation')],
+  ];
+}
+
+function presentationApp(plan: BuildPlan): string {
+  const slides = [
+    {
+      kicker: '01 / IDENTITY',
+      title: 'JARVIS ตอนนี้',
+      body: 'นี่คือ JARVIS บนเครื่องคุณ ไม่ใช่คลาวด์เอเจนต์ไร้ขอบเขต วางแผน ขอ permission แล้วสร้างโปรเจกต์ใน ProjectWorkspace ได้',
+    },
+    {
+      kicker: '02 / PLAN',
+      title: 'วางแผนก่อนลงมือ',
+      body: 'BuildPlan มาก่อนไฟล์ ผมอธิบายสแต็ก ขอบเขต และสิ่งที่จะทำ แผนไม่ใช่สิทธิ์รัน',
+    },
+    {
+      kicker: '03 / PERMISSION',
+      title: 'Permission ไม่ใช่การเดา',
+      body: 'สร้างไฟล์ ติดตั้ง dependency รัน build/test และเปิด preview ได้เมื่อคุณอนุญาตงานนี้ ไม่มี unrestricted shell',
+    },
+    {
+      kicker: '04 / WORKSPACE',
+      title: 'ProjectWorkspace จริง',
+      body: 'งานสร้างเว็บอยู่ใต้โฟลเดอร์โปรเจกต์ที่จำกัดขอบเขต ไม่เขียนทั้งเครื่อง และไม่ถือว่าพิมพ์แล้วแปลว่าสร้างเสร็จ',
+    },
+    {
+      kicker: '05 / VERIFY',
+      title: 'ติดตั้ง / build / test',
+      body: 'หลังอนุญาต ผมติดตั้ง dependency, รัน build, แล้วตรวจ smoke test ก่อนบอกว่าพร้อมดู',
+    },
+    {
+      kicker: '06 / PREVIEW',
+      title: 'localhost preview',
+      body: 'เมื่อผ่านการตรวจ ผมเปิด dev server บน 127.0.0.1 ให้คุณดูของจริง ไม่ใช่แค่อธิบายในแชท',
+    },
+    {
+      kicker: '07 / LIMITS',
+      title: 'สิ่งที่ยังไม่ทำ',
+      body: 'ยังไม่ deploy สาธารณะ ไม่คลิก/พิมพ์แทนคุณ และไม่สร้างไฟล์ก่อนคุณอนุมัติแผน',
+    },
+  ];
+  return `import { useEffect, useMemo, useState } from 'react';
+
+const TITLE = '${escapeJs(plan.title)}';
+const SLIDES = ${JSON.stringify(slides, null, 2)};
+
+export default function App() {
+  const [index, setIndex] = useState(0);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const slide = SLIDES[index];
+  const reduced = useMemo(() => (
+    typeof window !== 'undefined'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ), []);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'ArrowRight' || event.key === ' ') {
+        event.preventDefault();
+        setIndex(current => Math.min(SLIDES.length - 1, current + 1));
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setIndex(current => Math.max(0, current - 1));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  return (
+    <main
+      className="deck"
+      data-deck="jarvis"
+      onPointerMove={event => {
+        if (reduced) return;
+        const box = event.currentTarget.getBoundingClientRect();
+        setTilt({
+          x: ((event.clientY - box.top) / box.height - 0.5) * -10,
+          y: ((event.clientX - box.left) / box.width - 0.5) * 14,
+        });
+      }}
+      onPointerLeave={() => setTilt({ x: 0, y: 0 })}
+    >
+      <div className="deck__grain" aria-hidden="true" />
+      <header className="deck__top">
+        <p className="deck__mark">JARVIS · LOCAL CAPABILITY DECK</p>
+        <p className="deck__count">{String(index + 1).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}</p>
+      </header>
+      <section
+        className="slide"
+        data-slide={index + 1}
+        style={{
+          transform: reduced
+            ? 'none'
+            : 'rotateX(' + tilt.x + 'deg) rotateY(' + tilt.y + 'deg)',
+        }}
+      >
+        <p className="slide__kicker">{slide.kicker}</p>
+        <h1>{index === 0 ? TITLE : slide.title}</h1>
+        <p className="slide__body">{slide.body}</p>
+      </section>
+      <nav className="deck__nav" aria-label="สไลด์">
+        <button type="button" onClick={() => setIndex(current => Math.max(0, current - 1))} disabled={index === 0}>ก่อนหน้า</button>
+        <ol>
+          {SLIDES.map((_, itemIndex) => (
+            <li key={itemIndex}>
+              <button
+                type="button"
+                className={itemIndex === index ? 'is-active' : undefined}
+                aria-current={itemIndex === index ? 'true' : undefined}
+                onClick={() => setIndex(itemIndex)}
+              >
+                {itemIndex + 1}
+              </button>
+            </li>
+          ))}
+        </ol>
+        <button type="button" onClick={() => setIndex(current => Math.min(SLIDES.length - 1, current + 1))} disabled={index === SLIDES.length - 1}>ถัดไป</button>
+      </nav>
+    </main>
+  );
+}
+`;
+}
+
+function presentationStyles(): string {
+  return `:root {
+  color-scheme: dark;
+  --void: #05070d;
+  --ink: #f4efe2;
+  --amber: #f4c56d;
+  --ice: #8be7ff;
+  --plate: rgba(10, 14, 24, 0.78);
+  font-family: "IBM Plex Sans Thai", "Sora", "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(244, 197, 109, 0.16), transparent 32%),
+    radial-gradient(circle at 82% 88%, rgba(139, 231, 255, 0.12), transparent 36%),
+    var(--void);
+  color: var(--ink);
+}
+.deck {
+  min-height: 100vh;
+  padding: 6vh 7vw 8vh;
+  perspective: 1400px;
+  overflow: hidden;
+  position: relative;
+}
+.deck__grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0 2px,
+    rgba(255,255,255,0.03) 2px 3px
+  );
+}
+.deck__top, .deck__nav {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.deck__mark, .deck__count, .slide__kicker {
+  letter-spacing: 0.22em;
+  font-size: 0.72rem;
+  color: var(--ice);
+  text-transform: uppercase;
+}
+.slide {
+  position: relative;
+  z-index: 1;
+  margin: 8vh auto;
+  max-width: 52rem;
+  min-height: 48vh;
+  padding: 8vh 6vw;
+  border: 1px solid rgba(244, 197, 109, 0.32);
+  background:
+    linear-gradient(180deg, rgba(244, 197, 109, 0.08), transparent 28%),
+    var(--plate);
+  box-shadow: 0 40px 90px rgb(0 0 0 / 0.45), inset 0 0 0 1px rgb(139 231 255 / 0.08);
+  transform-style: preserve-3d;
+  transition: transform 160ms ease;
+}
+.slide::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(139, 231, 255, 0.14);
+  pointer-events: none;
+}
+h1 {
+  margin: 0.6rem 0 1.2rem;
+  font-size: clamp(2.4rem, 8vw, 5.6rem);
+  line-height: 0.92;
+  max-width: 12ch;
+  color: var(--amber);
+}
+.slide__body {
+  max-width: 38ch;
+  font-size: 1.12rem;
+  line-height: 1.7;
+  color: #d7d0c2;
+}
+.deck__nav button {
+  font: inherit;
+  border: 1px solid rgba(139, 231, 255, 0.28);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+}
+.deck__nav button:disabled { opacity: 0.35; }
+.deck__nav ol {
+  display: flex;
+  gap: 0.4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.deck__nav ol button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 0.4rem;
+}
+.deck__nav ol button.is-active {
+  background: var(--amber);
+  color: #160f05;
+  border-color: var(--amber);
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide { transition: none; }
+}
+@media (max-width: 720px) {
+  .slide { margin: 4vh 0; padding: 6vh 7vw; }
+  .deck__nav { flex-wrap: wrap; }
+}
+`;
 }
 
 function pagesOf(plan: BuildPlan): string[] {
@@ -300,8 +568,8 @@ h1 { font-size: clamp(2.4rem, 8vw, 5.4rem); max-width: 12ch; }
 `;
 }
 
-function smokeTest(plan: BuildPlan, kind: 'todo' | 'portfolio'): string {
-  const marker = kind === 'todo' ? 'todo' : 'site';
+function smokeTest(plan: BuildPlan, kind: 'todo' | 'portfolio' | 'presentation'): string {
+  const marker = kind === 'todo' ? 'todo' : kind === 'presentation' ? 'slide' : 'site';
   return `import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';

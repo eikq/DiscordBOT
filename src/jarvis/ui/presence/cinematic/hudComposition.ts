@@ -110,6 +110,18 @@ export function permissionSupersedesResearch(slot: PresenceHudSlot | null): bool
   return Boolean(slot && (slot.kind === 'permission' || slot.priority === 'PERMISSION' || slot.priority === 'EMERGENCY'));
 }
 
+export function permissionHidesContextChrome(input: {
+  waitingPermission?: boolean;
+  hudKind?: string;
+  phase?: string;
+}): boolean {
+  return Boolean(
+    input.waitingPermission
+    || input.hudKind === 'permission'
+    || input.phase === 'WAITING_OWNER',
+  );
+}
+
 export function compareHudPriority(a: PresenceHudPriority, b: PresenceHudPriority): number {
   return PRIORITY_RANK[a] - PRIORITY_RANK[b];
 }

@@ -25,6 +25,12 @@ test('self-knowledge classifier routes setup, permission, gap, and availability 
   assert.equal(selfKnowledgeQuestionKind('What do you need from me to do X?'), 'GAP_EXPLANATION');
   assert.equal(selfKnowledgeQuestionKind('What can you do?'), 'CAPABILITY_SUMMARY');
   assert.equal(selfKnowledgeQuestionKind('hello there'), undefined);
+  assert.equal(selfKnowledgeQuestionKind([
+    'ตอนนี้คุณคือ JARVIS ตัวไหน และคุณทำอะไรให้ผมได้บ้าง',
+    'นี่คือ BUILD_WEBSITE goal',
+    'สร้างเว็บพรีเซนต์แบบ slide deck 7 สไลด์ ใน ProjectWorkspace',
+    'ใช้ React + Vite',
+  ].join('\n')), undefined);
 });
 
 test('Goal Catalog maps setup and gap questions to Self Knowledge handlers', async () => {

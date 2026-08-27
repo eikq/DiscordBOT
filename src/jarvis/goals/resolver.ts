@@ -442,12 +442,18 @@ function isWorkspaceIntent(text: string): boolean {
 }
 
 export function isBuildWebsiteIntent(text: string): boolean {
-  return /สร้างเว็บ|ทำเว็บ|เว็บไซต์|portfolio|landing page|ร้าน(?:ค้า)?|ขายรองเท้า|build (?:a |an )?(?:web(?:site)?|portfolio)|create (?:a |an )?(?:web(?:site)?|portfolio)/iu.test(text);
+  return /สร้างเว็บ|ทำเว็บ|เว็บไซต์|portfolio|landing page|ร้าน(?:ค้า)?|ขายรองเท้า|build (?:a |an )?(?:web(?:site)?|portfolio)|create (?:a |an )?(?:web(?:site)?|portfolio)|BUILD_WEBSITE|ProjectWorkspace|slide deck|สไลด์|พรีเซนต์|เว็บพรีเซนต์|React\s*\+\s*Vite/iu.test(text);
 }
 
 export function isBuildSoftwareIntent(text: string): boolean {
   if (isBuildWebsiteIntent(text)) return false;
   return /สร้างแอป|สร้างแอพ|build (?:a |an )?(?:app|application|todo|dashboard)|create (?:a |an )?(?:app|todo|dashboard)|todo สำหรับมือถือ|dashboard ดูสถานะ|software project/iu.test(text);
+}
+
+export function isSoftwareWorkRequest(text: string): boolean {
+  if (isBuildWebsiteIntent(text) || isBuildSoftwareIntent(text)) return true;
+  return /BUILD_WEBSITE|สร้างโปรเจกต์จริง|ลงมือทำจริง|BuildPlan|localhost preview|ติดตั้ง dependency/iu.test(text)
+    && /สร้าง|ทำ|build|create|plan|วางแผน|ลงมือ/iu.test(text);
 }
 
 function extractWorkspaceQuery(text: string): string {

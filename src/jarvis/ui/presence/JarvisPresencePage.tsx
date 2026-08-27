@@ -21,6 +21,7 @@ import { PresenceCoreFallback } from './cinematic/PresenceCoreFallback';
 import { PresenceSpatialHud } from './cinematic/PresenceSpatialHud';
 import { pushActivityItem, visibleActivityItems, type PresenceActivityItem } from './cinematic/activityFeed';
 import { parsePresenceReplay } from './cinematic/cinematicReplay';
+import { permissionHidesContextChrome } from './cinematic/hudComposition';
 import { composePresenceVisual, latestResearchStage, researchActiveFromRuntime } from './cinematic/presenceVisualModel';
 import { inspectDragEnabled, visualDebugEnabled } from './cinematic/pointerAuthority';
 import { pcmAmplitude } from './cinematic/pcmAmplitude';
@@ -932,6 +933,11 @@ export default function JarvisPresencePage() {
     reducedMotion,
   });
   const showPermission = Boolean(pendingRisk) && (approvalTarget.kind === 'confirm' || approvalTarget.kind === 'grant' || visual.phase === 'WAITING_OWNER');
+  const hideContextChrome = permissionHidesContextChrome({
+    waitingPermission: showPermission || Boolean(commandCenter?.permission.waiting || pendingConfirmation),
+    hudKind: visual.hud?.kind,
+    phase: visual.phase,
+  });
   const approvalLabel = approvalTarget.kind === 'confirm' || approvalTarget.kind === 'grant' ? approvalTarget.label : 'this request';
   const answer = draft || response?.presented.text || response?.workOutcome?.text;
   const tone = visual.phase === 'EMERGENCY_STOP' || visual.phase === 'CRITICAL' ? 'critical' : visual.phase === 'WARNING' || visual.phase === 'WAITING_OWNER' ? 'warning' : visual.phase === 'IDLE' ? 'ok' : undefined;
@@ -974,7 +980,7 @@ export default function JarvisPresencePage() {
   ) : <PresenceCoreFallback phase={visual.phase} />;
 
   return (
-    <div className="jp jai" data-cinematic="true" data-edition={status?.edition || 'owner'} data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase}>
+    <div className="jp jai" data-cinematic="true" data-edition={status?.edition || 'owner'} data-ambient={ambientNow ? 'true' : 'false'} data-hidden={documentHidden ? 'true' : 'false'} data-phase={visual.phase} data-permission={hideContextChrome ? 'true' : 'false'}>
       {visual.fixtureLabel ? <div className="jp-fixture" role="status">{visual.fixtureLabel}</div> : null}
       <div className="jp-orbit" aria-hidden="true" />
       <header className="jp-mark">
@@ -1042,35 +1048,39 @@ export default function JarvisPresencePage() {
         }}
       />
       {visual.fixture === 'waiting-owner' && !pendingRisk ? (
-        <aside className="jp-approve" aria-label="Owner approval fixture">
-          <header>
-            <span>Owner authority required</span>
-            <em className="jp-sim">DEVELOPMENT FIXTURE</em>
-          </header>
-          <dl>
-            <div><dt>Action</dt><dd>Modify three project files</dd></div>
-            <div><dt>Risk</dt><dd>LOW</dd></div>
-            <div><dt>Target</dt><dd>Local recovery sandbox</dd></div>
-            <div><dt>Changes</dt><dd>Three declared text files</dd></div>
-            <div><dt>Rollback</dt><dd>Available</dd></div>
-          </dl>
-          <p className="jp-approve__ask">I need to modify three project files. Risk is low and a rollback checkpoint is available. Proceed?</p>
-          <div className="jp-approve__row">
-            <button type="button" className="jp-btn jp-btn--deny" disabled>Deny</button>
-            <button type="button" className="jp-btn jp-btn--allow" disabled>Allow once</button>
-          </div>
-          <p className="jp-approve__note">Fixture only. This overlay cannot grant authority.</p>
-        </aside>
+        <div className="jp-approve-layer">
+          <aside className="jp-approve" aria-label="Owner approval fixture">
+            <header>
+              <span>Owner authority required</span>
+              <em className="jp-sim">DEVELOPMENT FIXTURE</em>
+            </header>
+            <dl>
+              <div><dt>Action</dt><dd>Modify three project files</dd></div>
+              <div><dt>Risk</dt><dd>LOW</dd></div>
+              <div><dt>Target</dt><dd>Local recovery sandbox</dd></div>
+              <div><dt>Changes</dt><dd>Three declared text files</dd></div>
+              <div><dt>Rollback</dt><dd>Available</dd></div>
+            </dl>
+            <p className="jp-approve__ask">I need to modify three project files. Risk is low and a rollback checkpoint is available. Proceed?</p>
+            <div className="jp-approve__row">
+              <button type="button" className="jp-btn jp-btn--deny" disabled>Deny</button>
+              <button type="button" className="jp-btn jp-btn--allow" disabled>Allow once</button>
+            </div>
+            <p className="jp-approve__note">Fixture only. This overlay cannot grant authority.</p>
+          </aside>
+        </div>
       ) : showPermission && pendingRisk ? (
-        <PresenceApproval
-          model={pendingRisk}
-          busy={busy || opsBusy}
-          spokenPrompt={`I need approval for ${approvalLabel}. Proceed?`}
-          proposal={pendingConfirmation?.permissionProposal}
-          onDeny={() => { void settleApproval('deny'); }}
-          onAllow={() => { void settleApproval('allow', 'THIS_GOAL'); }}
-          onAllowOnce={() => { void settleApproval('allow', 'ONCE'); }}
-        />
+        <div className="jp-approve-layer">
+          <PresenceApproval
+            model={pendingRisk}
+            busy={busy || opsBusy}
+            spokenPrompt={`I need approval for ${approvalLabel}. Proceed?`}
+            proposal={pendingConfirmation?.permissionProposal}
+            onDeny={() => { void settleApproval('deny'); }}
+            onAllow={() => { void settleApproval('allow', 'THIS_GOAL'); }}
+            onAllowOnce={() => { void settleApproval('allow', 'ONCE'); }}
+          />
+        </div>
       ) : (
         <PresenceSpatialHud
           slot={visual.hud}
@@ -1107,7 +1117,7 @@ export default function JarvisPresencePage() {
       ) : null}
       {!ambientNow ? (
         <div className="jp-dock">
-          {!ambientNow && (conversation?.project || conversation?.goal || conversation?.current) ? (
+          {!hideContextChrome && (conversation?.project || conversation?.goal || conversation?.current) ? (
             <aside className="jp-context" aria-label="JARVIS context">
               <span>JARVIS CONTEXT</span>
               {conversation.project ? <p>Working on <strong>{conversation.project}</strong></p> : null}
@@ -1119,7 +1129,7 @@ export default function JarvisPresencePage() {
               {conversation.remembering?.length ? <p>Remembering <strong>{conversation.remembering.slice(0, 3).join(' · ')}</strong></p> : null}
             </aside>
           ) : null}
-          {contextDebug && conversation?.debug ? (
+          {!hideContextChrome && contextDebug && conversation?.debug ? (
             <aside className="jp-context-debug" aria-label="Context debug">
               <span>{[
                 conversation.debug.intent,

@@ -1639,3 +1639,37 @@ test('leftover plans do not steal research recall, in-sentence ordinals, or heal
   assert.equal(applyHome?.capabilityId, SOFTWARE_APPLY_BUILD);
   assert.ok(String(applyHome?.arguments?.brief || '').length <= 400);
 });
+
+test('leftover portfolio waiting-plan does not swallow a mixed Thai BUILD_WEBSITE deck brief', () => {
+  const leftover = softwareState({
+    pendingPlanReview: { planId: 'plan_portfolio', goalId: 'BUILD_WEBSITE', title: 'Portfolio' },
+  });
+  const brief = [
+    'ตอนนี้คุณคือ JARVIS ตัวไหน และคุณทำอะไรให้ผมได้บ้าง',
+    'ถ้าผมให้คุณสร้างโปรเจกต์จริง คุณสามารถวางแผน ขอ permission แล้วลงมือทำได้ไหม',
+    'สร้างเว็บ todo แบบ modern ให้ผม',
+    'เริ่มจากวางแผนก่อน แล้วค่อยขอ permission ก่อนลงมือทำจริง',
+    'สร้างเว็บพรีเซนต์แบบ slide deck 7 สไลด์',
+    'สำหรับนำเสนอความสามารถของ JARVIS ในตอนนี้',
+    'นี่คือ BUILD_WEBSITE goal',
+    'ให้สร้าง project จริงใน ProjectWorkspace ไม่ใช่แค่ตอบข้อความ',
+    'ใช้ React + Vite',
+    'มี motion และ 3D interactive feeling',
+    'ดีไซน์ futuristic / clean / cinematic',
+    'ภาษาไทย อ่านง่าย',
+    'เริ่มจาก BuildPlan',
+    'จากนั้นขอ Permission',
+    'สร้างไฟล์ ติดตั้ง dependency ทดสอบ build',
+    'และเปิด localhost preview ให้ผมดู',
+  ].join('\n');
+  const discourse = interpretDiscourse(brief, leftover);
+  assert.equal(discourse.act, 'NEW_PROJECT');
+  assert.equal(discoursePreemptsPendingGoal(discourse), true);
+  const bound = bindDiscourseToIntent(discourse, leftover, brief);
+  assert.equal(bound?.capabilityId, SOFTWARE_PLAN_BUILD);
+  assert.match(String(bound?.arguments?.brief || ''), /React \+ Vite/);
+  assert.match(String(bound?.arguments?.brief || ''), /7 สไลด์|slide deck/i);
+  assert.equal(interpretDiscourse('เปิด preview', leftover).act, 'PREVIEW');
+  const preview = bindDiscourseToIntent(interpretDiscourse('เปิด preview', leftover), leftover, 'เปิด preview');
+  assert.equal(preview?.capabilityId, PROJECT_START_DEV_SERVER);
+});

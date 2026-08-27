@@ -221,8 +221,8 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
     capabilityId: SOFTWARE_PLAN_BUILD,
     acceptedGoalFields: ['brief'],
     adapt: input => ({
-      brief: boundedString(input.brief, 'brief', 400),
-      query: boundedString(input.brief, 'brief', 400),
+      brief: boundedString(input.brief, 'brief', 8000),
+      query: boundedString(input.brief, 'brief', 8000),
     }),
   });
   registry.register({
@@ -231,7 +231,7 @@ export function createDefaultInputAdapterRegistry(): TrustedInputAdapterRegistry
     acceptedGoalFields: ['brief'],
     adapt: input => (
       typeof input.brief === 'string' && input.brief.trim()
-        ? { brief: input.brief.trim().slice(0, 400) }
+        ? { brief: input.brief.trim().slice(0, 8000) }
         : {}
     ),
   });

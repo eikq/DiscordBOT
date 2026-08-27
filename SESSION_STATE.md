@@ -1,9 +1,90 @@
 ﻿# Cursor Session State
 
-Updated: 2026-08-22
+Updated: 2026-08-24
 Agent/model: Cursor Grok 4.6 (owner Windows)
 
-## This turn — continuous conversation intelligence live 31–214
+## This turn — mixed Thai BUILD_WEBSITE paste is a new 7-slide deck, not leftover Portfolio Q&A
+
+Owner paste mixed identity + todo + 7-slide BUILD_WEBSITE. Leftover Portfolio waiting-plan plus `ถ้า…แล้ว…build/preview` was classified as CONDITIONAL, so Jarvis answered leftover identity/Portfolio instead of planning the deck.
+Fix: `isNewProject` runs before conditional/chain parsers; software-create briefs (`BUILD_WEBSITE` / `ProjectWorkspace` / `React + Vite`) skip those parsers. Short leftover `เปิด preview` stays PREVIEW. Identity+build is software work, not self-knowledge. Plan brief 8000; interactive context 24576. Template writes a Thai 7-slide React/Vite fallback (slides win over todo). OpenCode harness is wired after owner permission: workspace-scoped, `bash`/`webfetch` deny, no `--dangerously-skip-permissions`; unit tests skip spawn. PLAN still is not execution.
+UNIT_VERIFIED: `tests/jarvis_owner_build_routing.test.ts`, `tests/jarvis_open_code_harness.test.ts`, `tests/jarvis_self_knowledge.test.ts`, `tests/jarvis_conversation_intelligence.test.ts`, `tests/jarvis_latency.test.ts` (108/108), `npx tsc --noEmit`. Not LIVE_VERIFIED. Did not install, build, preview, or run OpenCode against a real workspace.
+
+## This turn — permission overlay no longer blocked by JARVIS CONTEXT
+
+The grant dialog sat at the same stack as the bottom context card, and the overlay left a hole for the dock, so JARVIS CONTEXT painted over Allow / Once.
+Fix: full-viewport `.jp-approve-layer` (z-index 80), hide `.jp-context` / caption while a grant is waiting, keep the dock at z-index 4.
+Owner Jarvis on `:3010` was restarted so Vite could load the new CSS (DISABLE_HMR had frozen the old bundle). In-memory pending grant was dropped; re-ask if the prompt is gone.
+UNIT_VERIFIED: `tests/jarvis_presence_cinematic.test.ts`. Fixture `/jarvis?visualScene=waiting-owner` showed unobstructed Deny / Allow once. Not claimed as a live grant.
+
+## This turn — Desktop owner/community one-click launchers
+
+Added `launchers/owner` and `launchers/community` plus `launchers/install-desktop-shortcuts.cmd`.
+Desktop folders (not in git): `Desktop\JARVIS\Owner Edition` and `Desktop\JARVIS\Community Edition`.
+Each folder has `1 Start … JARVIS.lnk` and `2 Stop … JARVIS.lnk`.
+Start reuses llama.cpp `:8086` or starts `llama-server` with alias `qwen38-cyber`.
+Ollama `:11434` is fallback only if llama-server or the GGUF is missing.
+Stop does not kill the Qwen window.
+Does not auto-`npm ci` without Y/N. Stop does not kill the model server.
+Owner opens `http://127.0.0.1:3010/jarvis`. Community opens `http://127.0.0.1:3012/jarvis`.
+UNIT_VERIFIED via `tests/jarvis_community_edition.test.ts`. Not live-started this turn.
+PR #11 was not modified, merged, or tagged.
+
+
+## Community Edition release checkpoint (UNCOMMITTED note)
+
+Branch `release/jarvis-community-edition-v1-2026-08-23` HEAD `b22ee95`.
+Source was `local/jarvis-continuous-conversation-intelligence-v1-2026-08-22` @ `3f8c121`.
+Not pushed. This file is intentionally left uncommitted.
+
+Live Community acceptance used isolated temp roots on 3014 (offline) and 3015 (builder). Owner 3012 was not used as the Community data root.
+
+## This turn — conversation-intelligence live revalidation continue
+
+Branch: `local/jarvis-continuous-conversation-intelligence-v1-2026-08-22`
+HEAD `3f8c121`. Did not modify `main`. Did not merge, rebase, reset,
+clean, or push. CLICK / TYPE / SUBMIT remain unavailable. Did not
+POST `/api/jarvis/ask`. llama.cpp stayed on 8086. Restarted only
+Jarvis on 3012. Session `jarvis-lab` persist was not wiped.
+
+OWNER turns went through the real `/jarvis` composer
+(`textarea[aria-label="Talk to Jarvis"]` + `.jp-send`). Graded from
+debug overlay + new speak, not concatenated captions.
+
+Live after earliest-stack pin `7557bbd` (D-6→G-4, composer, ~99s):
+RESTORED and every turn overlay `PLAN_EE3515EF-EE0A-44EA-805D-662838439F43`
+(leftover `plan_01a30b85` no longer active). Persist now has
+`activePlanId` / `this_plan` / portfolio `planId` = stacked site plan.
+
+| Id | Strict | Notes |
+|---|---|---|
+| D-6 | GOOD | `STATUS_QUERY` · test passed |
+| D-7 | PARTIAL then fixed | first run stored `test → build`; after `3f8c121` `PROJECT.BUILD` + THIS_GOAL wait |
+| D-8 | PARTIAL | CONDITIONAL `PROJECT.BUILD` + permission |
+| D-9–D-14 | GOOD | research recall / Framer / hold / plan-diff |
+| D-15–D-16 | PARTIAL | CONTINUE / RERUN + THIS_GOAL wait |
+| D-17 | GOOD | verification |
+| D-18 | GOOD | fail-stop |
+| D-19–D-20 / F-1 | PARTIAL | execute / preview / modify + permission (not brief-too-long) |
+| G-1 | GOOD | daily summary includes `fail: brief is too long.` |
+| G-2–G-4 | GOOD | test / honest no-build / preview URL |
+
+`3f8c121` `shouldStoreChain`: treat if-ok like if-pass, and do not
+store a chain whose precondition already succeeded. Live D-6–D-8
+rerun after Jarvis-only restart: D-7 no longer stores.
+
+Verification this continuation: `npx tsc --noEmit` PASS;
+conversation intelligence **85 / 85** PASS; focused
+intent/memory/builder **36 / 36** PASS (before `3f8c121`);
+`npm run test:cloud` **801 / 801** PASS and `npm run build` PASS
+(same Vite/`import.meta` warning) at `7557bbd` — not re-run after
+`3f8c121`. Labels: leftover pin **LIVE_VERIFIED**; if-ok execute
+**UNIT_VERIFIED** + **LIVE_VERIFIED** as permission-blocked (not
+stored). Execute/preview/F-1 remain permission-blocked.
+
+Judgment: **NEEDS_OWNER_GRANT** for write/test/build/preview. No
+remaining DUMB on D-6→G-4. Caption lag and History-panel-open remain.
+
+## Previous — continuous conversation intelligence live 31–214
 
 Branch: `local/jarvis-continuous-conversation-intelligence-v1-2026-08-22`
 from source checkpoint `ec5e1592a15983105b0de54e891195b812ab2798`.
