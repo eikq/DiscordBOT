@@ -70,6 +70,17 @@ export class AgentRuntimeBindingCoordinator {
     return binding ? cloneBinding(binding) : undefined;
   }
 
+  public hasRun(runId: string): boolean {
+    return this.bindings.has(runId);
+  }
+
+  public listBindings(): Array<{ runId: string; binding: AgentRuntimeBinding }> {
+    return [...this.bindings.entries()].map(([runId, binding]) => ({
+      runId,
+      binding: cloneBinding(binding),
+    }));
+  }
+
   public forgetRun(runId: string): boolean {
     return this.bindings.delete(runId);
   }
