@@ -1,4 +1,4 @@
-import type { MemoryKind, MemoryStatus, SemanticFactRecord } from '../../bot/memory/jarvis/types';
+import type { MemoryKind, MemoryStatus, PrivacyClass, SemanticFactRecord } from '../../bot/memory/jarvis/types';
 import type { JarvisMemoryStore, MemoryListFilter } from '../../bot/memory/jarvis/store';
 import { compactMemoryTokens, extractFactKeys, memoryIntentFor, wantsSupersededHistory } from './intent';
 import { OWNER_PREF_PREFIX } from './ownerSemantics';
@@ -26,6 +26,7 @@ export type RetrievedMemory = {
   supersededBy?: string;
   evidenceIds: string[];
   confidence: number;
+  privacyClass: PrivacyClass;
 };
 
 /**
@@ -159,6 +160,7 @@ function toCompact(row: RetrievedMemory): CompactMemoryItem {
     text: row.text,
     factKey: row.factKey,
     confidence: row.confidence,
+    privacyClass: row.privacyClass,
     sourceRefs: [...row.evidenceIds],
   };
 }
@@ -173,6 +175,7 @@ function mapRecord(kind: MemoryKind, record: unknown): RetrievedMemory | null {
     factKey?: string;
     supersededBy?: string;
     confidence?: number;
+    privacyClass?: PrivacyClass;
     provenance?: { evidenceIds?: string[] };
   };
   if (!value.id || !value.status) return null;
@@ -185,5 +188,6 @@ function mapRecord(kind: MemoryKind, record: unknown): RetrievedMemory | null {
     supersededBy: value.supersededBy,
     evidenceIds: value.provenance?.evidenceIds || [],
     confidence: value.confidence ?? 0,
+    privacyClass: value.privacyClass ?? 'private',
   };
 }

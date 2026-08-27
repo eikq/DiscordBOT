@@ -1,4 +1,4 @@
-import type { MemoryKind, MemoryStatus } from '../../bot/memory/jarvis/types';
+import type { MemoryKind, MemoryStatus, PrivacyClass } from '../../bot/memory/jarvis/types';
 
 export const DEFAULT_MEMORY_TURN_LIMIT = 8;
 
@@ -15,6 +15,7 @@ export type CompactMemoryItem = {
   text: string;
   factKey?: string;
   confidence: number;
+  privacyClass?: PrivacyClass;
   sourceRefs: string[];
 };
 
@@ -50,6 +51,7 @@ export function memoryRefsFromItems(items: CompactMemoryItem[]): Array<{
   domain: 'global';
   type: string;
   confidence: number;
+  privacyClass?: PrivacyClass;
   sourceRefs: string[];
   status: string;
 }> {
@@ -58,6 +60,7 @@ export function memoryRefsFromItems(items: CompactMemoryItem[]): Array<{
     domain: 'global' as const,
     type: String(item.type),
     confidence: item.confidence,
+    ...(item.privacyClass ? { privacyClass: item.privacyClass } : {}),
     sourceRefs: [...item.sourceRefs],
     status: item.status,
   }));
