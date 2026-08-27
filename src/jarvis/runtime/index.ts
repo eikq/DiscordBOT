@@ -14,3 +14,4 @@ export function createConfiguredAgentRuntime(env: NodeJS.ProcessEnv = process.en
 export * from './binding';
 export * from './journalBridge';
 export * from './authorityBroker';
+export * from './resilience';
