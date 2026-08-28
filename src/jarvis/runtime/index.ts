@@ -4,6 +4,7 @@ import type { AgentRuntime } from './types';
 
 export * from './types';
 export * from './config';
+export * from './localBootstrap';
 export { HermesRuntimeAdapter, HermesRuntimeError } from './HermesRuntimeAdapter';
 export type { HermesRuntimeAdapterOptions } from './HermesRuntimeAdapter';
 

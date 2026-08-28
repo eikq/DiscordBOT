@@ -33,6 +33,7 @@ import { isResearchResult, researchFactsFromResult } from '../research/researchF
 import type { WorkspaceRuntime, WorkspaceSnapshot } from '../workspace';
 import { trySharedWorkspaceRuntime } from '../workspace';
 import { ownerConfirmationVisibleText, ownerDecisionSourceFrom } from '../security/ownerConfirmation';
+import { redactSecrets } from '../security/redaction';
 import { emptyPermissionRuntimeSnapshot, type PermissionRuntimeSnapshot } from '../security/permissionSnapshot';
 import { probeHostSecurity } from '../security/hostBaseline';
 import { sharedJarvisEventBus } from '../security/eventBus';
@@ -88,7 +89,7 @@ import type { CapabilityHost, CapabilityProviderKind } from '../capabilities/typ
 import { createJarvisRequest } from '../core/request';
 import type { ActionResult, JarvisCore, JarvisCoreResult } from '../core/types';
 import { JarvisMemoryRetrieval } from '../memory/retrieval';
-import type { JarvisMemoryService } from '../memory/service';
+import { memoryRefsFromItems, type JarvisMemoryService } from '../memory/service';
 import {
   forgetOwnerAlias,
   formatAliasAnswer,
@@ -137,6 +138,7 @@ import { isDuplicateUtterance, shapeSpokenText } from '../speech/speechShape';
 import { LocalLlmJarvisCore, type StandaloneLlm } from './LocalLlmJarvisCore';
 import { describeJarvisRuntimeProfile, type JarvisRuntimeProfile } from './runtimeProfile';
 import type { AgentRuntime } from '../runtime/types';
+import { AgentRuntimeMemoryBridge, AgentRuntimeOwnerTaskCoordinator, type AgentRuntimeMcpBoundary } from '../runtime';
 import { runStandaloneTextTurn, type StandaloneTextTurnOutput } from './textHarness';
 import { CommandCenterRuntime, sharedCommandCenter } from './commandCenter';
 import { routeJarvisRequest, shouldUseWorkAgent, type RouteDecision } from '../intent/requestRouter';
@@ -298,6 +300,7 @@ export type JarvisLabRuntimeOptions = {
   modelProfiles?: ModelProfileRegistry;
   modelCertifications?: ModelCertificationRegistry;
   agentRuntime?: AgentRuntime;
+  agentRuntimeMcpBoundary?: AgentRuntimeMcpBoundary;
 };
 
 export class JarvisLabRuntime {
@@ -327,6 +330,7 @@ export class JarvisLabRuntime {
   private readonly modelProfiles: ModelProfileRegistry;
   private readonly modelCertifications: ModelCertificationRegistry;
   private readonly agentRuntime?: AgentRuntime;
+  private readonly agentRuntimeConversation?: AgentRuntimeOwnerTaskCoordinator;
   private readonly plans?: BuildPlanStore;
   private readonly conversations: ConversationStateStore;
   private activeJarvisTurnId?: string;
@@ -388,6 +392,11 @@ export class JarvisLabRuntime {
     this.modelProfiles = options.modelProfiles ?? new ModelProfileRegistry();
     this.modelCertifications = options.modelCertifications ?? new ModelCertificationRegistry();
     this.agentRuntime = options.agentRuntime;
+    this.agentRuntimeConversation = this.agentRuntime ? new AgentRuntimeOwnerTaskCoordinator({
+      runtime: this.agentRuntime,
+      ...(attached?.service ? { memory: new AgentRuntimeMemoryBridge(attached.service) } : {}),
+      ...(options.agentRuntimeMcpBoundary ? { mcp: options.agentRuntimeMcpBoundary } : {}),
+    }) : undefined;
     this.persona = options.persona ?? (options.attachDefaultPresentation ? new FileBehaviorPersonaProvider() : undefined);
     this.speech = options.speech ?? (options.attachDefaultSpeech ? new StandaloneVoiceRouter() : undefined);
     this.voices = options.voices
@@ -866,6 +875,11 @@ export class JarvisLabRuntime {
       return this.finalizeVisibleTurn(sessionId, worked);
     }
     if (!this.hasDeterministicAskReply(prepared)) {
+      const runtimeReply = await this.maybeAgentRuntimeReply(input, prepared, route);
+      if (runtimeReply) {
+        await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, runtimeReply);
+        return this.finalizeVisibleTurn(sessionId, runtimeReply);
+      }
       const offline = await this.maybeOfflineModelReply(input, sessionId);
       if (offline) return this.finalizeVisibleTurn(sessionId, offline);
     }
@@ -936,6 +950,11 @@ export class JarvisLabRuntime {
       return emitFinal(output);
     }
     if (!this.hasDeterministicAskReply(prepared)) {
+      const runtimeReply = await this.maybeAgentRuntimeReply(input, prepared, route);
+      if (runtimeReply) {
+        await this.rememberAfterTurn(prepared.sessionId, prepared.resolution, runtimeReply);
+        return emitFinal(runtimeReply);
+      }
       const offline = await this.maybeOfflineModelReply(input, sessionId);
       if (offline) return emitFinal(offline);
     }
@@ -1053,7 +1072,10 @@ export class JarvisLabRuntime {
   private hasDeterministicAskReply(
     prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
   ): boolean {
-    return Boolean(prepared.turn.actionOnly && prepared.turn.presetActionResults?.length)
+    const hostResult = prepared.turn.presetActionResults?.some(result => (
+      result.capabilityId !== 'intent.conversation'
+    ));
+    return Boolean(prepared.turn.actionOnly && hostResult)
       || Boolean(prepared.turn.capabilityCalls?.length);
   }
 
@@ -1084,6 +1106,72 @@ export class JarvisLabRuntime {
     kind: SelfKnowledgeAnswer['kind'],
   ) {
   if (kind === 'MODEL_IDENTITY') {
+    if (this.agentRuntime && !isCommunityEdition()) {
+      let runtimeModel = 'hermes-agent';
+      let platform = 'hermes-agent';
+      try {
+        const capabilities = await this.agentRuntime.getCapabilities();
+        runtimeModel = capabilities.model || runtimeModel;
+        platform = capabilities.platform || platform;
+      } catch {
+        // Runtime identity remains Hermes even when the live capability probe is temporarily unavailable.
+      }
+      const opaqueModel = runtimeModel === 'hermes-agent' || runtimeModel === 'jarvis';
+      const thai = /[\u0E00-\u0E7F]/u.test(String(input.text || ''));
+      const text = thai
+        ? opaqueModel
+          ? 'ตอนนี้ JARVIS ใช้ Hermes Agent เป็น primary runtime และให้ Hermes จัดการ model routing/fallback ภายใน โดย API รอบนี้ไม่ได้ยืนยันชื่อ provider model ด้านใน จึงไม่เดาชื่อโมเดล'
+          : `ตอนนี้ JARVIS ใช้ Hermes Agent เป็น primary runtime โดย runtime รายงานโมเดล ${runtimeModel}`
+        : opaqueModel
+          ? 'JARVIS is currently using Hermes Agent as the primary runtime. Hermes manages model routing and fallback internally; this API response does not verify the underlying provider model, so JARVIS will not guess it.'
+          : `JARVIS is currently using Hermes Agent as the primary runtime; the runtime reports model ${runtimeModel}.`;
+      const identity = { runtime: 'hermes', platform, model: runtimeModel, providerManaged: true, opaqueModel };
+      const answer = {
+        kind: 'MODEL_IDENTITY' as const,
+        text,
+        capabilityIds: [] as string[],
+        evidence: [`runtime:${platform}`, `runtime-model:${runtimeModel}`, 'routing:provider-managed'],
+      };
+      const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
+      const result: JarvisCoreResult = {
+        requestId: request.requestId,
+        answerIntent: 'self_knowledge',
+        verifiedFacts: [{
+          key: 'jarvis.modelIdentity',
+          value: identity,
+          sourceType: 'system',
+          sourceRef: `agent-runtime:${platform}`,
+          immutableForPresentation: true,
+        }],
+        unverifiedClaims: [],
+        toolResults: [],
+        memoryRefs: [],
+        actionResults: [],
+        uncertainty: opaqueModel ? ['Underlying provider model is not exposed by the current Hermes runtime identity response.'] : [],
+        suggestedContent: answer.text,
+      };
+      const presented = await this.engine.render(
+        result,
+        this.sessions.resolveTurn(sessionId, input.oneTurn ? turnOverride(input) : undefined),
+        { sessionId },
+      );
+      const speech = await this.maybeSpeak(answer.text, request.requestId, presented.voiceProfileId, input.speak);
+      return {
+        request,
+        result,
+        presented: { ...presented, text: answer.text },
+        timings: { totalMs: 0 },
+        coreState: 'complete' as const,
+        presentation: await this.presentationStatus(sessionId),
+        research: this.researchSnapshot(),
+        workspace: this.workspaceSnapshot(),
+        intent: { stage: 'self_knowledge', detail: 'Trusted Hermes runtime identity', kind: answer.kind },
+        route: { route: 'CONVERSATION' as const, socialAction: 'SPEAK' as const, agentic: false, reason: 'runtime_model_identity', confidence: 1 },
+        selfKnowledge: answer,
+        affectStyle: this.commandCenter?.affect.style(),
+        ...(speech ? { speech } : {}),
+      };
+    }
     const selectedId = isCommunityEdition()
       ? (process.env.JARVIS_LLM_MODEL || process.env.LOCAL_QWEN_MODEL || 'local-model')
       : 'qwen38-cyber';
@@ -1446,7 +1534,7 @@ export class JarvisLabRuntime {
       },
       conversation,
       aliases: listOwnerAliases(this.memoryStore),
-      semanticResolve: this.llm?.generateText
+      semanticResolve: !this.agentRuntime && this.llm?.generateText
         ? async (request) => runSemanticResolver(
           input => this.llm!.generateText!(input),
           request.text,
@@ -2183,6 +2271,173 @@ export class JarvisLabRuntime {
       };
     }
     return { ...answer, capabilityIds };
+  }
+
+  private async maybeAgentRuntimeReply(
+    input: JarvisLabAskInput,
+    prepared: Awaited<ReturnType<JarvisLabRuntime['prepareAsk']>>,
+    route: RouteDecision,
+  ) {
+    if (!this.agentRuntimeConversation || isCommunityEdition()) return undefined;
+    const text = String(input.text || '').trim();
+    if (!text) return undefined;
+    const started = Date.now();
+    const request = createJarvisRequest({ text, sessionId: prepared.sessionId });
+    try {
+      const execution = await this.agentRuntimeConversation.executeReadOnly({
+        objective: text,
+        binding: {
+          jarvisSessionId: prepared.sessionId,
+          requestId: request.requestId,
+        },
+        instructions: [
+          'You are the primary cognitive runtime for JARVIS.',
+          'Answer the owner directly in the same language they used.',
+          'This turn is conversational and READ-ONLY.',
+          'Do not claim files, installs, tests, searches, reminders, or system actions happened unless JARVIS supplied evidence.',
+          'Do not grant yourself permission or expand scope.',
+          'Do not reveal hidden chain-of-thought or scratchpad.',
+        ].join('\n'),
+        allowedTools: ['tool_describe'],
+        verify: ({ finalRun, tools }) => {
+          const output = redactSecrets(finalRun.output || '').trim();
+          if (finalRun.status === 'completed' && output) {
+            return {
+              state: 'PARTIALLY_VERIFIED' as const,
+              outcome: 'degraded' as const,
+              summary: 'Hermes completed inside JARVIS read-only scope; generated content remains unverified model output.',
+              evidence: [
+                `runtime:${finalRun.runId}`,
+                'runtime-status:completed',
+                ...tools.map(tool => `runtime-tool:${tool}`),
+              ],
+            };
+          }
+          if (finalRun.status === 'cancelled') {
+            return {
+              state: 'NOT_APPLICABLE' as const,
+              outcome: 'cancelled' as const,
+              summary: 'Hermes conversation run was cancelled.',
+              evidence: [`runtime:${finalRun.runId}`, 'runtime-status:cancelled'],
+            };
+          }
+          return {
+            state: 'FAILED_VERIFICATION' as const,
+            outcome: 'failure' as const,
+            summary: redactSecrets(finalRun.error || 'Hermes did not produce a usable conversational response.').slice(0, 300),
+            evidence: [`runtime:${finalRun.runId}`, `runtime-status:${finalRun.status}`],
+          };
+        },
+      });
+      const content = redactSecrets(execution.finalRun.output || '').trim();
+      if (!content) {
+        return await this.agentRuntimeFailureReply(
+          input,
+          prepared.sessionId,
+          route,
+          execution.verification.summary,
+          started,
+        );
+      }
+      const memoryRefs = execution.memoryProjection
+        ? memoryRefsFromItems(execution.memoryProjection.items)
+        : [];
+      const result: JarvisCoreResult = {
+        requestId: request.requestId,
+        answerIntent: 'agent_runtime_text',
+        verifiedFacts: [{
+          key: 'jarvis.agentRuntime',
+          value: 'hermes',
+          sourceType: 'system',
+          sourceRef: `runtime:${execution.finalRun.runId}`,
+          confidence: 1,
+          immutableForPresentation: true,
+        }],
+        unverifiedClaims: [{ text: content, confidence: 0.4 }],
+        toolResults: execution.tools.map(tool => ({
+          toolName: tool,
+          status: 'ok' as const,
+          summary: 'Observed under JARVIS read-only runtime scope.',
+        })),
+        memoryRefs,
+        actionResults: freezeActionResults([]),
+        uncertainty: ['Hermes generated this response; factual claims are not independently verified unless separately supported by JARVIS evidence.'],
+        suggestedContent: content,
+      };
+      const presented = await this.engine.render(
+        result,
+        this.sessions.resolveTurn(prepared.sessionId, input.oneTurn ? turnOverride(input) : undefined),
+        { sessionId: prepared.sessionId },
+      );
+      const speech = await this.maybeSpeak(
+        presented.text,
+        request.requestId,
+        presented.voiceProfileId,
+        input.speak,
+      );
+      return {
+        request,
+        result,
+        presented,
+        timings: { totalMs: Date.now() - started },
+        coreState: 'complete' as const,
+        presentation: await this.presentationStatus(prepared.sessionId),
+        research: this.researchSnapshot(),
+        workspace: this.workspaceSnapshot(),
+        intent: prepared.intent,
+        route,
+        affectStyle: this.workCenter()?.affect.style(),
+        ...(speech ? { speech } : {}),
+      };
+    } catch (error) {
+      const detail = redactSecrets(error instanceof Error ? error.message : String(error)).slice(0, 300);
+      return await this.agentRuntimeFailureReply(input, prepared.sessionId, route, detail, started);
+    }
+  }
+
+  private async agentRuntimeFailureReply(
+    input: JarvisLabAskInput,
+    sessionId: string,
+    route: RouteDecision,
+    detail: string,
+    started: number,
+  ) {
+    const message = detail
+      ? `Hermes primary runtime is unavailable or did not complete safely: ${detail}. No blind local-model retry was started.`
+      : 'Hermes primary runtime is unavailable or did not complete safely. No blind local-model retry was started.';
+    const request = createJarvisRequest({ text: String(input.text || ''), sessionId });
+    const result: JarvisCoreResult = {
+      requestId: request.requestId,
+      answerIntent: 'agent_runtime_unavailable',
+      verifiedFacts: [{
+        key: 'jarvis.agentRuntime',
+        value: 'hermes',
+        sourceType: 'system',
+        confidence: 1,
+        immutableForPresentation: true,
+      }],
+      unverifiedClaims: [],
+      toolResults: [],
+      memoryRefs: [],
+      actionResults: freezeActionResults([]),
+      uncertainty: [message],
+      suggestedContent: message,
+    };
+    const presented = await this.engine.render(result, this.sessions.resolveTurn(sessionId), { sessionId });
+    const speech = await this.maybeSpeak(message, request.requestId, presented.voiceProfileId, input.speak);
+    return {
+      request,
+      result,
+      presented: { ...presented, text: message },
+      timings: { totalMs: Date.now() - started },
+      coreState: 'complete' as const,
+      presentation: await this.presentationStatus(sessionId),
+      research: this.researchSnapshot(),
+      workspace: this.workspaceSnapshot(),
+      route,
+      affectStyle: this.workCenter()?.affect.style(),
+      ...(speech ? { speech } : {}),
+    };
   }
 
   private async maybeOfflineModelReply(input: JarvisLabAskInput, sessionId: string) {

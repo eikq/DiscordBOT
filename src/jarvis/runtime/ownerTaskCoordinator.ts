@@ -23,6 +23,7 @@ export type ReadOnlyOwnerTaskInput = {
   binding: AgentRuntimeBindingContext;
   instructions?: string;
   allowedTools?: string[];
+  timeoutMs?: number;
   journalOperationId?: string;
   verify: (input: { finalRun: AgentRun; events: AgentEvent[]; tools: string[] }) => Promise<ReadOnlyRuntimeVerification> | ReadOnlyRuntimeVerification;
 };
@@ -85,22 +86,43 @@ export class AgentRuntimeOwnerTaskCoordinator {
     const bound = await this.resilience.startManagedRun(input.binding, preparedInput);
     const events: AgentEvent[] = [];
     const tools: string[] = [];
-    const stream = this.options.mcp
-      ? this.options.mcp.streamGuardedEvents(bound.run.runId)
-      : this.options.runtime.streamEvents(bound.run.runId);
-    for await (const event of stream) {
-      events.push(event);
-      if (event.tool && !tools.includes(event.tool)) tools.push(event.tool);
-      if (event.tool && input.allowedTools?.length && !toolAllowed(event.tool, input.allowedTools)) {
-        try { await this.options.runtime.stop(bound.run.runId); } catch { /* fail closed below */ }
-        throw new RuntimeOwnerTaskError(
-          'RUNTIME_READ_ONLY_TOOL_OUT_OF_SCOPE',
-          `Hermes attempted tool ${event.tool} outside the read-only task scope.`,
-        );
+    const timeoutMs = runTimeoutMs(input.timeoutMs);
+    const controller = new AbortController();
+    let timedOut = false;
+    let stopOnTimeout: Promise<void> | undefined;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      stopOnTimeout = this.options.runtime.stop(bound.run.runId).catch(() => undefined);
+    }, timeoutMs);
+    try {
+      const stream = this.options.mcp
+        ? this.options.mcp.streamGuardedEvents(bound.run.runId, controller.signal)
+        : this.options.runtime.streamEvents(bound.run.runId, controller.signal);
+      for await (const event of stream) {
+        events.push(event);
+        if (event.tool && !tools.includes(event.tool)) tools.push(event.tool);
+        if (event.tool && input.allowedTools && !toolAllowed(event.tool, input.allowedTools)) {
+          try { await this.options.runtime.stop(bound.run.runId); } catch { /* fail closed below */ }
+          throw new RuntimeOwnerTaskError(
+            'RUNTIME_READ_ONLY_TOOL_OUT_OF_SCOPE',
+            `Hermes attempted tool ${event.tool} outside the read-only task scope.`,
+          );
+        }
+        if (input.journalOperationId && this.options.journal) {
+          this.options.journal.recordEvent(input.journalOperationId, event);
+        }
+        if (isTerminalEvent(event.type)) break;
       }
-      if (input.journalOperationId && this.options.journal) {
-        this.options.journal.recordEvent(input.journalOperationId, event);
-      }
+    } catch (error) {
+      if (!timedOut) throw error;
+      await stopOnTimeout;
+      throw new RuntimeOwnerTaskError(
+        'RUNTIME_READ_ONLY_TIMEOUT',
+        `Hermes read-only run exceeded the JARVIS deadline of ${timeoutMs}ms and was stopped.`,
+      );
+    } finally {
+      clearTimeout(timeout);
     }
 
     const finalRun = await this.options.runtime.getRun(bound.run.runId);
@@ -145,6 +167,18 @@ export class AgentRuntimeOwnerTaskCoordinator {
     };
   }
 }
+const DEFAULT_READ_ONLY_RUNTIME_TIMEOUT_MS = 120_000;
+
+function runTimeoutMs(value?: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_READ_ONLY_RUNTIME_TIMEOUT_MS;
+}
+
+function isTerminalEvent(type: string): boolean {
+  return type === 'run.completed' || type === 'run.failed' || type === 'run.cancelled';
+}
+
 function toolAllowed(tool: string, allowed: string[]): boolean {
   const value = tool.trim().toLowerCase();
   return allowed.some(item => {

@@ -20,6 +20,7 @@ import { isGatedCapabilityId } from "./src/jarvis/capabilities/actions/constants
 import { sharedJarvisEventBus } from "./src/jarvis/security/eventBus";
 import { sharedTrustedOperatorRuntime } from "./src/jarvis/security/trustedOperatorRuntime";
 import { sharedCommandCenter } from "./src/jarvis/standalone/commandCenter";
+import { createConfiguredAgentRuntime, createConfiguredMcpBoundary, resolveOwnerHermesRuntimeBootstrap } from "./src/jarvis/runtime";
 import { formatSseComment, formatSseEvent, sseCursorFrom, writeSseReplay } from "./src/jarvis/ops/sse";
 import { applyOwnerControl, parseControlPatch, parseDemoScenario, parseNightAction, parseObjective, parseOperatorReason, parsePermissionGrant, parsePrivilegeLeaseId, parseStepId, parseTaskId } from "./src/jarvis/standalone/commandCenterHttp";
 
@@ -802,6 +803,19 @@ async function startServer() {
   });
   }
 
+  const ownerRuntimeBootstrap = isCommunityEdition()
+    ? undefined
+    : resolveOwnerHermesRuntimeBootstrap(process.env, { workspaceRoot: process.cwd() });
+  const agentRuntime = ownerRuntimeBootstrap?.runtime === 'hermes'
+    ? createConfiguredAgentRuntime(ownerRuntimeBootstrap.env)
+    : undefined;
+  const agentRuntimeMcpBoundary = agentRuntime && ownerRuntimeBootstrap
+    ? createConfiguredMcpBoundary(agentRuntime, ownerRuntimeBootstrap.env)
+    : undefined;
+  if (ownerRuntimeBootstrap) {
+    console.log('[Jarvis] agentRuntime=' + ownerRuntimeBootstrap.runtime + ' source=' + ownerRuntimeBootstrap.source + ' profile=' + (ownerRuntimeBootstrap.profile || 'none'));
+  }
+
   const jarvisLab = createJarvisLabRuntime({
     attachDefaultMemory: true,
     attachDefaultCapabilities: true,
@@ -809,6 +823,8 @@ async function startServer() {
     attachDefaultPresentation: true,
     attachDefaultSpeech: true,
     probeStt: probeStandaloneStt,
+    ...(agentRuntime ? { agentRuntime } : {}),
+    ...(agentRuntimeMcpBoundary ? { agentRuntimeMcpBoundary } : {}),
   });
   const labCapabilities = jarvisLab.capabilities();
   if (labCapabilities) sharedCommandCenter().attachCapabilities(labCapabilities);

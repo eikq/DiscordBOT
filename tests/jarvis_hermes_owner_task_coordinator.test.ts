@@ -92,6 +92,54 @@ test('read-only coordinator rejects a success label without independent VERIFIED
     && error.reasonCode === 'RUNTIME_READ_ONLY_UNVERIFIED_SUCCESS');
 });
 
+test('read-only coordinator stops a run when its JARVIS deadline is exceeded', async () => {
+  const runtime = fakeRuntime([], { runId: 'run_timeout', status: 'cancelled' });
+  runtime.streamEvents = async function* (_runId, signal) {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, 5_000);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        const error = new Error('aborted by deadline');
+        error.name = 'AbortError';
+        reject(error);
+      }, { once: true });
+    });
+  };
+  const coordinator = new AgentRuntimeOwnerTaskCoordinator({ runtime });
+  const started = Date.now();
+  await assert.rejects(() => coordinator.executeReadOnly({
+    objective: 'Inspect runtime status without hanging.',
+    binding: { jarvisSessionId: 'owner-session', taskId: 'task-timeout' },
+    timeoutMs: 40,
+    verify: () => ({ state: 'VERIFIED', outcome: 'success', summary: 'not reached', evidence: [] }),
+  }), (error: unknown) => error instanceof RuntimeOwnerTaskError
+    && error.reasonCode === 'RUNTIME_READ_ONLY_TIMEOUT');
+  assert.deepEqual(runtime.stopped, ['run_timeout']);
+  assert.ok(Date.now() - started < 1_000);
+});
+
+test('read-only coordinator stops consuming SSE after a terminal run event', async () => {
+  const runtime = fakeRuntime([], { runId: 'run_terminal_event', status: 'completed', output: 'done' });
+  runtime.streamEvents = async function* () {
+    yield { type: 'run.completed', runId: 'run_terminal_event', raw: {} };
+    await new Promise<void>(() => undefined);
+  };
+  const coordinator = new AgentRuntimeOwnerTaskCoordinator({ runtime });
+  const result = await coordinator.executeReadOnly({
+    objective: 'Inspect runtime status.',
+    binding: { jarvisSessionId: 'owner-session', taskId: 'task-terminal-event' },
+    timeoutMs: 100,
+    verify: ({ finalRun }) => ({
+      state: finalRun.status === 'completed' ? 'VERIFIED' : 'FAILED_VERIFICATION',
+      outcome: finalRun.status === 'completed' ? 'success' : 'failure',
+      summary: 'Terminal event observed.',
+      evidence: ['runtime-terminal-event'],
+    }),
+  });
+  assert.equal(result.finalRun.status, 'completed');
+  assert.deepEqual(runtime.stopped, []);
+});
+
 function learningStores() {
   return {
     experiences: new ExperienceStore(() => Date.UTC(2026, 7, 28)),
