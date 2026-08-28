@@ -18,3 +18,4 @@ export * from './resilience';
 export * from './memoryBridge';
 export * from './mcpBoundary';
 export * from './learningBridge';
+export * from './ownerTaskCoordinator';
