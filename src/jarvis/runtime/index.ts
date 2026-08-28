@@ -16,3 +16,4 @@ export * from './journalBridge';
 export * from './authorityBroker';
 export * from './resilience';
 export * from './memoryBridge';
+export * from './mcpBoundary';
