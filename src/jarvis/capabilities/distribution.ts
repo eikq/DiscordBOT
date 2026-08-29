@@ -9,6 +9,7 @@ const OWNER_ONLY_PREFIXES = [
   'cyber.',
   'cybersecurity.',
   'securityAcademy.',
+  'media.',
 ] as const;
 
 const CORE_SECURITY_PREFIXES = [

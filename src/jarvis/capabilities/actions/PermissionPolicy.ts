@@ -25,6 +25,7 @@ import { serviceRecord } from './services/catalog';
 import { loadSettingsAllowlist, settingsById } from './settingsAllowlist';
 import type { ActionProposal, DesktopAllowlists, PermissionDecision } from './types';
 import { DEFAULT_ALLOWLISTED_WEB_HOSTS } from '../../desktop/webAllowlist';
+import { MEDIA_CANCEL, MEDIA_CREATE_VIDEO, MEDIA_GET_OUTPUT, MEDIA_STATUS, isMediaCapabilityId } from '../../media/constants';
 import { planScopedOpen, scopedWebOpenMessage, structuredBlockExplanation } from '../../desktop/scopedOpen';
 import { SessionWebGrantStore } from '../../desktop/sessionWebGrants';
 import { processNameForUrl } from '../../desktop/windowsDisplayHost';
@@ -287,6 +288,33 @@ export class PermissionPolicy {
           : `Open ${plan.resource.label}.`,
         risk: 'LOW_RISK_ACTION',
       };
+    }
+
+    if (isMediaCapabilityId(proposal.capabilityId)) {
+      if (proposal.capabilityId === MEDIA_STATUS) {
+        return {
+          ...base, decision: 'allow', reasonCode: 'READ_ONLY',
+          userMessage: 'Read local media render status.', risk: 'READ_ONLY',
+        };
+      }
+      if (proposal.capabilityId === MEDIA_CREATE_VIDEO) {
+        return {
+          ...base, decision: 'allow', reasonCode: 'LOCAL_MEDIA_GENERATION',
+          userMessage: 'Queue bounded local video generation on the configured GPU backend.', risk: 'LOW_RISK_ACTION',
+        };
+      }
+      if (proposal.capabilityId === MEDIA_CANCEL) {
+        return {
+          ...base, decision: 'allow', reasonCode: 'MEDIA_CANCEL',
+          userMessage: 'Cancel jobs owned by this media project.', risk: 'LOW_RISK_ACTION',
+        };
+      }
+      if (proposal.capabilityId === MEDIA_GET_OUTPUT) {
+        return {
+          ...base, decision: 'allow', reasonCode: 'MEDIA_OUTPUT_COLLECTION',
+          userMessage: 'Collect and stitch outputs inside the bounded media project.', risk: 'LOW_RISK_ACTION',
+        };
+      }
     }
 
     if (isReminderCapabilityId(proposal.capabilityId)) {

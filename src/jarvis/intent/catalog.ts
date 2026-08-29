@@ -83,6 +83,26 @@ const DESCRIPTIONS: Record<string, { shortDescription: string; argumentSchemaSum
     argumentSchemaSummary: 'serviceId',
     sideEffectClass: 'CONFIRM_REQUIRED',
   },
+  'media.createVideo': {
+    shortDescription: 'Create a local multi-shot video from an owner storyline using the shared AI Media Bridge.',
+    argumentSchemaSummary: 'storyline, title?, targetDurationSeconds?, aspectRatio?, style?, fps?, shotCount?',
+    sideEffectClass: 'LOW_RISK_ACTION',
+  },
+  'media.status': {
+    shortDescription: 'Read render progress for a shared media project.',
+    argumentSchemaSummary: 'projectId',
+    sideEffectClass: 'READ_ONLY',
+  },
+  'media.cancel': {
+    shortDescription: 'Cancel queued or running jobs owned by one media project.',
+    argumentSchemaSummary: 'projectId',
+    sideEffectClass: 'LOW_RISK_ACTION',
+  },
+  'media.getOutput': {
+    shortDescription: 'Collect completed media outputs and optionally stitch final.mp4.',
+    argumentSchemaSummary: 'projectId, stitch?',
+    sideEffectClass: 'LOW_RISK_ACTION',
+  },
   'reminders.create': {
     shortDescription: 'Create a notification-only reminder.',
     argumentSchemaSummary: 'whenText, title, message?',

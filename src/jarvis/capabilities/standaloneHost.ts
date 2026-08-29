@@ -28,6 +28,8 @@ import type { FailureContainment } from '../safety/failureContainment';
 import { sharedTrustedOperatorRuntime, TrustedOperatorRuntime } from '../security/trustedOperatorRuntime';
 import type { WorkspaceCapabilityDeps } from '../workspace/workspaceCapabilities';
 import { registerWorkspaceCapabilities } from '../workspace/workspaceCapabilities';
+import { registerMediaCapabilities, type MediaCapabilityDeps } from '../media';
+import { resolveJarvisEdition } from '../edition/resolve';
 import { registerRuntimeCapabilities } from './actions/runtimeCapabilities';
 import { sharedJarvisServiceController, type JarvisServiceController } from './actions/services';
 import { CapabilityRegistry } from './CapabilityRegistry';
@@ -51,6 +53,7 @@ export type StandaloneCapabilityHostOptions = {
   reminders?: ReminderCapabilityDeps | false;
   research?: ResearchCapabilityDeps | false;
   workspace?: WorkspaceCapabilityDeps | false;
+  media?: MediaCapabilityDeps | false;
   actions?: false | {
     allowlists?: DesktopAllowlists;
     adapter?: DesktopActionAdapter;
@@ -138,6 +141,14 @@ export function createStandaloneCapabilityHost(
       registerWorkspaceCapabilities(registry, options.workspace ?? {});
     } catch (error) {
       console.warn(`[Jarvis] Workspace capabilities unavailable: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  if (options.actions !== false && options.media && resolveJarvisEdition() === 'owner') {
+    try {
+      registerMediaCapabilities(registry, options.media);
+    } catch (error) {
+      console.warn(`[Jarvis] Media capabilities unavailable: ${error instanceof Error ? error.message : error}`);
     }
   }
 

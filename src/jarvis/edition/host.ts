@@ -10,6 +10,7 @@ import type {
   CapabilityResult,
 } from '../capabilities/types';
 import { defaultConversationStatePath } from '../conversation/store';
+import { McpMediaGateway } from '../media';
 import { isCommunityCapabilityAllowed, jarvisEditionManifest, communityUnavailablePrivateText } from './manifest';
 import { ensureJarvisDataRoot, isCommunityEdition, resolveJarvisEdition } from './resolve';
 
@@ -65,7 +66,10 @@ export function createEditionCapabilityHost(
   options: StandaloneCapabilityHostOptions = {},
 ): CapabilityHost {
   if (!isCommunityEdition()) {
-    return createStandaloneCapabilityHost(options);
+    const media = options.media === false
+      ? false
+      : options.media ?? { port: new McpMediaGateway() };
+    return createStandaloneCapabilityHost({ ...options, media });
   }
   const research = options.research === false
     ? false

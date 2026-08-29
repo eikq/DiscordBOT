@@ -317,3 +317,6 @@ export { permissionFirstFromCapability, shouldAvoidGenericRefusal } from './poli
 export { permissionProposalFromBuild, BUILD_GOAL_EFFECTS } from './security/permissionProposal';
 export { ownerConfirmationVisibleText, ownerDecisionSourceFrom } from './security/ownerConfirmation';
 export * from './project';
+
+export { MEDIA_CREATE_VIDEO, MEDIA_STATUS, MEDIA_CANCEL, MEDIA_GET_OUTPUT, McpMediaGateway, registerMediaCapabilities } from './media';
+export type { MediaCapabilityPort, MediaCreateRequest, MediaGatewayAvailability, MediaCapabilityDeps, SubmittedMediaProject } from './media';

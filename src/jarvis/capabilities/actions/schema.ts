@@ -84,6 +84,11 @@ import {
   isProjectCapabilityId,
   isRegisteredProjectScript,
 } from '../../project/constants';
+import {
+  MEDIA_ASPECT_RATIOS, MEDIA_CANCEL, MEDIA_CREATE_VIDEO, MEDIA_GET_OUTPUT,
+  MEDIA_MAX_STORYLINE_CHARS, MEDIA_MAX_STYLE_CHARS, MEDIA_PROJECT_ID_PATTERN,
+  MEDIA_STATUS, isMediaCapabilityId,
+} from '../../media/constants';
 import { looksLikeSecret } from '../../security/redaction';
 import { sanitizeDisplaySelector } from '../../desktop/monitorTopology';
 
@@ -309,6 +314,10 @@ export function validateActionInput(
     return parseServiceId(input.serviceId);
   }
 
+  if (isMediaCapabilityId(capabilityId)) {
+    return validateMediaInput(capabilityId, input);
+  }
+
   if (isReminderCapabilityId(capabilityId)) {
     return validateReminderInput(capabilityId, input);
   }
@@ -357,6 +366,74 @@ export function validateActionInput(
   }
 
   return { ok: false, reasonCode: 'UNKNOWN_CAPABILITY', userMessage: 'Unknown capability.' };
+}
+
+function validateMediaInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {
+  if (capabilityId === MEDIA_CREATE_VIDEO) {
+    const allowed = ['storyline', 'title', 'targetDurationSeconds', 'aspectRatio', 'style', 'fps', 'shotCount'];
+    if (!onlyKeys(input, allowed)) {
+      return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Unsupported media-generation argument.' };
+    }
+    const storyline = typeof input.storyline === 'string' ? input.storyline.trim() : '';
+    if (!storyline || storyline.length > MEDIA_MAX_STORYLINE_CHARS) {
+      return { ok: false, reasonCode: 'INVALID_STORYLINE', userMessage: `Storyline must be 1-${MEDIA_MAX_STORYLINE_CHARS} characters.` };
+    }
+    if (looksLikeSecret(storyline)) {
+      return { ok: false, reasonCode: 'SECRET_INPUT_REJECTED', userMessage: 'Secret-like values are not allowed in media prompts.' };
+    }
+    const value: Record<string, unknown> = { storyline };
+    if (input.title !== undefined) {
+      if (typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 120) {
+        return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Media title must be 1-120 characters.' };
+      }
+      value.title = input.title.trim();
+    }
+    if (input.style !== undefined) {
+      if (typeof input.style !== 'string' || input.style.length > MEDIA_MAX_STYLE_CHARS || looksLikeSecret(input.style)) {
+        return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Media style is invalid.' };
+      }
+      value.style = input.style.trim();
+    }
+    if (input.targetDurationSeconds !== undefined) {
+      const duration = Number(input.targetDurationSeconds);
+      if (!Number.isFinite(duration) || duration < 2 || duration > 180) {
+        return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Video duration must be between 2 and 180 seconds.' };
+      }
+      value.targetDurationSeconds = duration;
+    }
+    if (input.aspectRatio !== undefined) {
+      if (typeof input.aspectRatio !== 'string' || !(MEDIA_ASPECT_RATIOS as readonly string[]).includes(input.aspectRatio)) {
+        return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Aspect ratio must be 16:9, 9:16, or 1:1.' };
+      }
+      value.aspectRatio = input.aspectRatio;
+    }
+    if (input.fps !== undefined) {
+      const fps = Number(input.fps);
+      if (!Number.isInteger(fps) || fps < 8 || fps > 60) {
+        return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'FPS must be an integer from 8 to 60.' };
+      }
+      value.fps = fps;
+    }
+    if (input.shotCount !== undefined) {
+      const shots = Number(input.shotCount);
+      if (!Number.isInteger(shots) || shots < 1 || shots > 24) {
+        return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'Shot count must be an integer from 1 to 24.' };
+      }
+      value.shotCount = shots;
+    }
+    return { ok: true, value };
+  }
+  const allowed = capabilityId === MEDIA_GET_OUTPUT ? ['projectId', 'stitch'] : ['projectId'];
+  if (!onlyKeys(input, allowed) || typeof input.projectId !== 'string' || !MEDIA_PROJECT_ID_PATTERN.test(input.projectId)) {
+    return { ok: false, reasonCode: 'INVALID_MEDIA_PROJECT', userMessage: 'Invalid media project id.' };
+  }
+  if (capabilityId === MEDIA_GET_OUTPUT && input.stitch !== undefined && typeof input.stitch !== 'boolean') {
+    return { ok: false, reasonCode: 'INVALID_ARGUMENT', userMessage: 'stitch must be true or false.' };
+  }
+  if (![MEDIA_STATUS, MEDIA_CANCEL, MEDIA_GET_OUTPUT].includes(capabilityId as any)) {
+    return { ok: false, reasonCode: 'UNKNOWN_CAPABILITY', userMessage: 'Unknown media capability.' };
+  }
+  return { ok: true, value: { projectId: input.projectId, ...(input.stitch !== undefined ? { stitch: input.stitch } : {}) } };
 }
 
 function validateSoftwareInput(capabilityId: string, input: Record<string, unknown>): ValidatedActionInput {

@@ -1415,6 +1415,16 @@ function describeProposal(
   if (capabilityId === 'system.networkStatus') {
     return { displayName: 'Network', summary: 'Network status', target: 'network', risk: 'READ_ONLY' };
   }
+  if (capabilityId.startsWith('media.')) {
+    const read = capabilityId === 'media.status';
+    const target = String(input.projectId || input.title || 'new-media-project');
+    return {
+      displayName: read ? 'Media status' : 'Local media generation',
+      summary: capabilityId.replace('media.', 'Media '),
+      target,
+      risk: read ? 'READ_ONLY' : 'LOW_RISK_ACTION',
+    };
+  }
   if (capabilityId.startsWith('reminders.')) {
     const read = capabilityId === 'reminders.list' || capabilityId === 'reminders.get';
     return {
@@ -1511,6 +1521,9 @@ function targetClassOf(proposal: ActionProposal, lists: DesktopAllowlists): stri
     return `jarvis-service:${String(proposal.normalizedArguments.serviceId)}`;
   }
   if (proposal.capabilityId.startsWith('jarvis.')) return 'jarvis:runtime';
+  if (proposal.capabilityId.startsWith('media.')) {
+    return `media:${String(proposal.normalizedArguments.projectId || 'new-project')}`;
+  }
   if (proposal.capabilityId.startsWith('reminders.')) {
     return `reminder:${String(proposal.normalizedArguments.reminderId || 'store')}`;
   }
