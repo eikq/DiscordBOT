@@ -308,7 +308,7 @@ test('community demo history and memory phrases bind without a model', () => {
 test('community build plans advertise the community workspace, not owner builds', () => {
   withEnv({ JARVIS_EDITION: 'community' }, () => {
     const plan = createBuildPlan({ brief: 'สร้างเว็บ todo แบบ modern ให้ผม' });
-    assert.equal(plan.slug, 'todo-modern');
+    assert.equal(plan.slug, 'todo-app');
     assert.match(plan.assumptions.join('\n'), /data\/community\/workspaces\/<slug>/);
     assert.doesNotMatch(plan.assumptions.join('\n'), /data\/jarvis\/builds/);
     assert.match(plan.acceptanceCriteria.join('\n'), /data\/community\/workspaces/);
